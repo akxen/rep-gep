@@ -1,0 +1,26 @@
+BUBBLE_ID,REGION,ZONE,DESCRIPTION
+FNQ,QLD,NQ,Far North QLD
+NQ,QLD,NQ,North QLD
+CQ,QLD,CQ,Central QLD
+SWQ,QLD,SWQ,South West QLD
+FWN,NSW,SWNSW,Far West NSW
+MUN,NSW,SWNSW,Murray NSW
+SEN,NSW,CAN,South East NSW
+MRN,NSW,CAN,Marulan NSW
+WEN,NSW,NCEN,West NSW
+HUN,NSW,NCEN,Hunter NSW
+NEN,NSW,NNS,New England NSW
+SEV,VIC,LV,South East VIC
+NWV,VIC,CVIC,North West VIC
+SWV,VIC,CVIC,South West VIC
+CS,VIC,MEL,Central South
+WCS,SA,NSA,West Coast SA
+EPS,SA,NSA,Eyre Peninsula SA
+YPS,SA,NSA,Yorke Peninsula SA
+MNS,SA,NSA,Mid North SA
+FLS,SA,ADE,Fleurieu Peninsula SA
+CS,SA,SESA,Central South
+NWT,TAS,TAS,North West TAS
+NET,TAS,TAS,North East TAS
+WCT,TAS,TAS,West Coast TAS
+ST,TAS,TAS,South TAS

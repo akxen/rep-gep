@@ -1,0 +1,13 @@
+UNIT_ID,NTNDP_FUEL_COST_ID,NOTES
+NNS-COAL-SC,New_BlackCoal_NNSW,
+NNS-COAL-SC-CCS,New_BlackCoal_NNSW,
+CQ-COAL-SC,New_BlackCoal_CQ,
+CQ-COAL-SC-CCS,New_BlackCoal_CQ,
+NQ-COAL-SC,New_BlackCoal_NQ,
+NQ-COAL-SC-CCS,New_BlackCoal_NQ,
+SEQ-COAL-SC,New_BlackCoal_SWQ,No SEQ coal in dataset. SWQ is close SEQ.
+SEQ-COAL-SC-CCS,New_BlackCoal_SWQ,No SEQ coal in dataset. SWQ is close SEQ.
+SWQ-COAL-SC,New_BlackCoal_SWQ,
+SWQ-COAL-SC-CCS,New_BlackCoal_SWQ,
+LV-COAL-SC,New_BrownCoal_LV,Assumes only brown coal options in LV
+LV-COAL-SC-CCS,New_BrownCoal_LV,Assumes only brown coal options in LV
