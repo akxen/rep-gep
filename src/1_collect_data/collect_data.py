@@ -314,7 +314,7 @@ class ConstructDataset:
 
         return duids
 
-    def get_all_candidate_units(self):
+    def get_possible_candidate_units(self):
         """Extract information for all candidate units"""
 
         # All candidate unit IDs from FOM spreadsheet (use this as the basis for candidate unit IDs)
@@ -366,7 +366,7 @@ class ConstructDataset:
                     # Primary technology category
                     technology_cat_1 = 'GAS'
 
-                    # Primary and secondary fuel category            
+                    # Primary and secondary fuel category
                     fuel_cat_1, fuel_cat_2 = 'GAS', 'GAS'
 
                 # Solar farms
@@ -375,7 +375,7 @@ class ConstructDataset:
                     # Primary technology category
                     technology_cat_1 = 'SOLAR'
 
-                    # Primary and secondary fuel category            
+                    # Primary and secondary fuel category
                     fuel_cat_1, fuel_cat_2 = 'SOLAR', 'SOLAR'
 
                 # Biomass plant
@@ -384,7 +384,7 @@ class ConstructDataset:
                     # Primary technology category
                     technology_cat_1 = 'BIOMASS'
 
-                    # Primary and secondary fuel category            
+                    # Primary and secondary fuel category
                     fuel_cat_1, fuel_cat_2 = 'BIOMASS', 'BIOMASS'
 
                 # Wave power
@@ -393,7 +393,7 @@ class ConstructDataset:
                     # Primary technology category
                     technology_cat_1 = 'WAVE'
 
-                    # Primary and secondary fuel category            
+                    # Primary and secondary fuel category
                     fuel_cat_1, fuel_cat_2 = 'WAVE', 'WAVE'
 
                 # Set value to NaN
@@ -402,7 +402,7 @@ class ConstructDataset:
                     # Primary technology category
                     technology_cat_1 = np.nan
 
-                    # Primary and secondary fuel category            
+                    # Primary and secondary fuel category
                     fuel_cat_1, fuel_cat_2 = np.nan, np.nan
 
             return technology_cat_1, technology_cat_2, fuel_cat_1, fuel_cat_2
@@ -418,29 +418,36 @@ class ConstructDataset:
 
         return df_candidate
 
-    def get_candidate_wind_units(self):
-        """Get candidate wind generators"""
+    def get_candidate_gas_units(self):
+        """Get candidate gas units"""
 
-        # All candidate wind generators
-        df = self.get_all_candidate_units().copy()
-        mask_wind = df['TECHNOLOGY_PRIMARY'] == 'WIND'
-        mask_40pc = df['NTNDP_UNIT_ID'].str.contains('40pc')
+        # Old candidate units
+        df = self.get_possible_candidate_units().copy()
 
-        # Only retain one wind bubble per zone
-        df_wind = df.loc[mask_wind & ~mask_40pc, :].drop_duplicates(subset=['ZONE'], keep='first')
+        # Candidate coal generators
+        mask_gas = df['FUEL_TYPE_PRIMARY'] == 'GAS'
+        df_gas = df.loc[mask_gas, :].copy()
 
-        # Candidate wind units
-        df_wind['UNIT_ID'] = df_wind.apply(lambda x: x['ZONE'] + '-' + x['TECHNOLOGY_SUBCAT'], axis=1)
+        # Construct unit ID
+        df_gas['UNIT_ID'] = df_gas['NTNDP_UNIT_ID'].apply(lambda x: x.upper().replace(' ', '-'))
 
-        # Set index and rename columns
-        df_wind = df_wind.set_index('UNIT_ID').rename(columns={'LOCATION': 'WIND_BUBBLE'})
+        # Set index and drop columns
+        df_gas = df_gas.set_index('UNIT_ID').drop('LOCATION', axis=1)
 
         def _get_acil_id(row):
             """Get ACIL Allen technology ID"""
 
-            # Solar - dual axis tracking
-            if row.name.endswith('WIND'):
-                acil_id = 'Wind - (100 MW)'
+            # OCGT (no CCS)
+            if row.name.endswith('OCGT'):
+                acil_id = 'OCGT - Without CCS'
+
+            # CCGT (no CCS)
+            elif row.name.endswith('CCGT'):
+                acil_id = 'CCGT - Without CCS'
+
+            # CCGT with CCS
+            elif row.name.endswith('CCGT-CCS'):
+                acil_id = 'CCGT - With CCS'
 
             else:
                 raise (Exception('Missing ACIL Allen technology ID assignment'))
@@ -448,15 +455,64 @@ class ConstructDataset:
             return acil_id
 
         # ACIL Allen technology ID
-        df_wind['ACIL_TECHNOLOGY_ID'] = df_wind.apply(_get_acil_id, axis=1)
+        df_gas['ACIL_TECHNOLOGY_ID'] = df_gas.apply(_get_acil_id, axis=1)
 
-        return df_wind
+        return df_gas
+
+    def get_candidate_coal_units(self):
+        """Get candidate coal units"""
+
+        # Old candidate units
+        df = self.get_possible_candidate_units().copy()
+
+        # Candidate coal generators
+        mask_coal = df['FUEL_TYPE_PRIMARY'] == 'COAL'
+        df_coal = df.loc[mask_coal, :].copy()
+
+        # Construct unit ID
+        df_coal['UNIT_ID'] = df_coal['NTNDP_UNIT_ID'].apply(lambda x: x.upper().replace(' ', '-'))
+
+        # Set index and drop columns
+        df_coal = df_coal.set_index('UNIT_ID').drop('LOCATION', axis=1)
+
+        def _get_acil_id(row):
+            """Get ACIL Allen technology ID
+
+            Note: Assuming black coal geneators are candidate units
+            except for LV (brown coal assumed)
+            """
+
+            # Supercritical black coal (no CCS)
+            if row.name.endswith('SC') and row['ZONE'] != 'LV':
+                acil_id = 'Supercritical PC - Black coal without CCS'
+
+            # Supercritical black coal (with CCS)
+            elif row.name.endswith('SC-CCS') and row['ZONE'] != 'LV':
+                acil_id = 'Supercritical PC - Black coal with CCS'
+
+            # Supercritical brown coal (no CCS)
+            elif row.name.endswith('SC') and row['ZONE'] == 'LV':
+                acil_id = 'Supercritical PC - Brown coal without CCS'
+
+            # Supercritical brown coal (with CCS)
+            elif row.name.endswith('SC-CCS') and row['ZONE'] == 'LV':
+                acil_id = 'Supercritical PC - Brown coal with CCS'
+
+            else:
+                raise (Exception('Missing assignment'))
+
+            return acil_id
+
+        # ACIL Allen technology ID
+        df_coal['ACIL_TECHNOLOGY_ID'] = df_coal.apply(_get_acil_id, axis=1)
+
+        return df_coal
 
     def get_candidate_solar_units(self):
         """Get candidate solar generators"""
 
         # All solar units
-        df = self.get_all_candidate_units().copy()
+        df = self.get_possible_candidate_units().copy()
         mask_solar = df['TECHNOLOGY_PRIMARY'] == 'SOLAR'
 
         # Remove generators with 40pc in name (duplicates)
@@ -496,85 +552,29 @@ class ConstructDataset:
 
         return df_solar
 
-    def get_candidate_coal_units(self):
-        """Get candidate coal units"""
+    def get_candidate_wind_units(self):
+        """Get candidate wind generators"""
 
-        # Old candidate units
-        df = self.get_all_candidate_units().copy()
+        # All candidate wind generators
+        df = self.get_possible_candidate_units().copy()
+        mask_wind = df['TECHNOLOGY_PRIMARY'] == 'WIND'
+        mask_40pc = df['NTNDP_UNIT_ID'].str.contains('40pc')
 
-        # Candidate coal generators
-        mask_coal = df['FUEL_TYPE_PRIMARY'] == 'COAL'
-        df_coal = df.loc[mask_coal, :].copy()
+        # Only retain one wind bubble per zone
+        df_wind = df.loc[mask_wind & ~mask_40pc, :].drop_duplicates(subset=['ZONE'], keep='first')
 
-        # Construct unit ID
-        df_coal['UNIT_ID'] = df_coal['NTNDP_UNIT_ID'].apply(lambda x: x.upper().replace(' ', '-'))
+        # Candidate wind units
+        df_wind['UNIT_ID'] = df_wind.apply(lambda x: x['ZONE'] + '-' + x['TECHNOLOGY_SUBCAT'], axis=1)
 
-        # Set index and drop columns
-        df_coal = df_coal.set_index('UNIT_ID').drop('LOCATION', axis=1)
-
-        def _get_acil_id(row):
-            """Get ACIL Allen technology ID
-
-            Note: Assuming black coal geneators are candidate units 
-            except for LV (brown coal assumed)
-            """
-
-            # Supercritical black coal (no CCS)
-            if row.name.endswith('SC') and row['ZONE'] != 'LV':
-                acil_id = 'Supercritical PC - Black coal without CCS'
-
-            # Supercritical black coal (with CCS)
-            elif row.name.endswith('SC-CCS') and row['ZONE'] != 'LV':
-                acil_id = 'Supercritical PC - Black coal with CCS'
-
-            # Supercritical brown coal (no CCS)
-            elif row.name.endswith('SC') and row['ZONE'] == 'LV':
-                acil_id = 'Supercritical PC - Brown coal without CCS'
-
-            # Supercritical brown coal (with CCS)
-            elif row.name.endswith('SC-CCS') and row['ZONE'] == 'LV':
-                acil_id = 'Supercritical PC - Brown coal with CCS'
-
-            else:
-                raise (Exception('Missing assignment'))
-
-            return acil_id
-
-        # ACIL Allen technology ID
-        df_coal['ACIL_TECHNOLOGY_ID'] = df_coal.apply(_get_acil_id, axis=1)
-
-        return df_coal
-
-    def get_candidate_gas_units(self):
-        """Get candidate gas units"""
-
-        # Old candidate units
-        df = self.get_all_candidate_units().copy()
-
-        # Candidate coal generators
-        mask_gas = df['FUEL_TYPE_PRIMARY'] == 'GAS'
-        df_gas = df.loc[mask_gas, :].copy()
-
-        # Construct unit ID
-        df_gas['UNIT_ID'] = df_gas['NTNDP_UNIT_ID'].apply(lambda x: x.upper().replace(' ', '-'))
-
-        # Set index and drop columns
-        df_gas = df_gas.set_index('UNIT_ID').drop('LOCATION', axis=1)
+        # Set index and rename columns
+        df_wind = df_wind.set_index('UNIT_ID').rename(columns={'LOCATION': 'WIND_BUBBLE'})
 
         def _get_acil_id(row):
             """Get ACIL Allen technology ID"""
 
-            # OCGT (no CCS)
-            if row.name.endswith('OCGT'):
-                acil_id = 'OCGT - Without CCS'
-
-            # CCGT (no CCS)
-            elif row.name.endswith('CCGT'):
-                acil_id = 'CCGT - Without CCS'
-
-            # CCGT with CCS
-            elif row.name.endswith('CCGT-CCS'):
-                acil_id = 'CCGT - With CCS'
+            # Solar - dual axis tracking
+            if row.name.endswith('WIND'):
+                acil_id = 'Wind - (100 MW)'
 
             else:
                 raise (Exception('Missing ACIL Allen technology ID assignment'))
@@ -582,21 +582,23 @@ class ConstructDataset:
             return acil_id
 
         # ACIL Allen technology ID
-        df_gas['ACIL_TECHNOLOGY_ID'] = df_gas.apply(_get_acil_id, axis=1)
+        df_wind['ACIL_TECHNOLOGY_ID'] = df_wind.apply(_get_acil_id, axis=1)
 
-        return df_gas
+        return df_wind
 
-    def get_all_units(self):
-        """Get all existing and candidate unit IDs"""
+    def get_candidate_units(self):
+        """Get all candidate units"""
 
-        # All unit IDs
-        all_units = (self.df_g.index
-                     .union(self.get_candidate_coal_units().index)
-                     .union(self.get_candidate_gas_units().index)
-                     .union(self.get_candidate_solar_units().index)
-                     .union(self.get_candidate_wind_units().index))
+        # All candidate units
+        dfs = [self.get_candidate_wind_units().copy(),
+               self.get_candidate_gas_units().copy(),
+               self.get_candidate_coal_units(),
+               self.get_candidate_solar_units()]
 
-        return all_units
+        # Place all candidate units in single DataFrame
+        df = pd.concat(dfs, sort=False)
+
+        return df
 
     def get_candidate_coal_fuel_cost_profiles(self):
         """Get candidate coal generator fuel cost profiles"""
@@ -744,31 +746,17 @@ class ConstructDataset:
 
         return df_o
 
-    def get_candidate_wind_vom_cost(self):
-        """Get candidate wind generator variable operating and maintenance cost"""
+    def get_candidate_gas_vom_cost(self):
+        """Get candidate gas generator variable operating and maintenance cost"""
 
-        # All candidate wind generators
-        df = self.get_candidate_wind_units().copy()
-
-        # Variable operating and maintenance cost
-        df_vom = pd.merge(df, self.df_ntndp_vom, how='left', left_on='NTNDP_UNIT_ID', right_index=True)[['VOM']]
-
-        # Check for missing values
-        assert not df_vom.isna().any().any(), 'Missing wind VOM values'
-
-        return df_vom
-
-    def get_candidate_solar_vom_cost(self):
-        """Get candidate solar generator variable operating and maintenance cost"""
-
-        # All candidate solar generators
-        df = self.get_candidate_solar_units().copy()
+        # All candidate gas generators
+        df = self.get_candidate_gas_units().copy()
 
         # Variable operating and maintenance cost
         df_vom = pd.merge(df, self.df_ntndp_vom, how='left', left_on='NTNDP_UNIT_ID', right_index=True)[['VOM']]
 
         # Check for missing values
-        assert not df_vom.isna().any().any(), 'Missing solar VOM values'
+        assert not df_vom.isna().any().any(), 'Missing gas VOM values'
 
         return df_vom
 
@@ -786,45 +774,45 @@ class ConstructDataset:
 
         return df_vom
 
-    def get_candidate_gas_vom_cost(self):
-        """Get candidate gas generator variable operating and maintenance cost"""
-
-        # All candidate gas generators
-        df = self.get_candidate_gas_units().copy()
-
-        # Variable operating and maintenance cost
-        df_vom = pd.merge(df, self.df_ntndp_vom, how='left', left_on='NTNDP_UNIT_ID', right_index=True)[['VOM']]
-
-        # Check for missing values
-        assert not df_vom.isna().any().any(), 'Missing gas VOM values'
-
-        return df_vom
-
-    def get_candidate_wind_fom_cost(self):
-        """Get candidate wind generator fixed operating and maintenance cost"""
-
-        # All candidate wind generators
-        df = self.get_candidate_wind_units().copy()
-
-        # Variable operating and maintenance cost
-        df_fom = pd.merge(df, self.df_ntndp_fom, how='left', left_on='NTNDP_UNIT_ID', right_index=True)[['FOM']]
-
-        # Check for missing values
-        assert not df_fom.isna().any().any(), 'Missing wind FOM values'
-
-        return df_fom
-
-    def get_candidate_solar_fom_cost(self):
-        """Get candidate solar generator fixed operating and maintenance cost"""
+    def get_candidate_solar_vom_cost(self):
+        """Get candidate solar generator variable operating and maintenance cost"""
 
         # All candidate solar generators
         df = self.get_candidate_solar_units().copy()
 
         # Variable operating and maintenance cost
+        df_vom = pd.merge(df, self.df_ntndp_vom, how='left', left_on='NTNDP_UNIT_ID', right_index=True)[['VOM']]
+
+        # Check for missing values
+        assert not df_vom.isna().any().any(), 'Missing solar VOM values'
+
+        return df_vom
+
+    def get_candidate_wind_vom_cost(self):
+        """Get candidate wind generator variable operating and maintenance cost"""
+
+        # All candidate wind generators
+        df = self.get_candidate_wind_units().copy()
+
+        # Variable operating and maintenance cost
+        df_vom = pd.merge(df, self.df_ntndp_vom, how='left', left_on='NTNDP_UNIT_ID', right_index=True)[['VOM']]
+
+        # Check for missing values
+        assert not df_vom.isna().any().any(), 'Missing wind VOM values'
+
+        return df_vom
+
+    def get_candidate_gas_fom_cost(self):
+        """Get candidate gas generator fixed operating and maintenance cost"""
+
+        # All candidate gas generators
+        df = self.get_candidate_gas_units().copy()
+
+        # Variable operating and maintenance cost
         df_fom = pd.merge(df, self.df_ntndp_fom, how='left', left_on='NTNDP_UNIT_ID', right_index=True)[['FOM']]
 
         # Check for missing values
-        assert not df_fom.isna().any().any(), 'Missing solar FOM values'
+        assert not df_fom.isna().any().any(), 'Missing gas FOM values'
 
         return df_fom
 
@@ -842,43 +830,33 @@ class ConstructDataset:
 
         return df_fom
 
-    def get_candidate_gas_fom_cost(self):
-        """Get candidate gas generator fixed operating and maintenance cost"""
+    def get_candidate_solar_fom_cost(self):
+        """Get candidate solar generator fixed operating and maintenance cost"""
 
-        # All candidate gas generators
-        df = self.get_candidate_gas_units().copy()
+        # All candidate solar generators
+        df = self.get_candidate_solar_units().copy()
 
         # Variable operating and maintenance cost
         df_fom = pd.merge(df, self.df_ntndp_fom, how='left', left_on='NTNDP_UNIT_ID', right_index=True)[['FOM']]
 
         # Check for missing values
-        assert not df_fom.isna().any().any(), 'Missing gas FOM values'
+        assert not df_fom.isna().any().any(), 'Missing solar FOM values'
 
         return df_fom
 
-    def get_candidate_coal_emissions_rates(self):
-        """Get emissions rates for candidate coal generators"""
+    def get_candidate_wind_fom_cost(self):
+        """Get candidate wind generator fixed operating and maintenance cost"""
 
-        # NTNDP emissions
-        df_emissions = self.df_ntndp_emissions.copy()
+        # All candidate wind generators
+        df = self.get_candidate_wind_units().copy()
 
-        # Remove duplicates
-        df_emissions = df_emissions.loc[~df_emissions.index.duplicated(keep='first'), :]
+        # Variable operating and maintenance cost
+        df_fom = pd.merge(df, self.df_ntndp_fom, how='left', left_on='NTNDP_UNIT_ID', right_index=True)[['FOM']]
 
-        # Divide kgCO2/MWh by 1000 to get tCO2/MWh
-        df_emissions[['EMISSIONS', 'FUGITIVE_EMISSIONS']] = df_emissions[['EMISSIONS', 'FUGITIVE_EMISSIONS']].div(1000)
+        # Check for missing values
+        assert not df_fom.isna().any().any(), 'Missing wind FOM values'
 
-        # Candidate coal units
-        df = self.get_candidate_coal_units()
-
-        # Join candidate coal emissions rates
-        df_coal_emissions = (pd.merge(df[['NTNDP_UNIT_ID']], df_emissions,
-                                      how='left', left_on=['NTNDP_UNIT_ID'],
-                                      right_index=True)[['EMISSIONS']])
-
-        assert not df_coal_emissions.isna().any().any(), 'Missing candidate coal emissions rates'
-
-        return df_coal_emissions
+        return df_fom
 
     def get_candidate_gas_emissions_rates(self):
         """Get emissions rates for candidate gas generators"""
@@ -904,6 +882,30 @@ class ConstructDataset:
 
         return df_gas_emissions
 
+    def get_candidate_coal_emissions_rates(self):
+        """Get emissions rates for candidate coal generators"""
+
+        # NTNDP emissions
+        df_emissions = self.df_ntndp_emissions.copy()
+
+        # Remove duplicates
+        df_emissions = df_emissions.loc[~df_emissions.index.duplicated(keep='first'), :]
+
+        # Divide kgCO2/MWh by 1000 to get tCO2/MWh
+        df_emissions[['EMISSIONS', 'FUGITIVE_EMISSIONS']] = df_emissions[['EMISSIONS', 'FUGITIVE_EMISSIONS']].div(1000)
+
+        # Candidate coal units
+        df = self.get_candidate_coal_units()
+
+        # Join candidate coal emissions rates
+        df_coal_emissions = (pd.merge(df[['NTNDP_UNIT_ID']], df_emissions,
+                                      how='left', left_on=['NTNDP_UNIT_ID'],
+                                      right_index=True)[['EMISSIONS']])
+
+        assert not df_coal_emissions.isna().any().any(), 'Missing candidate coal emissions rates'
+
+        return df_coal_emissions
+
     def get_candidate_solar_emissions_rates(self):
         """Get emissions rates for candidate solar generators (assume=0)"""
 
@@ -924,7 +926,7 @@ class ConstructDataset:
         # Get all candidate wind units
         df = self.get_candidate_wind_units().copy()
 
-        # Set emission=0 for all solar units
+        # Set emissions=0 for all solar units
         df['EMISSIONS'] = 0
 
         # Only retain 'emissions' column
@@ -932,33 +934,197 @@ class ConstructDataset:
 
         return df_o
 
-    def get_existing_coal_fuel_cost_profiles(self):
-        """Get fuel cost profiles for existing coal generators"""
+    def get_candidate_unit_technical_parameters(self):
+        """Candidate unit technical parameters"""
 
-        # Get DUIDs for existing coal generators
-        existing_coal_duids = self.get_existing_duids('COAL')
+        # Candidate units
+        df = self.get_candidate_units()
 
-        # All existing coal generators
-        df = self.df_g.reindex(existing_coal_duids).copy()
+        # ACIL Allen technical information for candidate units
+        df_acil = self._load_acil_candidate_technical_parameters()
 
-        # Join fuel cost profile IDs
-        df = df.join(self.df_fuel_cost_map[['FUEL_COST_ID']], how='left')
+        # Columns to retain along with their new names
+        cols = {'Ramp Up Rate (MW/h)': 'RR_UP',
+                'Ramp Down Rate (MW/h)': 'RR_DOWN',
+                'Warm Start-up Costs ($/MW sent-out)': 'SU_COST_WARM_MW',
+                'No Load Fuel Consumption (% of Full Load Fuel Consumption)': 'NL_FUEL_CONS',
+                'Min Gen (%)': 'MIN_GEN_PERCENT'}
 
-        # Check every existing coal generator has a corresponding fuel cost profile ID
-        assert not df['FUEL_COST_ID'].isna().any(), 'Existing coal generator missing fuel cost ID'
+        # ACIL Allen technical parameter information for candidate units
+        df_acil_merge = df_acil.rename(columns=cols)[cols.values()]
 
-        # Existing coal generators
-        df_existing_coal = pd.merge(df[['FUEL_COST_ID']], self.df_ntndp_coal_cost, how='left',
-                                    left_on=['FUEL_COST_ID'], right_index=True).drop('FUEL_COST_ID', axis=1)
+        # Columns to retain
+        keep_cols = list(cols.values()) + ['ZONE', 'TECHNOLOGY_SUBCAT']
 
-        # Rename columns
-        new_columns = {i: int(i.split('-')[0]) for i in df_existing_coal.columns}
-        df_existing_coal = df_existing_coal.rename(columns=new_columns)
+        # Technical parameters for each candidate unit
+        df_candidate_parameters = (pd.merge(df, df_acil_merge,
+                                            how='left', left_on='ACIL_TECHNOLOGY_ID',
+                                            right_index=True)[keep_cols])
+
+        # Assume that startup ramp-rate is same as normal operation ramp rate (no other data)
+        df_candidate_parameters['RR_STARTUP'] = df_candidate_parameters['RR_UP']
+
+        # Assume that shutdown ramp-rate is same as normal operation ramp rate (no other data)
+        df_candidate_parameters['RR_SHUTDOWN'] = df_candidate_parameters['RR_DOWN']
+
+        # Divide by 100 to get min generation percentage as fraction
+        df_candidate_parameters['MIN_GEN'] = df_candidate_parameters['MIN_GEN_PERCENT'].div(100)
+
+        def _get_min_on_time(row):
+            """Get minimum on time for candidate units"""
+
+            # Based on existing OCGT unit in ACIL Allen spreadsheet
+            if row.name.endswith('OCGT'):
+                return 1
+
+            # Based on existing CCGT unit in ACIL Allen spreadsheet
+            elif row.name.endswith('CCGT') or row.name.endswith('CCGT-CCS'):
+                return 4
+
+            # Note: is = 1 in ACIL, but think this is misleading. Zero likely a better value.
+            elif row.name.endswith('PV-DAT') or row.name.endswith('PV-SAT') or row.name.endswith('PV-FFP'):
+                return 0
+
+            # Note: is = 1 in ACIL, but think this is misleading. Zero likely a better value.
+            elif row.name.endswith('WIND'):
+                return 0
+
+            # Assumption for black coal generators
+            elif (row.name.endswith('COAL-SC') or row.name.endswith('COAL-SC-CCS')) and row['ZONE'] != 'LV':
+                return 8
+
+            # Assuming brown coal generators in LV have min on time of 16 hours
+            elif (row.name.endswith('COAL-SC') or row.name.endswith('COAL-SC-CCS')) and row['ZONE'] == 'LV':
+                return 16
+
+            else:
+                raise (Exception('Missing minimum on time assignment for candidate units'))
+
+        # Minimum on time
+        df_candidate_parameters['MIN_ON_TIME'] = df_candidate_parameters.apply(_get_min_on_time, axis=1)
+
+        # Assume minimum off time is same as minimum on time (consistent with ACIL Allen existing technologies
+        # spreadsheet)
+        df_candidate_parameters['MIN_OFF_TIME'] = df_candidate_parameters.apply(_get_min_on_time, axis=1)
+
+        # Drop zone and technology sub-category columns (will overlap with later merge otherwise)
+        df_candidate_parameters = df_candidate_parameters.drop(['ZONE', 'TECHNOLOGY_SUBCAT'], axis=1)
+
+        return df_candidate_parameters
+
+    def get_candidate_unit_build_costs(self):
+        """Compile build cost data into a single DataFrame"""
+
+        # All candidate units which can be invested in
+        df_candidate_units = pd.concat([self.get_candidate_coal_units()[['NTNDP_UNIT_ID']],
+                                        self.get_candidate_gas_units()[['NTNDP_UNIT_ID']],
+                                        self.get_candidate_wind_units()[['NTNDP_UNIT_ID']],
+                                        self.get_candidate_solar_units()[['NTNDP_UNIT_ID']]])
+
+        # candidate_units
+        df_build_cost = pd.merge(df_candidate_units, self.df_ntndp_build_cost, how='left',
+                                 left_on='NTNDP_UNIT_ID', right_index=True).drop('NTNDP_UNIT_ID', axis=1)
+
+        # Update column names. Assume 2016-17 applies from Jan 1 2016 - Dec 31 2016
+        new_cols = {i: int(i.split('-')[0]) for i in df_build_cost.columns}
+        df_build_cost = df_build_cost.rename(columns=new_cols)
 
         # Check for missing values
-        assert not df_existing_coal.isna().any().any(), 'Missing fuel cost values for existing coal generators'
+        assert not df_build_cost.isna().any().any(), 'Missing build cost values'
 
-        return df_existing_coal
+        return df_build_cost
+
+    def get_candidate_unit_parameters(self):
+        """Parameters for all candidate units"""
+
+        # Base DataFrame
+        df = self.get_candidate_units()
+
+        # Heat rates
+        heat_rates = [self.get_candidate_gas_heat_rates(),
+                      self.get_candidate_coal_heat_rates(),
+                      self.get_candidate_solar_heat_rates(),
+                      self.get_candidate_wind_heat_rates(),
+                      ]
+
+        # Combine heat rate information into single DataFrame
+        df_heat_rates = pd.concat(heat_rates, sort=False)
+
+        # Emissions rates
+        emissions_rates = [self.get_candidate_gas_emissions_rates(),
+                           self.get_candidate_coal_emissions_rates(),
+                           self.get_candidate_solar_emissions_rates(),
+                           self.get_candidate_wind_emissions_rates(),
+                           ]
+
+        # Combine emissions rate information into single DataFrame
+        df_emissions_rates = pd.concat(emissions_rates, sort=False)
+
+        # Technical parameters for each unit
+        df_technical_parameters = self.get_candidate_unit_technical_parameters()
+
+        # FOM costs
+        fom_costs = [self.get_candidate_gas_fom_cost(),
+                     self.get_candidate_coal_fom_cost(),
+                     self.get_candidate_solar_fom_cost(),
+                     self.get_candidate_wind_fom_cost(),
+                     ]
+
+        # Combine emissions rate information into single DataFrame
+        df_fom_costs = pd.concat(fom_costs, sort=False)
+
+        # VOM costs
+        vom_costs = [self.get_candidate_gas_vom_cost(),
+                     self.get_candidate_coal_vom_cost(),
+                     self.get_candidate_solar_vom_cost(),
+                     self.get_candidate_wind_vom_cost(),
+                     ]
+
+        # Combine emissions rate information into single DataFrame
+        df_vom_costs = pd.concat(vom_costs, sort=False)
+
+        # Join information to main DataFrame
+        df = (df.join(df_heat_rates, how='left')
+              .join(df_emissions_rates, how='left')
+              .join(df_technical_parameters, how='left')
+              .join(df_fom_costs, how='left')
+              .join(df_vom_costs, how='left')
+              )
+
+        # Add level to column index to differentiate between static and time-varying costs
+        df.columns = pd.MultiIndex.from_product([['PARAMETERS'], df.columns])
+
+        # Fuel cost profiles
+        # ------------------
+        # Candidate coal units
+        df_coal_costs = self.get_candidate_coal_fuel_cost_profiles()
+
+        # Candidate gas units
+        df_gas_costs = self.get_candidate_gas_fuel_cost_profiles()
+
+        # Fuel costs
+        df_fuel_costs = pd.concat([df_coal_costs, df_gas_costs], sort=False).reindex(df.index).fillna(method='ffill',
+                                                                                                      axis=1).fillna(
+            method='bfill', axis=1).fillna(0)
+
+        # Add level to columns
+        df_fuel_costs.columns = pd.MultiIndex.from_product([['FUEL_COST'], df_fuel_costs.columns])
+
+        # Join fuel costs
+        df = df.join(df_fuel_costs, how='left')
+
+        # Build cost profiles
+        # -------------------
+        # Build cost for candidate units
+        df_build_cost = self.get_candidate_unit_build_costs()
+
+        # Add level to column index
+        df_build_cost.columns = pd.MultiIndex.from_product([['BUILD_COST'], df_build_cost.columns])
+
+        # Join build costs
+        df = df.join(df_build_cost, how='left')
+
+        return df
 
     def get_existing_gas_and_liquid_fuel_cost_profiles(self):
         """Get fuel cost profiles for existing gas and liquid fuel generators"""
@@ -968,7 +1134,8 @@ class ConstructDataset:
         existing_liquid_fuel_duids = self.get_existing_duids('LIQUID')
 
         # All existing gas and liquid fuel generators
-        df = self.df_g.reindex(existing_gas_duids + existing_liquid_fuel_duids).copy()
+        existing_gas_and_liquid_duids = existing_gas_duids.union(existing_liquid_fuel_duids)
+        df = self.df_g.reindex(existing_gas_and_liquid_duids).copy()
 
         # Join fuel cost profile IDs
         df = df.join(self.df_fuel_cost_map[['FUEL_COST_ID']], how='left')
@@ -1040,6 +1207,34 @@ class ConstructDataset:
 
         return df_existing
 
+    def get_existing_coal_fuel_cost_profiles(self):
+        """Get fuel cost profiles for existing coal generators"""
+
+        # Get DUIDs for existing coal generators
+        existing_coal_duids = self.get_existing_duids('COAL')
+
+        # All existing coal generators
+        df = self.df_g.reindex(existing_coal_duids).copy()
+
+        # Join fuel cost profile IDs
+        df = df.join(self.df_fuel_cost_map[['FUEL_COST_ID']], how='left')
+
+        # Check every existing coal generator has a corresponding fuel cost profile ID
+        assert not df['FUEL_COST_ID'].isna().any(), 'Existing coal generator missing fuel cost ID'
+
+        # Existing coal generators
+        df_existing_coal = pd.merge(df[['FUEL_COST_ID']], self.df_ntndp_coal_cost, how='left',
+                                    left_on=['FUEL_COST_ID'], right_index=True).drop('FUEL_COST_ID', axis=1)
+
+        # Rename columns
+        new_columns = {i: int(i.split('-')[0]) for i in df_existing_coal.columns}
+        df_existing_coal = df_existing_coal.rename(columns=new_columns)
+
+        # Check for missing values
+        assert not df_existing_coal.isna().any().any(), 'Missing fuel cost values for existing coal generators'
+
+        return df_existing_coal
+
     def get_existing_unit_fom_costs(self):
         """Get FOM costs for existing generators"""
 
@@ -1054,216 +1249,73 @@ class ConstructDataset:
 
         return df_o
 
-    def get_all_fom_costs(self):
-        """Get FOM costs for all unit and place in a single DataFrame"""
+    def get_existing_unit_parameters(self):
+        """Combine parameter information for existing units"""
 
-        # FOM costs for different types of units
-        fom = [self.get_candidate_coal_fom_cost(),
-               self.get_candidate_gas_fom_cost(),
-               self.get_candidate_solar_fom_cost(),
-               self.get_candidate_wind_fom_cost(),
-               self.get_existing_unit_fom_costs()]
+        # Basis DataFrame (contains most parameters)
+        df = self.df_g.copy()
 
-        # Concatenate FOM costs
-        df_fom = pd.concat(fom)
+        # Add fields for fuel type categories (conforming with candidate unit format)
+        primary_fuel_cat_map = {'Wind': 'WIND',
+                                'Brown coal': 'COAL',
+                                'Black coal': 'COAL',
+                                'Natural Gas (Pipeline)': 'GAS',
+                                'Hydro': 'HYDRO',
+                                'Coal seam methane': 'GAS',
+                                'Solar': 'SOLAR',
+                                'Kerosene - non aviation': 'LIQUID',
+                                'Diesel oil': 'LIQUID'}
 
-        # Check no missing values
-        assert not df_fom.isna().any().any(), 'Missing FOM cost values'
+        secondary_fuel_cat_map = {'Wind': 'WIND',
+                                  'Brown coal': 'BROWN-COAL',
+                                  'Black coal': 'BLACK-COAL',
+                                  'Natural Gas (Pipeline)': 'GAS',
+                                  'Hydro': 'HYDRO',
+                                  'Coal seam methane': 'GAS',
+                                  'Solar': 'SOLAR',
+                                  'Kerosene - non aviation': 'LIQUID',
+                                  'Diesel oil': 'LIQUID'}
 
-        return df_fom
+        # Primary fuel type category
+        df['FUEL_TYPE_PRIMARY'] = df.apply(lambda x: primary_fuel_cat_map[x['FUEL_TYPE']], axis=1)
 
-    def get_all_vom_costs(self):
-        """Get VOM costs for all unit and place in a single DataFrame"""
+        # Fuel type sub-category
+        df['FUEL_TYPE_SUBCAT'] = df.apply(lambda x: secondary_fuel_cat_map[x['FUEL_TYPE']], axis=1)
 
-        # VOM costs for different types of units
-        vom = [self.get_candidate_coal_vom_cost(),
-               self.get_candidate_gas_vom_cost(),
-               self.get_candidate_solar_vom_cost(),
-               self.get_candidate_wind_vom_cost(),
-               self.df_g[['VOM']]]
+        # Primary technology category (no information for sub-categories for existing generators)
+        df['TECHNOLOGY_CAT_PRIMARY'] = df['FUEL_TYPE_PRIMARY']
 
-        # Concatenate VOM costs
-        df_vom = pd.concat(vom)
+        # Add FOM costs
+        df_fom = self.get_existing_unit_fom_costs()
 
-        # Check no missing values
-        assert not df_vom.isna().any().any(), 'Missing VOM cost values'
+        # Join FOM costs
+        df = df.join(df_fom, how='left')
 
-        return df_vom
+        # Add level to column index
+        df.columns = pd.MultiIndex.from_product([['PARAMETERS'], df.columns])
 
-    def get_all_heat_rates(self):
-        """Get heat rates for all units and place in a single DataFrame"""
+        # Fuel cost profiles
+        # ------------------
+        # Coal costs
+        df_coal_cost = self.get_existing_coal_fuel_cost_profiles()
 
-        # Heat rates for different types of units
-        heat_rates = [self.get_candidate_coal_heat_rates(),
-                      self.get_candidate_gas_heat_rates(),
-                      self.get_candidate_solar_heat_rates(),
-                      self.get_candidate_wind_heat_rates(),
-                      self.df_g[['HEAT_RATE']]]
-
-        # Concatenate heat rates
-        df_heat_rates = pd.concat(heat_rates)
-
-        # Check no missing values
-        assert not df_heat_rates.isna().any().any(), 'Missing heat rate values'
-
-        return df_heat_rates
-
-    def get_all_emissions_rates(self):
-        """Get emissions rates for all units and place in a single DataFrame"""
-
-        # Emissions rates for different types of units
-        emissions_rates = [self.get_candidate_coal_emissions_rates(),
-                           self.get_candidate_gas_emissions_rates(),
-                           self.get_candidate_solar_emissions_rates(),
-                           self.get_candidate_wind_emissions_rates(),
-                           self.df_g[['EMISSIONS']]]
-
-        # Concatenate heat rates
-        df_emissions_rates = pd.concat(emissions_rates)
-
-        # Check no missing values
-        assert not df_emissions_rates.isna().any().any(), 'Missing emissions rate values'
-
-        return df_emissions_rates
-
-    def get_static_data(self):
-        """Compile parameters for all units that do not vary over time (static parameters)"""
-
-        # FOM costs
-        df_fom = self.get_all_fom_costs()
-
-        # VOM costs
-        df_vom = self.get_all_vom_costs()
-
-        # Heat rates
-        df_heat_rates = self.get_all_heat_rates()
-
-        # Emissions rates
-        df_emissions_rates = self.get_all_emissions_rates()
-
-        # Concatenate in single DataFrame
-        df_static = pd.concat([df_fom, df_vom, df_heat_rates, df_emissions_rates], axis=1)
-
-        # Check no missing values
-        assert not df_static.isna().any().any(), 'Missing static values'
-
-        return df_static
-
-    def get_time_varying_fuel_costs(self):
-        """Compile fuel cost data for all units (costs vary over time)"""
-
-        # All fuel cost information in a single DataFrame
-        df_fuel_costs = pd.concat([self.get_candidate_coal_fuel_cost_profiles(),
-                                   self.get_candidate_gas_fuel_cost_profiles(),
-                                   self.get_existing_coal_fuel_cost_profiles(),
-                                   self.get_existing_gas_and_liquid_fuel_cost_profiles()],
-                                  sort=False)
-
-        # Reindex so all units included. Fill forward along rows (2041 fuel cost value missing for some units).
-        # Then fill missing entries with 0. Assume fuel cost for wind and solar generators = 0 for entire horizon.
-        # Will check later that no thermal plant have fuel costs=0.
-        df_fuel_costs = df_fuel_costs.reindex(self.get_all_units()).fillna(method='ffill', axis=1).fillna(0)
-
-        return df_fuel_costs
-
-    def get_time_varying_build_costs(self):
-        """Compile build cost data into a single DataFrame"""
-
-        # All candidate units which can be invested in
-        df_candidate_units = pd.concat([self.get_candidate_coal_units()[['NTNDP_UNIT_ID']],
-                                        self.get_candidate_gas_units()[['NTNDP_UNIT_ID']],
-                                        self.get_candidate_wind_units()[['NTNDP_UNIT_ID']],
-                                        self.get_candidate_solar_units()[['NTNDP_UNIT_ID']]])
-
-        # candidate_units
-        df_build_cost = pd.merge(df_candidate_units, self.df_ntndp_build_cost, how='left',
-                                 left_on='NTNDP_UNIT_ID', right_index=True).drop('NTNDP_UNIT_ID', axis=1)
-
-        # Update column names. Assume 2016-17 applies from Jan 1 2016 - Dec 31 2016
-        new_cols = {i: int(i.split('-')[0]) for i in df_build_cost.columns}
-        df_build_cost = df_build_cost.rename(columns=new_cols)
-
-        # Check for missing values
-        assert not df_build_cost.isna().any().any(), 'Missing build cost values'
-
-        return df_build_cost
-
-    def get_combined_unit_information(self):
-        """Combine unit information into a single DataFrame"""
-
-        # Static generator information (heat rates, FOM, VOM costs)
-        df_static = self.get_static_data().copy()
-        df_static.columns = pd.MultiIndex.from_product([['STATIC'], df_static.columns])
-
-        # Time varying fuel costs
-        df_fuel_costs = self.get_time_varying_fuel_costs().copy()
-        df_fuel_costs.columns = pd.MultiIndex.from_product([['FUEL_COST'], df_fuel_costs.columns])
-
-        # Candidate unit information
-        df_candidate_coal = self.get_candidate_coal_units().copy()
-        df_candidate_gas = self.get_candidate_gas_units().copy()
-        df_candidate_solar = self.get_candidate_solar_units().copy()
-        df_candidate_wind = self.get_candidate_wind_units().copy()
+        # Gas costs
+        df_gas_and_liquid_cost = self.get_existing_gas_and_liquid_fuel_cost_profiles()
 
         # Combine into single DataFrame
-        df_candidate = pd.concat([df_candidate_coal, df_candidate_gas, df_candidate_solar, df_candidate_wind],
-                                 sort=False).drop(['NTNDP_UNIT_ID', 'WIND_BUBBLE', 'GEN_TYPE'], axis=1)
-        df_candidate['UNIT_TYPE'] = 'CANDIDATE'
+        df_fuel_cost = pd.concat([df_coal_cost, df_gas_and_liquid_cost], sort=False)
 
-        # Map between fuel types and fuel categories for existing generators
-        fuel_type_map = {'Wind': 'WIND',
-                         'Brown coal': 'COAL',
-                         'Black coal': 'COAL',
-                         'Natural Gas (Pipeline)': 'GAS',
-                         'Hydro': 'HYDRO',
-                         'Coal seam methane': 'GAS',
-                         'Solar': 'SOLAR',
-                         'Kerosene - non aviation': 'LIQUID',
-                         'Diesel oil': 'LIQUID'}
+        # Forward fill values for missing years along rows, then back-fill. Missing values should be renewables.
+        df_fuel_cost = df_fuel_cost.reindex(df.index).fillna(method='ffill', axis=1).fillna(method='bfill',
+                                                                                            axis=1).fillna(0)
 
-        # Existing generators
-        df_existing = self.df_g[['FUEL_TYPE', 'NEM_ZONE']].copy()
+        # Add level to column index
+        df_fuel_cost.columns = pd.MultiIndex.from_product([['FUEL_COST'], df_fuel_cost.columns])
 
-        # Assign fuel categories
-        df_existing['FUEL_CAT'] = df_existing.apply(lambda x: fuel_type_map[x['FUEL_TYPE']], axis=1)
-        df_existing = df_existing.drop('FUEL_TYPE', axis=1).rename(columns={'NEM_ZONE': 'ZONE'})
-        df_existing['UNIT_TYPE'] = 'EXISTING'
+        # Join fuel cost profiles to main DataFrame
+        df = df.join(df_fuel_cost, how='left')
 
-        # Combine candidate and existing unit information into single DataFrame
-        df_unit_info = pd.concat([df_candidate, df_existing])
-        df_unit_info.columns = pd.MultiIndex.from_product([['INFO'], df_unit_info.columns])
-        df_units = df_unit_info.join(df_static, how='left').join(df_fuel_costs, how='left')
-
-        # Check for missing values
-        assert not df_units.isna().any().any(), 'Missing unit information'
-
-        # Filters
-        # -------
-        # Renewable generators
-        mask_renewables = df_units[('INFO', 'FUEL_CAT')].isin(['SOLAR', 'WIND', 'HYDRO'])
-
-        # Non-renewables
-        mask_non_renewables = df_units[('INFO', 'FUEL_CAT')].isin(['LIQUID', 'COAL', 'GAS'])
-
-        # Perform checks
-        # --------------
-        # Check that fuel costs for renewables are zero
-        assert not df_units.loc[mask_renewables, ('FUEL_COST', slice(None))].ne(
-            0).any().any(), 'Fuel cost for renewables not 0'
-
-        # Check that emisisons rates for renewables are zero
-        assert not df_units.loc[mask_renewables, ('STATIC', 'EMISSIONS')].ne(
-            0).any().any(), 'Emissions for renewables not 0'
-
-        # Check that fuel costs for non-renewables are greater than zero
-        assert df_units.loc[mask_non_renewables, ('FUEL_COST', slice(None))].gt(
-            0).any().any(), 'Fuel cost for non-renewables less than or equal to 0'
-
-        # Check that emisisons rates for renewables are zero
-        assert df_units.loc[mask_non_renewables, ('STATIC', 'EMISSIONS')].gt(
-            0).any().any(), 'Emissions for non-renewables less than or equal to 0'
-
-        return df_units
+        return df
 
     def get_battery_build_cost(self):
         """Load and format batter build cost information"""
@@ -1286,89 +1338,12 @@ class ConstructDataset:
         new_cols = {i: int(i.split('-')[0]) for i in df.columns}
         df = df.rename(columns=new_cols)
 
+        # Extract NEM zone from index
+        df['ZONE'] = df.apply(lambda x: x.name.split('-')[0], axis=1)
+
         return df
 
-    def get_candidate_unit_technical_parameters(self):
-        """Candidate unit technical parameters"""
-
-        # Candidate units
-        dfs = [self.get_candidate_wind_units().copy(),
-               self.get_candidate_solar_units().copy(),
-               self.get_candidate_coal_units().copy(),
-               self.get_candidate_gas_units().copy(),
-               ]
-
-        # Place all candidate unit information into a single DataFrame
-        df = pd.concat(dfs, sort=False)
-
-        # ACIL Allen technical information for candidate units
-        df_acil = self._load_acil_candidate_technical_parameters()
-
-        # Columns to retain along with their new names
-        cols = {'Ramp Up Rate (MW/h)': 'RR_UP',
-                'Ramp Down Rate (MW/h)': 'RR_DOWN',
-                'Warm Start-up Costs ($/MW sent-out)': 'SU_COST_WARM_MW',
-                'No Load Fuel Consumption (% of Full Load Fuel Consumption)': 'NL_FUEL_CONS',
-                'Min Gen (%)': 'MIN_GEN_PERCENT'}
-
-        # ACIL Allen technical parameter information for candidate units
-        df_acil_merge = df_acil.rename(columns=cols)[cols.values()]
-
-        # Columns to retain
-        keep_cols = list(cols.values()) + ['ZONE', 'GEN_TYPE', 'FUEL_CAT']
-        df_candidate_parameters = (pd.merge(df, df_acil_merge,
-                                            how='left', left_on='ACIL_TECHNOLOGY_ID',
-                                            right_index=True)[keep_cols])
-
-        # Assume that startup ramp-rate is same as normal operation ramp rate (no other data)
-        df_candidate_parameters['RR_STARTUP'] = df_candidate_parameters['RR_UP']
-
-        # Assume that shutdown ramp-rate is same as normal operation ramp rate (no other data)
-        df_candidate_parameters['RR_SHUTDOWN'] = df_candidate_parameters['RR_DOWN']
-
-        # Divide by 100 to get min generation percentage as fraction
-        df_candidate_parameters['MIN_GEN_PERCENT'] = df_candidate_parameters['MIN_GEN_PERCENT'].div(100)
-
-        def _get_min_on_time(row):
-            """Get minimum on time for candidate units"""
-
-            # Based on existing OCGT unit in ACIL Allen spreadsheet
-            if row.name.endswith('OCGT'):
-                return 1
-
-            # Based on existing CCGT unit in ACIL Allen spreadsheet
-            elif row.name.endswith('CCGT') or row.name.endswith('CCGT-CCS'):
-                return 4
-
-            # Note: is = 1 in ACIL, but think this is misleading. Zero likely a better value.
-            elif row.name.endswith('PV-DAT') or row.name.endswith('PV-SAT') or row.name.endswith('PV-FFP'):
-                return 0
-
-            # Note: is = 1 in ACIL, but think this is misleading. Zero likely a better value.
-            elif row.name.endswith('WIND'):
-                return 0
-
-            # Assumption for black coal generators
-            elif (row.name.endswith('COAL-SC') or row.name.endswith('COAL-SC-CCS')) and row['ZONE'] != 'LV':
-                return 8
-
-            # Assuming brown coal generators in LV have min on time of 16 hours
-            elif (row.name.endswith('COAL-SC') or row.name.endswith('COAL-SC-CCS')) and row['ZONE'] == 'LV':
-                return 16
-
-            else:
-                raise (Exception('Missing minimum on time assignment for candidate units'))
-
-        # Minimum on time
-        df_candidate_parameters['MIN_ON_TIME'] = df_candidate_parameters.apply(_get_min_on_time, axis=1)
-
-        # Assume minimum off time is same as minimum on time (consistent with ACIL Allen existing technologies
-        # spreadsheet)
-        df_candidate_parameters['MIN_OFF_TIME'] = df_candidate_parameters.apply(_get_min_on_time, axis=1)
-
-        return df_candidate_parameters
-
-    def get_build_limits(self):
+    def get_candidate_unit_build_limits(self):
         """Get build limits for each candidate technology, for each zone"""
 
         # Load build limits from ACIL Allen spreadsheet
@@ -1383,89 +1358,114 @@ class ConstructDataset:
         # All regions
         all_regions = self.df_g['NEM_REGION'].unique()
 
+        def _get_zones_given_region(nem_region):
+            """Get zones belonging to a given region"""
+
+            # Zones belonging to a given region
+            nem_zones = self.df_zones_map.loc[self.df_zones_map['REGION'].eq(nem_region), :].index
+
+            return nem_zones
+
+        # Loop through each row of the ACIL Allen build limits table
         for index, row in df.iterrows():
             if row['Region'] == 'NEM Wide':
+                # Build limit applies to all NEM regions
+                region_zone_combinations = [[r, z] for r in all_regions for z in _get_zones_given_region(r)]
 
-                # Loop through all regions
-                for r in all_regions:
+            elif row['Zone'] == 'All':
+                # NEM region
+                region = row['Region']
 
-                    # Loop through all zones
-                    for z in self.df_zones_map.loc[self.df_zones_map['REGION'].eq(r), :].index:
+                # Build limit applies to all zones within a given region
+                region_zone_combinations = [[region, z] for z in _get_zones_given_region(region)]
 
-                        # Build limit for zone
-                        build_limit = row['Max Build Limit per Zone (MW)']
+            elif row['ACIL_TECHNOLOGY_ID'] == 'Solar PV DAT':
+                # Note: Unclear build limits from ACIL spreadsheet, but this technology
+                # type should have unconstrained build limits given that other solar options do.
+                # Setting build limit to a comparable level as other solar units.
 
-                        # If value missing, assume build limit is unconstrained
-                        if pd.isnull(build_limit):
-                            # Set build limit to arbitrarily large number
-                            build_limit = 99999
-
-                        # Append build limit information to container
-                        build_limits.append((row['ACIL_TECHNOLOGY_ID'], r, z, build_limit))
+                # Build limit applies to all NEM regions
+                region_zone_combinations = [[r, z] for r in all_regions for z in _get_zones_given_region(r)]
 
             else:
-                if row['Zone'] == 'All':
-                    # All zones beloning to a given region
-                    zones = self.df_zones_map.loc[self.df_zones_map['REGION'].eq(row['Region']), :].index
+                # NEM region
+                region = row['Region']
 
-                elif row['ACIL_TECHNOLOGY_ID'] == 'Solar PV DAT':
-                    # Note: Unclear build limits from ACIL spreadsheet, but this technology 
-                    # type should have unconstrained build limits given that other solar options do.
-                    # Setting build limit to a comparable level as other solar units.
+                # Zones for which build limit applies
+                zones = row['Zone'].replace(' ', '').split(',')
 
-                    # Loop through all regions
-                    for r in all_regions:
+                # Build limits applies to zones within given region
+                region_zone_combinations = [[region, z] for z in zones]
 
-                        # Loop through all zones
-                        for z in self.df_zones_map.loc[self.df_zones_map['REGION'].eq(r), :].index:
+            # Build limit for given zone
+            build_limit = row['Max Build Limit per Zone (MW)']
 
-                            # Build limit for zone
-                            build_limit = row['Max Build Limit per Zone (MW)']
+            # If value missing, assume build limit is unconstrained
+            if pd.isnull(build_limit):
+                # Set build limit to arbitrarily large number
+                build_limit = 99999
 
-                            # If value missing, assume build limit is unconstrained
-                            if pd.isnull(build_limit):
-                                # Set build limit to arbitrarily large number
-                                build_limit = 40000
+            # Loop through region zone combinations and add build limits. Append to main container.
+            for i in region_zone_combinations:
+                # Build limit for a given technology within a given zone
+                zone_build_limit = i + [row['ACIL_TECHNOLOGY_ID'], build_limit]
 
-                            # Append build limit information to container
-                            build_limits.append((row['ACIL_TECHNOLOGY_ID'], r, z, build_limit))
+                # Append zone build limit to main container
+                build_limits.append(tuple(zone_build_limit))
 
-                else:
-                    zones = row['Zone'].replace(' ', '').split(',')
-
-                    # For each zone
-                    for z in zones:
-
-                        # Build limit for zone
-                        build_limit = row['Max Build Limit per Zone (MW)']
-
-                        # If value missing, assume build limit is unconstrained
-                        if pd.isnull(build_limit):
-                            # Set build limit to arbitrarily large number
-                            build_limit = 99999
-
-                        # Append build limit information to container
-                        build_limits.append((row['ACIL_TECHNOLOGY_ID'], row['Region'], z, build_limit))
-
-                        # Build limits for each technology per zone
-        df_build_limits = pd.DataFrame(build_limits, columns=['ACIL_TECHNOLOGY_ID', 'REGION', 'ZONE', 'BUILD_LIMIT'])
+        # Build limits for each technology per zone
+        df_build_limits = pd.DataFrame(build_limits, columns=['REGION', 'ZONE', 'ACIL_TECHNOLOGY_ID', 'BUILD_LIMIT'])
 
         # Pivot so different technologies comprise the index, and zones the columns. Cell values denote build limit
         # for technology for each zone.
         df_build_limits_pivot = df_build_limits.pivot(index='ACIL_TECHNOLOGY_ID', columns='ZONE',
                                                       values='BUILD_LIMIT').reindex(columns=all_zones).fillna(0)
 
+        # Map between ACIL unit types and candidate unit types
+        acil_unit_map = {'Biomass': 'BIOMASS',
+                         'CCGT - With CCS': 'CCGT-CCS',
+                         'CCGT - Without CCS': 'CCGT',
+                         'CLF, PV FFP, PV SAT CR S, PT S': 'SOLAR',
+                         'Integrated Solar Combined Cycle (ISCS)': 'INTEGRATED-SOLAR',
+                         'OCGT - Without CCS': 'OCGT',
+                         'Pumped Hydro Storage': 'PUMPED-HYDRO',
+                         'Supercritical PC - Black coal with CCS': 'COAL-SC-CCS BLACK-COAL',
+                         'Supercritical PC - Black coal without CCS': 'COAL-SC BLACK-COAL',
+                         'Supercritical PC - Brown coal with CCS': 'COAL-SC-CCS BROWN-COAL',
+                         'Supercritical PC - Brown coal without CCS': 'COAL-SC BROWN-COAL',
+                         'Wave/Ocean': 'WAVE',
+                         'Wind - (100 MW)': 'WIND'
+                         }
+
+        # Update index names (ensure consistency with candidate and existing unit fuel / technology types)
+        df_build_limits_pivot.index = df_build_limits_pivot.apply(lambda x: acil_unit_map[x.name], axis=1)
+
         return df_build_limits_pivot
 
 
-# Paths
-# -----
-# Directory containing core data files
-data_directory = os.path.join(os.path.curdir, os.path.pardir, os.path.pardir, 'data')
+if __name__ == '__main__':
 
-Dataset = ConstructDataset(data_directory, scenario='neutral')
-self = Dataset
+    # Directory containing core data files
+    data_directory = os.path.join(os.path.curdir, os.path.pardir, os.path.pardir, 'data')
 
-a = self.get_candidate_gas_fuel_cost_profiles()
+    # Output directory
+    output_directory = os.path.join(os.path.curdir, 'output')
 
+    # Object used to construct dataset
+    Dataset = ConstructDataset(data_directory, scenario='neutral')
 
+    # Candidate unit parameters
+    candidate_units = Dataset.get_candidate_unit_parameters()
+    candidate_units.to_csv(os.path.join(output_directory, 'candidate_units.csv'))
+
+    # Parameters for existing units
+    existing_units = Dataset.get_existing_unit_parameters()
+    existing_units.to_csv(os.path.join(output_directory, 'existing_units.csv'))
+
+    # Candidate unit build costs
+    battery_build_costs = Dataset.get_battery_build_cost()
+    battery_build_costs.to_csv(os.path.join(output_directory, 'battery_build_costs.csv'))
+
+    # Candidate unit build limits
+    candidate_unit_build_limits = Dataset.get_candidate_unit_build_limits()
+    candidate_unit_build_limits.to_csv(os.path.join(output_directory, 'candidate_unit_build_limits.csv'))
