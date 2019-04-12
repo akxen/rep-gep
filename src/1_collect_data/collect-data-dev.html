@@ -11789,7 +11789,7 @@ div#notebook {
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[2]:</div>
+<div class="prompt input_prompt">In&nbsp;[4]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="k">class</span> <span class="nc">ConstructDataset</span><span class="p">:</span>
@@ -12119,38 +12119,87 @@ div#notebook {
         <span class="c1"># Fill missing zones (LOCATION and ZONE will be the same for these generators)</span>
         <span class="n">df_candidate</span><span class="p">[</span><span class="s1">&#39;ZONE&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_candidate</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="s1">&#39;LOCATION&#39;</span><span class="p">]</span> <span class="k">if</span> <span class="n">pd</span><span class="o">.</span><span class="n">isnull</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="s1">&#39;ZONE&#39;</span><span class="p">])</span> <span class="k">else</span> <span class="n">x</span><span class="p">[</span><span class="s1">&#39;ZONE&#39;</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 
-        <span class="c1"># Check that zone assigned to all candidate units</span>
-        <span class="k">assert</span> <span class="ow">not</span> <span class="n">df_candidate</span><span class="p">[</span><span class="s1">&#39;ZONE&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">isna</span><span class="p">()</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
+        <span class="k">def</span> <span class="nf">_get_technology_and_fuel_type</span><span class="p">(</span><span class="n">row</span><span class="p">):</span>
+            <span class="s2">&quot;Get technology and fuel type for each candidate unit&quot;</span>
 
-        <span class="k">def</span> <span class="nf">_get_candidate_information</span><span class="p">(</span><span class="n">row</span><span class="p">):</span>
-            <span class="sd">&quot;&quot;&quot;Extract unit information from unit names&quot;&quot;&quot;</span>
-
+            <span class="c1"># Wind farms</span>
             <span class="k">if</span> <span class="s1">&#39;WIND&#39;</span> <span class="ow">in</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;NTNDP_UNIT_ID&#39;</span><span class="p">]:</span>
-                <span class="n">gen_type</span><span class="p">,</span> <span class="n">fuel_cat</span> <span class="o">=</span> <span class="s1">&#39;WIND&#39;</span><span class="p">,</span> <span class="s1">&#39;WIND&#39;</span>
-
-            <span class="k">elif</span> <span class="s1">&#39;Solar&#39;</span> <span class="ow">in</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;NTNDP_UNIT_ID&#39;</span><span class="p">]:</span>
-                <span class="n">gen_type</span><span class="p">,</span> <span class="n">fuel_cat</span> <span class="o">=</span> <span class="s1">&#39;SOLAR&#39;</span><span class="p">,</span> <span class="s1">&#39;SOLAR&#39;</span>
-
-            <span class="k">elif</span> <span class="s1">&#39;OCGT&#39;</span> <span class="ow">in</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;NTNDP_UNIT_ID&#39;</span><span class="p">]:</span>
-                <span class="n">gen_type</span><span class="p">,</span> <span class="n">fuel_cat</span> <span class="o">=</span> <span class="s1">&#39;OCGT&#39;</span><span class="p">,</span> <span class="s1">&#39;GAS&#39;</span>
-
-            <span class="k">elif</span> <span class="s1">&#39;CCGT&#39;</span> <span class="ow">in</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;NTNDP_UNIT_ID&#39;</span><span class="p">]:</span>
-                <span class="n">gen_type</span><span class="p">,</span> <span class="n">fuel_cat</span> <span class="o">=</span> <span class="s1">&#39;CCGT&#39;</span><span class="p">,</span> <span class="s1">&#39;GAS&#39;</span>
-
-            <span class="k">elif</span> <span class="s1">&#39;Coal&#39;</span> <span class="ow">in</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;NTNDP_UNIT_ID&#39;</span><span class="p">]:</span>
-                <span class="n">gen_type</span><span class="p">,</span> <span class="n">fuel_cat</span> <span class="o">=</span> <span class="s1">&#39;COAL&#39;</span><span class="p">,</span> <span class="s1">&#39;COAL&#39;</span>
-
-            <span class="k">elif</span> <span class="s1">&#39;Biomass&#39;</span> <span class="ow">in</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;NTNDP_UNIT_ID&#39;</span><span class="p">]:</span>
-                <span class="n">gen_type</span><span class="p">,</span> <span class="n">fuel_cat</span> <span class="o">=</span> <span class="s1">&#39;BIOMASS&#39;</span><span class="p">,</span> <span class="s1">&#39;BIOMASS&#39;</span>
+                <span class="n">fuel_cat_1</span><span class="p">,</span> <span class="n">fuel_cat_2</span><span class="p">,</span> <span class="n">technology_cat_1</span><span class="p">,</span> <span class="n">technology_cat_2</span> <span class="o">=</span> <span class="s1">&#39;WIND&#39;</span><span class="p">,</span> <span class="s1">&#39;WIND&#39;</span><span class="p">,</span> <span class="s1">&#39;WIND&#39;</span><span class="p">,</span> <span class="s1">&#39;WIND&#39;</span>
 
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">fuel_type</span><span class="p">,</span> <span class="n">fuel_cat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+                <span class="c1"># Get technology subcategory from NTNDP ID</span>
+                <span class="n">technology_cat_2</span> <span class="o">=</span> <span class="s1">&#39;-&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">i</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;NTNDP_UNIT_ID&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39; &#39;</span><span class="p">)[</span><span class="mi">1</span><span class="p">:]])</span>
 
-            <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;GEN_TYPE&#39;</span><span class="p">:</span> <span class="n">gen_type</span><span class="p">,</span> <span class="s1">&#39;FUEL_CAT&#39;</span><span class="p">:</span> <span class="n">fuel_cat</span><span class="p">})</span>
+                <span class="c1"># Brown coal assumed in LV</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;ZONE&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;LV&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="s1">&#39;COAL&#39;</span> <span class="ow">in</span> <span class="n">technology_cat_2</span><span class="p">):</span>
 
-        <span class="c1"># Get candidate generator and fuel type</span>
-        <span class="n">df_candidate</span><span class="p">[[</span><span class="s1">&#39;GEN_TYPE&#39;</span><span class="p">,</span> <span class="s1">&#39;FUEL_CAT&#39;</span><span class="p">]]</span> <span class="o">=</span> <span class="n">df_candidate</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_get_candidate_information</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+                    <span class="c1"># Technology primary category</span>
+                    <span class="n">technology_cat_1</span> <span class="o">=</span> <span class="s1">&#39;COAL&#39;</span>
 
+                    <span class="c1"># Primary and secondary fuel categories</span>
+                    <span class="n">fuel_cat_1</span><span class="p">,</span> <span class="n">fuel_cat_2</span> <span class="o">=</span> <span class="s1">&#39;COAL&#39;</span><span class="p">,</span> <span class="s1">&#39;BROWN-COAL&#39;</span>
+
+                <span class="c1"># Black coal assumed everywhere else</span>
+                <span class="k">elif</span> <span class="s1">&#39;COAL&#39;</span> <span class="ow">in</span> <span class="n">technology_cat_2</span><span class="p">:</span>
+                    
+                    <span class="c1"># Technology primary category</span>
+                    <span class="n">technology_cat_1</span> <span class="o">=</span> <span class="s1">&#39;COAL&#39;</span>
+
+                    <span class="n">fuel_cat_1</span><span class="p">,</span> <span class="n">fuel_cat_2</span> <span class="o">=</span> <span class="s1">&#39;COAL&#39;</span><span class="p">,</span> <span class="s1">&#39;BLACK-COAL&#39;</span>
+
+                <span class="c1"># Gas generators</span>
+                <span class="k">elif</span> <span class="p">(</span><span class="s1">&#39;OCGT&#39;</span> <span class="ow">in</span> <span class="n">technology_cat_2</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="s1">&#39;CCGT&#39;</span> <span class="ow">in</span> <span class="n">technology_cat_2</span><span class="p">):</span>
+                    
+                    <span class="c1"># Primary technology category</span>
+                    <span class="n">technology_cat_1</span> <span class="o">=</span> <span class="s1">&#39;GAS&#39;</span>
+
+                    <span class="c1"># Primary and secondary fuel category            </span>
+                    <span class="n">fuel_cat_1</span><span class="p">,</span> <span class="n">fuel_cat_2</span> <span class="o">=</span> <span class="s1">&#39;GAS&#39;</span><span class="p">,</span> <span class="s1">&#39;GAS&#39;</span>
+
+                <span class="c1"># Solar farms</span>
+                <span class="k">elif</span> <span class="s1">&#39;SOLAR&#39;</span> <span class="ow">in</span> <span class="n">technology_cat_2</span><span class="p">:</span>
+                    
+                    <span class="c1"># Primary technology category</span>
+                    <span class="n">technology_cat_1</span> <span class="o">=</span> <span class="s1">&#39;SOLAR&#39;</span>
+
+                    <span class="c1"># Primary and secondary fuel category            </span>
+                    <span class="n">fuel_cat_1</span><span class="p">,</span> <span class="n">fuel_cat_2</span> <span class="o">=</span> <span class="s1">&#39;SOLAR&#39;</span><span class="p">,</span> <span class="s1">&#39;SOLAR&#39;</span>
+
+                <span class="c1"># Biomass plant</span>
+                <span class="k">elif</span> <span class="s1">&#39;BIOMASS&#39;</span> <span class="ow">in</span> <span class="n">technology_cat_2</span><span class="p">:</span>
+                    
+                    <span class="c1"># Primary technology category</span>
+                    <span class="n">technology_cat_1</span> <span class="o">=</span> <span class="s1">&#39;BIOMASS&#39;</span>
+
+                    <span class="c1"># Primary and secondary fuel category            </span>
+                    <span class="n">fuel_cat_1</span><span class="p">,</span> <span class="n">fuel_cat_2</span> <span class="o">=</span> <span class="s1">&#39;BIOMASS&#39;</span><span class="p">,</span> <span class="s1">&#39;BIOMASS&#39;</span>
+
+                <span class="c1"># Wave power</span>
+                <span class="k">elif</span> <span class="s1">&#39;WAVE&#39;</span> <span class="ow">in</span> <span class="n">technology_cat_2</span><span class="p">:</span>
+                    
+                    <span class="c1"># Primary technology category</span>
+                    <span class="n">technology_cat_1</span> <span class="o">=</span> <span class="s1">&#39;WAVE&#39;</span>
+
+                    <span class="c1"># Primary and secondary fuel category            </span>
+                    <span class="n">fuel_cat_1</span><span class="p">,</span> <span class="n">fuel_cat_2</span> <span class="o">=</span> <span class="s1">&#39;WAVE&#39;</span><span class="p">,</span> <span class="s1">&#39;WAVE&#39;</span>
+
+                <span class="c1"># Set value to NaN</span>
+                <span class="k">else</span><span class="p">:</span>
+                    
+                    <span class="c1"># Primary technology category</span>
+                    <span class="n">technology_cat_1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+
+                    <span class="c1"># Primary and secondary fuel category            </span>
+                    <span class="n">fuel_cat_1</span><span class="p">,</span> <span class="n">fuel_cat_2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+
+            <span class="k">return</span> <span class="n">technology_cat_1</span><span class="p">,</span> <span class="n">technology_cat_2</span><span class="p">,</span> <span class="n">fuel_cat_1</span><span class="p">,</span> <span class="n">fuel_cat_2</span>
+
+        <span class="c1"># Assign technology and fuel type as columns</span>
+        <span class="n">df_candidate</span><span class="p">[[</span><span class="s1">&#39;TECHNOLOGY_PRIMARY&#39;</span><span class="p">,</span> <span class="s1">&#39;TECHNOLOGY_SUBCAT&#39;</span><span class="p">,</span> <span class="s1">&#39;FUEL_TYPE_PRIMARY&#39;</span><span class="p">,</span> <span class="s1">&#39;FUEL_TYPE_SUBCAT&#39;</span><span class="p">]]</span> <span class="o">=</span> <span class="n">df_candidate</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_get_technology_and_fuel_type</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">result_type</span> <span class="o">=</span><span class="s1">&#39;expand&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Check no missing values</span>
+        <span class="k">assert</span> <span class="ow">not</span> <span class="n">df_candidate</span><span class="p">[[</span><span class="s1">&#39;TECHNOLOGY_PRIMARY&#39;</span><span class="p">,</span> <span class="s1">&#39;TECHNOLOGY_SUBCAT&#39;</span><span class="p">,</span> <span class="s1">&#39;FUEL_TYPE_PRIMARY&#39;</span><span class="p">,</span> <span class="s1">&#39;FUEL_TYPE_SUBCAT&#39;</span><span class="p">]]</span><span class="o">.</span><span class="n">isna</span><span class="p">()</span><span class="o">.</span><span class="n">any</span><span class="p">()</span><span class="o">.</span><span class="n">any</span><span class="p">(),</span> <span class="s1">&#39;Missing technology or fuel type label&#39;</span>
+        
         <span class="k">return</span> <span class="n">df_candidate</span>
     
     <span class="k">def</span> <span class="nf">get_candidate_wind_units</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -12158,13 +12207,14 @@ div#notebook {
         
         <span class="c1"># All candidate wind generators</span>
         <span class="n">df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_all_candidate_units</span><span class="p">()</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-        <span class="n">mask_wind</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;GEN_TYPE&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;WIND&#39;</span>
+        <span class="n">mask_wind</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;TECHNOLOGY_PRIMARY&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;WIND&#39;</span>
+        <span class="n">mask_40pc</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;NTNDP_ID&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="s1">&#39;40pc&#39;</span><span class="p">)</span>
 
         <span class="c1"># Only retain one wind bubble per zone</span>
-        <span class="n">df_wind</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">mask_wind</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">drop_duplicates</span><span class="p">(</span><span class="n">subset</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;ZONE&#39;</span><span class="p">],</span> <span class="n">keep</span><span class="o">=</span><span class="s1">&#39;first&#39;</span><span class="p">)</span>
+        <span class="n">df_wind</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">mask_wind</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">mask_40pc</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">drop_duplicates</span><span class="p">(</span><span class="n">subset</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;ZONE&#39;</span><span class="p">],</span> <span class="n">keep</span><span class="o">=</span><span class="s1">&#39;first&#39;</span><span class="p">)</span>
 
         <span class="c1"># Candidate wind units</span>
-        <span class="n">df_wind</span><span class="p">[</span><span class="s1">&#39;UNIT_ID&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_wind</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="s1">&#39;ZONE&#39;</span><span class="p">]</span><span class="o">+</span><span class="s1">&#39;-&#39;</span><span class="o">+</span><span class="n">x</span><span class="p">[</span><span class="s1">&#39;GEN_TYPE&#39;</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">df_wind</span><span class="p">[</span><span class="s1">&#39;UNIT_ID&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_wind</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="s1">&#39;ZONE&#39;</span><span class="p">]</span><span class="o">+</span><span class="s1">&#39;-&#39;</span><span class="o">+</span><span class="n">x</span><span class="p">[</span><span class="s1">&#39;TECHNOLOGY_SUBCAT&#39;</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
         
         <span class="c1"># Set index and rename columns</span>
         <span class="n">df_wind</span> <span class="o">=</span> <span class="n">df_wind</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s1">&#39;UNIT_ID&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;LOCATION&#39;</span><span class="p">:</span> <span class="s1">&#39;WIND_BUBBLE&#39;</span><span class="p">})</span>
@@ -13195,6 +13245,679 @@ div#notebook {
 </pre></div>
 
 </div>
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[6]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="bp">self</span><span class="o">.</span><span class="n">get_all_candidate_units</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt output_prompt">Out[6]:</div>
+
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>NTNDP_UNIT_ID</th>
+      <th>LOCATION</th>
+      <th>ZONE</th>
+      <th>TECHNOLOGY_PRIMARY</th>
+      <th>TECHNOLOGY_SUBCAT</th>
+      <th>FUEL_TYPE_PRIMARY</th>
+      <th>FUEL_TYPE_SUBCAT</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>FWN Broken Hill_WIND</td>
+      <td>FWN</td>
+      <td>SWNSW</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>FWN Buronga_WIND</td>
+      <td>FWN</td>
+      <td>SWNSW</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>HUN Bayswater_WIND</td>
+      <td>HUN</td>
+      <td>NCEN</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>MRN Bannaby_WIND</td>
+      <td>MRN</td>
+      <td>CAN</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>MRN Yass_WIND</td>
+      <td>MRN</td>
+      <td>CAN</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>MUN Deniliquin_WIND</td>
+      <td>MUN</td>
+      <td>SWNSW</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>MUN Jindera_WIND</td>
+      <td>MUN</td>
+      <td>SWNSW</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <td>NEN Armidale_WIND</td>
+      <td>NEN</td>
+      <td>NNS</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>8</th>
+      <td>SEN Cooma_WIND</td>
+      <td>SEN</td>
+      <td>CAN</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>9</th>
+      <td>WEN Wallerawang_WIND</td>
+      <td>WEN</td>
+      <td>NCEN</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>10</th>
+      <td>FNQ Challumbin_WIND</td>
+      <td>FNQ</td>
+      <td>NQ</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>11</th>
+      <td>FNQ Woree_WIND</td>
+      <td>FNQ</td>
+      <td>NQ</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>12</th>
+      <td>SWQ Blackstone_WIND</td>
+      <td>SWQ</td>
+      <td>SWQ</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>13</th>
+      <td>SWQ Blackwall_WIND</td>
+      <td>SWQ</td>
+      <td>SWQ</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>14</th>
+      <td>CS Krongart_WIND</td>
+      <td>CS</td>
+      <td>MEL</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>14</th>
+      <td>CS Krongart_WIND</td>
+      <td>CS</td>
+      <td>SESA</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>15</th>
+      <td>CS Mortlake_WIND</td>
+      <td>CS</td>
+      <td>MEL</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>15</th>
+      <td>CS Mortlake_WIND</td>
+      <td>CS</td>
+      <td>SESA</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>16</th>
+      <td>CS Portland_WIND</td>
+      <td>CS</td>
+      <td>MEL</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>16</th>
+      <td>CS Portland_WIND</td>
+      <td>CS</td>
+      <td>SESA</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>17</th>
+      <td>CS Shaw River_WIND</td>
+      <td>CS</td>
+      <td>MEL</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>17</th>
+      <td>CS Shaw River_WIND</td>
+      <td>CS</td>
+      <td>SESA</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>18</th>
+      <td>CS Tarrone_WIND</td>
+      <td>CS</td>
+      <td>MEL</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>18</th>
+      <td>CS Tarrone_WIND</td>
+      <td>CS</td>
+      <td>SESA</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>19</th>
+      <td>FWN Redcliffs_WIND</td>
+      <td>FWN</td>
+      <td>SWNSW</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>20</th>
+      <td>NWV Ballarat_WIND</td>
+      <td>NWV</td>
+      <td>CVIC</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>21</th>
+      <td>NWV Bendigo_WIND</td>
+      <td>NWV</td>
+      <td>CVIC</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>22</th>
+      <td>NWV Geelong_WIND</td>
+      <td>NWV</td>
+      <td>CVIC</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>23</th>
+      <td>NWV Horsham_WIND</td>
+      <td>NWV</td>
+      <td>CVIC</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>24</th>
+      <td>SEV Morwell_WIND</td>
+      <td>SEV</td>
+      <td>LV</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>112</th>
+      <td>LV OCGT</td>
+      <td>LV</td>
+      <td>LV</td>
+      <td>GAS</td>
+      <td>OCGT</td>
+      <td>GAS</td>
+      <td>GAS</td>
+    </tr>
+    <tr>
+      <th>113</th>
+      <td>MEL OCGT</td>
+      <td>MEL</td>
+      <td>MEL</td>
+      <td>GAS</td>
+      <td>OCGT</td>
+      <td>GAS</td>
+      <td>GAS</td>
+    </tr>
+    <tr>
+      <th>114</th>
+      <td>NVIC OCGT</td>
+      <td>NVIC</td>
+      <td>NVIC</td>
+      <td>GAS</td>
+      <td>OCGT</td>
+      <td>GAS</td>
+      <td>GAS</td>
+    </tr>
+    <tr>
+      <th>115</th>
+      <td>CVIC Solar PV DAT</td>
+      <td>CVIC</td>
+      <td>CVIC</td>
+      <td>SOLAR</td>
+      <td>SOLAR-PV-DAT</td>
+      <td>SOLAR</td>
+      <td>SOLAR</td>
+    </tr>
+    <tr>
+      <th>116</th>
+      <td>CVIC Solar PV FFP</td>
+      <td>CVIC</td>
+      <td>CVIC</td>
+      <td>SOLAR</td>
+      <td>SOLAR-PV-FFP</td>
+      <td>SOLAR</td>
+      <td>SOLAR</td>
+    </tr>
+    <tr>
+      <th>117</th>
+      <td>CVIC Solar PV SAT</td>
+      <td>CVIC</td>
+      <td>CVIC</td>
+      <td>SOLAR</td>
+      <td>SOLAR-PV-SAT</td>
+      <td>SOLAR</td>
+      <td>SOLAR</td>
+    </tr>
+    <tr>
+      <th>118</th>
+      <td>NVIC Biomass</td>
+      <td>NVIC</td>
+      <td>NVIC</td>
+      <td>BIOMASS</td>
+      <td>BIOMASS</td>
+      <td>BIOMASS</td>
+      <td>BIOMASS</td>
+    </tr>
+    <tr>
+      <th>119</th>
+      <td>TAS CCGT</td>
+      <td>TAS</td>
+      <td>TAS</td>
+      <td>GAS</td>
+      <td>CCGT</td>
+      <td>GAS</td>
+      <td>GAS</td>
+    </tr>
+    <tr>
+      <th>120</th>
+      <td>TAS OCGT</td>
+      <td>TAS</td>
+      <td>TAS</td>
+      <td>GAS</td>
+      <td>OCGT</td>
+      <td>GAS</td>
+      <td>GAS</td>
+    </tr>
+    <tr>
+      <th>121</th>
+      <td>TAS Biomass</td>
+      <td>TAS</td>
+      <td>TAS</td>
+      <td>BIOMASS</td>
+      <td>BIOMASS</td>
+      <td>BIOMASS</td>
+      <td>BIOMASS</td>
+    </tr>
+    <tr>
+      <th>122</th>
+      <td>CS Krongart_WIND_40pc</td>
+      <td>CS</td>
+      <td>MEL</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>122</th>
+      <td>CS Krongart_WIND_40pc</td>
+      <td>CS</td>
+      <td>SESA</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>123</th>
+      <td>CS Mortlake_WIND_40pc</td>
+      <td>CS</td>
+      <td>MEL</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>123</th>
+      <td>CS Mortlake_WIND_40pc</td>
+      <td>CS</td>
+      <td>SESA</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>124</th>
+      <td>CS Portland_WIND_40pc</td>
+      <td>CS</td>
+      <td>MEL</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>124</th>
+      <td>CS Portland_WIND_40pc</td>
+      <td>CS</td>
+      <td>SESA</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>125</th>
+      <td>CS Shaw River_WIND_40pc</td>
+      <td>CS</td>
+      <td>MEL</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>125</th>
+      <td>CS Shaw River_WIND_40pc</td>
+      <td>CS</td>
+      <td>SESA</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>126</th>
+      <td>CS Tarrone_WIND_40pc</td>
+      <td>CS</td>
+      <td>MEL</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>126</th>
+      <td>CS Tarrone_WIND_40pc</td>
+      <td>CS</td>
+      <td>SESA</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>127</th>
+      <td>CVIC Solar PV DAT_40pc</td>
+      <td>CVIC</td>
+      <td>CVIC</td>
+      <td>SOLAR</td>
+      <td>SOLAR-PV-DAT_40PC</td>
+      <td>SOLAR</td>
+      <td>SOLAR</td>
+    </tr>
+    <tr>
+      <th>128</th>
+      <td>CVIC Solar PV FFP_40pc</td>
+      <td>CVIC</td>
+      <td>CVIC</td>
+      <td>SOLAR</td>
+      <td>SOLAR-PV-FFP_40PC</td>
+      <td>SOLAR</td>
+      <td>SOLAR</td>
+    </tr>
+    <tr>
+      <th>129</th>
+      <td>CVIC Solar PV SAT_40pc</td>
+      <td>CVIC</td>
+      <td>CVIC</td>
+      <td>SOLAR</td>
+      <td>SOLAR-PV-SAT_40PC</td>
+      <td>SOLAR</td>
+      <td>SOLAR</td>
+    </tr>
+    <tr>
+      <th>130</th>
+      <td>FWN Redcliffs_WIND_40pc</td>
+      <td>FWN</td>
+      <td>SWNSW</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>131</th>
+      <td>NWV Ballarat_WIND_40pc</td>
+      <td>NWV</td>
+      <td>CVIC</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>132</th>
+      <td>NWV Bendigo_WIND_40pc</td>
+      <td>NWV</td>
+      <td>CVIC</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>133</th>
+      <td>NWV Geelong_WIND_40pc</td>
+      <td>NWV</td>
+      <td>CVIC</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>134</th>
+      <td>NWV Horsham_WIND_40pc</td>
+      <td>NWV</td>
+      <td>CVIC</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>135</th>
+      <td>SEV Morwell_WIND_40pc</td>
+      <td>SEV</td>
+      <td>LV</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+    <tr>
+      <th>136</th>
+      <td>SWV Terang_WIND_40pc</td>
+      <td>SWV</td>
+      <td>CVIC</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+      <td>WIND</td>
+    </tr>
+  </tbody>
+</table>
+<p>147 rows × 7 columns</p>
+</div>
+</div>
+
+</div>
+
 </div>
 </div>
 

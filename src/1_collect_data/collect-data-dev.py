@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 
-# In[2]:
+# In[4]:
 
 
 class ConstructDataset:
@@ -340,38 +340,87 @@ class ConstructDataset:
         # Fill missing zones (LOCATION and ZONE will be the same for these generators)
         df_candidate['ZONE'] = df_candidate.apply(lambda x: x['LOCATION'] if pd.isnull(x['ZONE']) else x['ZONE'], axis=1)
 
-        # Check that zone assigned to all candidate units
-        assert not df_candidate['ZONE'].isna().any()
+        def _get_technology_and_fuel_type(row):
+            "Get technology and fuel type for each candidate unit"
 
-        def _get_candidate_information(row):
-            """Extract unit information from unit names"""
-
+            # Wind farms
             if 'WIND' in row['NTNDP_UNIT_ID']:
-                gen_type, fuel_cat = 'WIND', 'WIND'
-
-            elif 'Solar' in row['NTNDP_UNIT_ID']:
-                gen_type, fuel_cat = 'SOLAR', 'SOLAR'
-
-            elif 'OCGT' in row['NTNDP_UNIT_ID']:
-                gen_type, fuel_cat = 'OCGT', 'GAS'
-
-            elif 'CCGT' in row['NTNDP_UNIT_ID']:
-                gen_type, fuel_cat = 'CCGT', 'GAS'
-
-            elif 'Coal' in row['NTNDP_UNIT_ID']:
-                gen_type, fuel_cat = 'COAL', 'COAL'
-
-            elif 'Biomass' in row['NTNDP_UNIT_ID']:
-                gen_type, fuel_cat = 'BIOMASS', 'BIOMASS'
+                fuel_cat_1, fuel_cat_2, technology_cat_1, technology_cat_2 = 'WIND', 'WIND', 'WIND', 'WIND'
 
             else:
-                fuel_type, fuel_cat = np.nan, np.nan
+                # Get technology subcategory from NTNDP ID
+                technology_cat_2 = '-'.join([i.upper() for i in row['NTNDP_UNIT_ID'].split(' ')[1:]])
 
-            return pd.Series(data={'GEN_TYPE': gen_type, 'FUEL_CAT': fuel_cat})
+                # Brown coal assumed in LV
+                if (row['ZONE'] == 'LV') and ('COAL' in technology_cat_2):
 
-        # Get candidate generator and fuel type
-        df_candidate[['GEN_TYPE', 'FUEL_CAT']] = df_candidate.apply(_get_candidate_information, axis=1)
+                    # Technology primary category
+                    technology_cat_1 = 'COAL'
 
+                    # Primary and secondary fuel categories
+                    fuel_cat_1, fuel_cat_2 = 'COAL', 'BROWN-COAL'
+
+                # Black coal assumed everywhere else
+                elif 'COAL' in technology_cat_2:
+                    
+                    # Technology primary category
+                    technology_cat_1 = 'COAL'
+
+                    fuel_cat_1, fuel_cat_2 = 'COAL', 'BLACK-COAL'
+
+                # Gas generators
+                elif ('OCGT' in technology_cat_2) or ('CCGT' in technology_cat_2):
+                    
+                    # Primary technology category
+                    technology_cat_1 = 'GAS'
+
+                    # Primary and secondary fuel category            
+                    fuel_cat_1, fuel_cat_2 = 'GAS', 'GAS'
+
+                # Solar farms
+                elif 'SOLAR' in technology_cat_2:
+                    
+                    # Primary technology category
+                    technology_cat_1 = 'SOLAR'
+
+                    # Primary and secondary fuel category            
+                    fuel_cat_1, fuel_cat_2 = 'SOLAR', 'SOLAR'
+
+                # Biomass plant
+                elif 'BIOMASS' in technology_cat_2:
+                    
+                    # Primary technology category
+                    technology_cat_1 = 'BIOMASS'
+
+                    # Primary and secondary fuel category            
+                    fuel_cat_1, fuel_cat_2 = 'BIOMASS', 'BIOMASS'
+
+                # Wave power
+                elif 'WAVE' in technology_cat_2:
+                    
+                    # Primary technology category
+                    technology_cat_1 = 'WAVE'
+
+                    # Primary and secondary fuel category            
+                    fuel_cat_1, fuel_cat_2 = 'WAVE', 'WAVE'
+
+                # Set value to NaN
+                else:
+                    
+                    # Primary technology category
+                    technology_cat_1 = np.nan
+
+                    # Primary and secondary fuel category            
+                    fuel_cat_1, fuel_cat_2 = np.nan, np.nan
+
+            return technology_cat_1, technology_cat_2, fuel_cat_1, fuel_cat_2
+
+        # Assign technology and fuel type as columns
+        df_candidate[['TECHNOLOGY_PRIMARY', 'TECHNOLOGY_SUBCAT', 'FUEL_TYPE_PRIMARY', 'FUEL_TYPE_SUBCAT']] = df_candidate.apply(_get_technology_and_fuel_type, axis=1, result_type ='expand')
+
+        # Check no missing values
+        assert not df_candidate[['TECHNOLOGY_PRIMARY', 'TECHNOLOGY_SUBCAT', 'FUEL_TYPE_PRIMARY', 'FUEL_TYPE_SUBCAT']].isna().any().any(), 'Missing technology or fuel type label'
+        
         return df_candidate
     
     def get_candidate_wind_units(self):
@@ -379,13 +428,14 @@ class ConstructDataset:
         
         # All candidate wind generators
         df = self.get_all_candidate_units().copy()
-        mask_wind = df['GEN_TYPE'] == 'WIND'
+        mask_wind = df['TECHNOLOGY_PRIMARY'] == 'WIND'
+        mask_40pc = df['NTNDP_ID'].str.contains('40pc')
 
         # Only retain one wind bubble per zone
-        df_wind = df.loc[mask_wind, :].drop_duplicates(subset=['ZONE'], keep='first')
+        df_wind = df.loc[mask_wind & ~mask_40pc, :].drop_duplicates(subset=['ZONE'], keep='first')
 
         # Candidate wind units
-        df_wind['UNIT_ID'] = df_wind.apply(lambda x: x['ZONE']+'-'+x['GEN_TYPE'], axis=1)
+        df_wind['UNIT_ID'] = df_wind.apply(lambda x: x['ZONE']+'-'+x['TECHNOLOGY_SUBCAT'], axis=1)
         
         # Set index and rename columns
         df_wind = df_wind.set_index('UNIT_ID').rename(columns={'LOCATION': 'WIND_BUBBLE'})
@@ -1413,4 +1463,10 @@ data_dir = os.path.join(os.path.curdir, os.path.pardir, os.path.pardir, 'data')
 
 Dataset = ConstructDataset(data_dir, scenario='neutral')
 self = Dataset
+
+
+# In[6]:
+
+
+self.get_all_candidate_units()
 
