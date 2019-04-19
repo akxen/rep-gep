@@ -110,8 +110,8 @@ class ProcessTraces:
 
         # Save file if specified
         if save:
-            # Pickle and save DataFrame
-            df_o.to_pickle(os.path.join(output_dir, 'solar_traces.pickle'))
+            # Save DataFrame
+            df_o.to_hdf(os.path.join(output_dir, 'solar_traces.h5'), key='df')
 
         return df_o
 
@@ -208,8 +208,8 @@ class ProcessTraces:
 
         # Save file if specified
         if save:
-            # Pickle and save DataFrame
-            df_o.to_pickle(os.path.join(output_dir, 'wind_traces.pickle'))
+            # Save DataFrame
+            df_o.to_hdf(os.path.join(output_dir, 'wind_traces.h5'), key='df')
 
         return df_o
 
@@ -314,8 +314,8 @@ class ProcessTraces:
 
         # Save file if specified
         if save:
-            # Pickle and save DataFrame
-            df_o.to_pickle(os.path.join(output_dir, 'demand_traces.pickle'))
+            # Save DataFrame
+            df_o.to_hdf(os.path.join(output_dir, 'demand_traces.h5'), key='df')
 
         return df_o
 
@@ -395,9 +395,9 @@ class ProcessTraces:
         # Combine all hydro traces into a single DataFrame
         df_o = pd.concat(dfs)
 
-        # Pickle and save
+        # Save DataFrame
         if save:
-            df_o.to_pickle(os.path.join(output_dir, 'hydro_traces.pickle'))
+            df_o.to_hdf(os.path.join(output_dir, 'hydro_traces.h5'), key='df')
 
         return df_o
 

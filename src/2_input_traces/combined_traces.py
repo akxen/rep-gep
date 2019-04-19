@@ -65,19 +65,18 @@ def format_demand_traces(data_dir, network_dir):
     return df_zone_demand
 
 
-def format_hydro_traces(data_dir):
-    """Format hydro data"""
-
-    # Load hydro traces
-    df = pd.read_pickle(os.path.join(data_dir, 'hydro_traces.pickle'))
-
-    # Add label to column index
-    df.columns = pd.MultiIndex.from_product([['HYDRO'], df.columns])
-
-    # Rename index
-    df.index.name = 'timestamp'
-
-    return df
+# def format_hydro_traces(data_dir):
+#     """Format hydro data"""
+#
+#     # Load hydro traces
+#     df = pd.read_pickle(os.path.join(data_dir, 'hydro_traces.pickle'))
+#
+#
+#
+#     # Rename index
+#     df.index.name = 'timestamp'
+#
+#     return df
 
 
 def format_solar_traces(data_dir):
@@ -97,6 +96,55 @@ def format_solar_traces(data_dir):
     df.columns = pd.MultiIndex.from_product([['SOLAR'], df.columns])
 
     return df
+
+
+def format_hydro_traces(data_dir):
+    """
+    Repeat hydro traces for each year in model horizon
+
+    Note: Assuming that hydro traces are mainly influenced by seasonal
+    weather events, and similar cycles are observed year to year. Signals
+    in 2016 are repeated for corresponding hour-day-months in the following
+    years. E.g. hydro output on 2016-01-06 05:00:00 is the same on
+    2030-01-06 05:00:00.
+    """
+
+    # Solar traces
+    df = pd.read_pickle(os.path.join(data_dir, 'solar_traces.pickle'))
+
+    # Add hour, day, month to DataFrame
+    df['hour'] = df.index.hour
+    df['day'] = df.index.day
+    df['month'] = df.index.month
+
+    # Construct new DataFrame with index from 2016 - 2050
+    model_horizon_index = pd.date_range(start='2016-01-01 01:00:00', end='2050-01-01 00:00:00', freq='1H')
+
+    # Initialize DataFrame for hydro traces over the entire model horizon
+    df_o = pd.DataFrame(index=model_horizon_index, columns=['hour', 'day', 'month'])
+
+    # Add hour, day, month to new DataFrame
+    df_o['hour'] = df_o.index.hour
+    df_o['day'] = df_o.index.day
+    df_o['month'] = df_o.index.month
+
+    # Reset index
+    df_o = df_o.reset_index()
+
+    # Merge hydro traces for days in 2016 to horizon DataFrame
+    df_o = pd.merge(df_o, df, how='left', left_on=['hour', 'day', 'month'],
+                          right_on=['hour', 'day', 'month'])
+
+    # Set index and drop redundant columns
+    df_o = df_o.set_index('index').drop(['hour', 'day', 'month'], axis=1)
+
+    # Check there are no missing values
+    assert not df_o.isna().any().any(), 'NaNs in hydro traces DataFrame'
+
+    # Add label to column index
+    df_o.columns = pd.MultiIndex.from_product([['HYDRO'], df_o.columns])
+
+    return df_o
 
 
 if __name__ == '__main__':
@@ -125,5 +173,4 @@ if __name__ == '__main__':
 
     # Merge into single DataFrame
     # ---------------------------
-    # TODO: Fix hydro traces - must tile / repeat them for each year in model horizon
     df_dataset = pd.concat([df_wind, df_demand, df_hydro, df_solar], axis=1)
