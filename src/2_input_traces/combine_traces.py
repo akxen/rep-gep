@@ -2,7 +2,6 @@
 
 import os
 
-import numpy as np
 import pandas as pd
 
 
@@ -10,7 +9,7 @@ def format_wind_traces(data_dir):
     """Format wind traces"""
 
     # Load wind traces
-    df = pd.read_pickle(os.path.join(data_dir, 'wind_traces.pickle'))
+    df = pd.read_hdf(os.path.join(data_dir, 'wind_traces.h5'))
 
     # Reset index and pivot
     df = df.reset_index().pivot(index='timestamp', columns='bubble', values='capacity_factor')
@@ -25,7 +24,7 @@ def format_demand_traces(data_dir, network_dir):
     """Format demand traces"""
 
     # Load demand traces
-    df_region_demand = pd.read_pickle(os.path.join(data_dir, 'demand_traces.pickle'))
+    df_region_demand = pd.read_hdf(os.path.join(data_dir, 'demand_traces.h5'))
 
     # Only consider neutral demand scenario
     df_region_demand = df_region_demand.loc[df_region_demand['scenario'] == 'Neutral', :]
@@ -65,25 +64,11 @@ def format_demand_traces(data_dir, network_dir):
     return df_zone_demand
 
 
-# def format_hydro_traces(data_dir):
-#     """Format hydro data"""
-#
-#     # Load hydro traces
-#     df = pd.read_pickle(os.path.join(data_dir, 'hydro_traces.pickle'))
-#
-#
-#
-#     # Rename index
-#     df.index.name = 'timestamp'
-#
-#     return df
-
-
 def format_solar_traces(data_dir):
     """Format solar data"""
 
     # Solar traces
-    df = pd.read_pickle(os.path.join(data_dir, 'solar_traces.pickle'))
+    df = pd.read_hdf(os.path.join(data_dir, 'solar_traces.h5'))
 
     # Pivot so different solar technologies and their respective zones constitute the columns
     # and timestamps the index
@@ -109,8 +94,8 @@ def format_hydro_traces(data_dir):
     2030-01-06 05:00:00.
     """
 
-    # Solar traces
-    df = pd.read_pickle(os.path.join(data_dir, 'solar_traces.pickle'))
+    # Hydro traces
+    df = pd.read_hdf(os.path.join(data_dir, 'hydro_traces.h5'))
 
     # Add hour, day, month to DataFrame
     df['hour'] = df.index.hour
@@ -133,7 +118,7 @@ def format_hydro_traces(data_dir):
 
     # Merge hydro traces for days in 2016 to horizon DataFrame
     df_o = pd.merge(df_o, df, how='left', left_on=['hour', 'day', 'month'],
-                          right_on=['hour', 'day', 'month'])
+                    right_on=['hour', 'day', 'month'])
 
     # Set index and drop redundant columns
     df_o = df_o.set_index('index').drop(['hour', 'day', 'month'], axis=1)
@@ -173,4 +158,11 @@ if __name__ == '__main__':
 
     # Merge into single DataFrame
     # ---------------------------
-    df_dataset = pd.concat([df_wind, df_demand, df_hydro, df_solar], axis=1)
+    # Join datasets
+    df_dataset = df_hydro.join(df_wind, how='left').join(df_demand, how='left').join(df_solar, how='left')
+
+    # Add timestamp as a column
+    df_dataset[('INDEX', 'TIMESTAMP')] = df_dataset.index
+
+    # Save to file
+    df_dataset.to_hdf(os.path.join(output_directory, 'dataset.h5'), key='dataset')

@@ -203,8 +203,11 @@ class ProcessTraces:
             # Append to container
             dfs.append(df)
 
-        # All solar traces
+        # All wind traces. Drop duplicates.
         df_o = pd.concat(dfs)
+
+        # Check if duplicated values found
+        assert not df_o.reset_index().duplicated().any(), 'Duplicated wind trace records identified'
 
         # Save file if specified
         if save:
@@ -312,6 +315,9 @@ class ProcessTraces:
         # All solar traces
         df_o = pd.concat(dfs)
 
+        # Check if duplicated demand values found
+        assert not df_o.reset_index().duplicated().any(), 'Duplicated demand trace entries identified'
+
         # Save file if specified
         if save:
             # Save DataFrame
@@ -392,8 +398,14 @@ class ProcessTraces:
             # Append processed data to main container
             dfs.append(df)
 
-        # Combine all hydro traces into a single DataFrame
+        # Combine all hydro traces into a single DataFrame and drop duplicated rows
         df_o = pd.concat(dfs)
+
+        # Drop duplicated entries
+        df_o = df_o.reset_index().drop_duplicates(subset=['SETTLEMENTDATE'], keep='last').set_index('SETTLEMENTDATE')
+
+        # Check for duplicated values
+        assert not df_o.reset_index().duplicated().any(), 'Duplicated hydro trace entries identified'
 
         # Save DataFrame
         if save:
@@ -422,7 +434,7 @@ if __name__ == '__main__':
     demand_data_directory = os.path.join(ntndp_directory, '2016 Regional Demand Traces', '2016 Regional Demand Traces')
 
     # Directory containing zipped MMSDM archive files
-    mmsdm_archive_directory = r'D:\nemweb\Reports\Data_Archive\MMSDM\zipped'
+    mmsdm_archive_directory = r'C:\Users\eee\Desktop\nemweb\Reports\Data_Archive\MMSDM\zipped'
 
     # Directory containing parameters for existing generators
     generator_data_directory = os.path.join(os.path.curdir, os.path.pardir, os.path.pardir, 'data', 'files',
@@ -440,13 +452,13 @@ if __name__ == '__main__':
     # Process signals
     # ---------------
     # Process solar traces
-    df_solar = Traces.process_solar_traces(solar_data_directory, output_directory, save=True)
+    # df_solar = Traces.process_solar_traces(solar_data_directory, output_directory, save=True)
 
     # Process wind traces
-    df_wind = Traces.process_wind_traces(wind_data_directory, output_directory, save=True)
+    # df_wind = Traces.process_wind_traces(wind_data_directory, output_directory, save=True)
 
     # Process demand traces
-    df_demand = Traces.process_demand_traces(demand_data_directory, output_directory, save=True)
+    # df_demand = Traces.process_demand_traces(demand_data_directory, output_directory, save=True)
 
     # Process hydro generator traces
     df_hydro = Traces.process_hydro_traces(generator_data_directory, output_directory, save=True)
