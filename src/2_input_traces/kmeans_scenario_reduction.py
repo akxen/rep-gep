@@ -4,55 +4,11 @@ import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 
-def partition_timestamps(year):
-    """Partition timestamps into 24 hour segments for a given year"""
-
-    # All hourly timestamps within one year
-    timestamps = pd.date_range(start=f'{year}-01-01 01:00:00', end=f'{year+1}-01-01 00:00:00', freq='1H')
-
-    # Construct chunks
-    # ----------------
-    # Number of timestamps per chunk
-    n = 24
-
-    # Timestamps within each chunk
-    timestamp_chunks = [timestamps[i:i + n] for i in range(0, len(timestamps), n)]
-
-    return timestamp_chunks
-
-
-# Construct vector describing parameters for each segment
-def compile_parameters(timestamps):
-    """Construct sample given a list of timestamps"""
-
-    # Unstack DataFrame
-    series = df.loc[timestamps, :].unstack().sort_index()
-
-    pass
-
-
-# Apply K-means algorithm to construct centroids (compute 7 centroids for each year)
-def construct_centroids(samples):
-    """Apply K-mean algorithm to construct centroids"""
-    pass
-
-# Compare load curve of resulting centroids to load curve for whole year
-
-# (check if day with highest demand should be included)
-
-# Compute the
-
-# Output
-# index: year, scenario_id (1-7), hour_id (1-48)
-# columns: cat 1 (data type e.g. wind, hydro), cat 2 (region / sub-id e.g. zone, DUID)
-
-
-if __name__ == '__main__':
-    # Load dataset
-    df = pd.read_hdf('output/dataset.h5')
+def get_all_samples(df):
+    """Construct samples to be used in K-mean algorithm"""
 
     # Add timestamp as column
     df[('INDEX', 'TIMESTAMP')] = df.index
@@ -75,28 +31,67 @@ if __name__ == '__main__':
     # Sort columns and drop columns with index values
     df_s = df_s.sort_index(axis=1).drop('INDEX', axis=1)
 
+    return df_s
+
+
+def get_centroids(df, year, n_clusters=7):
+    """Apply K-means algorithm to compute centroids for a given year"""
+
     # Sample
-    X = df_s.loc[2020].fillna(0).values
+    x = df.loc[year].values
+    # .fillna(0)
 
     # Construct and fit K-means classifier
-    kmeans = KMeans(n_clusters=7, random_state=0).fit(X)
+    kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(x)
 
-    # K-means assignment for each profile
-    assignment = kmeans.predict(X)
-    print(np.unique(assignment, return_counts=True))
+    # K-means assignment for each sample
+    assignment = kmeans.predict(x)
+
+    # Number of profiles assigned to each centroid
+    assignment_count = np.unique(assignment, return_counts=True)
+
+    # Duration assigned to each profile
+    duration = {i: j for i, j in zip(assignment_count[0], assignment_count[1])}
 
     # Convert centroid array into DataFrame
-    centroids = pd.DataFrame(kmeans.cluster_centers_, columns=df_s.columns)
+    centroids = pd.DataFrame(kmeans.cluster_centers_, columns=df.columns)
+
+    # Add duration information to DataFrame
+    centroids['DURATION'] = centroids.apply(lambda x: duration[x.name], axis=1)
+
+    return centroids
 
 
+if __name__ == '__main__':
+    # Load dataset
+    dataset = pd.read_hdf('output/dataset.h5')
 
+    # All samples
+    samples = get_all_samples(dataset)
 
+    # Container for all centroids
+    all_centroids = []
 
+    for year in range(2016, 2051):
 
+        try:
+            # Compute centroids and associated duration for each sample
+            centroids = get_centroids(samples, year)
 
+            # Add year to index
+            centroids['year'] = year
+            centroids = centroids.set_index('year', append=True).swaplevel(1, 0, 0)
 
+            # Append to main container
+            all_centroids.append(centroids)
 
+            print(f'Finished processing centroids for {year}')
 
+        except:
+            print(f'Failed to process year {year}')
 
+    # Combine all centroids into single DataFrame
+    df_c = pd.concat(all_centroids)
 
-
+    # Save output
+    df_c.to_pickle('output/centroids.pickle')

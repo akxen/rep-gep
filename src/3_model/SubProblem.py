@@ -1,4 +1,5 @@
 # Import required packages
+from pyomo.environ import *
 
 # Class to instantiate UC model, with methods to solve the model, update
 # parameters, and fix variables.
@@ -19,7 +20,48 @@ class UnitCommitment:
         """
         Initialise unit commitment model
         """
-        pass
+        # Create concrete model
+        m = ConcreteModel()
+
+        # Sets
+        # ----
+        # Existing thermal units
+        m.G_E_THERM = Set()
+
+        # Candidate thermal units
+        m.G_C_THERM = Set()
+
+        # Existing wind units
+        m.G_E_WIND = Set()
+
+        # Candidate wind units
+        m.G_C_WIND = Set()
+
+        # Existing
+
+        # Existing storage units
+        m.S_E = Set()
+
+        # Candidate storage units
+        m.S_C = Set()
+
+        # Investment periods
+        m.I = Set()
+
+        # Operating scenarios
+        m.O = Set()
+
+        # Hours within operating scenario o
+        m.T = Set()
+
+        #
+
+
+
+
+
+
+        #
 
     def fix_rolling_window_variables(self):
         """

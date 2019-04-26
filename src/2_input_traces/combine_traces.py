@@ -145,24 +145,84 @@ if __name__ == '__main__':
     # Formatted traces
     # ----------------
     # Wind traces
-    df_wind = format_wind_traces(output_directory)
+    # df_wind = format_wind_traces(output_directory)
 
     # Demand traces
     df_demand = format_demand_traces(output_directory, network_data_directory)
 
-    # Hydro traces
-    df_hydro = format_hydro_traces(output_directory)
+    # Check for missing values
+    assert not df_demand.isna().any().any(), 'Missing demand values'
 
-    # Solar traces
-    df_solar = format_solar_traces(output_directory)
+    df_tmp = df_demand.copy()
+    df_tmp[('INDEX', 'MINUS_1_YEAR')] = df_tmp.apply(lambda x: x.name - pd.Timedelta(days=365), axis=1)
+    df_tmp = df_tmp.set_index(('INDEX', 'MINUS_1_YEAR'))
 
-    # Merge into single DataFrame
-    # ---------------------------
-    # Join datasets
-    df_dataset = df_hydro.join(df_wind, how='left').join(df_demand, how='left').join(df_solar, how='left')
+    # New index for beginning of demand data
+    new_index_start = pd.date_range(start='2016-01-01 01:00:00', end=df_demand.index[-1], freq='1H')
 
-    # Add timestamp as a column
-    df_dataset[('INDEX', 'TIMESTAMP')] = df_dataset.index
+    # Reindex DataFrame
+    df_demand = df_demand.reindex(new_index_start)
 
-    # Save to file
-    df_dataset.to_hdf(os.path.join(output_directory, 'dataset.h5'), key='dataset')
+    # Update missing value at start of index with corresponding day-hours from following year
+    df_demand.update(df_tmp, overwrite=False)
+
+    # Data for last year in dataset
+    df_last_year = df_demand[-8760:].copy()
+    df_last_year[('INDEX', 'DAY_OF_YEAR')] = df_last_year.index.dayofyear
+    df_last_year[('INDEX', 'HOUR')] = df_last_year.index.hour
+    df_last_year = df_last_year.set_index([('INDEX', 'DAY_OF_YEAR'), ('INDEX', 'HOUR')])
+
+    # Assert no duplicates in index
+    assert not df_last_year.index.duplicated().any(), 'Duplicated day-hour index'
+
+    # Check no missing values
+
+    # New index for end of DataFrame
+    new_index_end = pd.date_range(start=df_demand.index[0], end='2050-01-01 00:00:00', freq='1H')
+
+    # Reindex DataFrame
+    df_demand = df_demand.reindex(new_index_end)
+
+    # Add timestamp, day of year, and hour to DataFrame
+    df_demand[('INDEX', 'TIMESTAMP')] = df_demand.index
+    df_demand[('INDEX', 'DAY_OF_YEAR')] = df_demand.index.dayofyear
+    df_demand[('INDEX', 'HOUR')] = df_demand.index.hour
+
+    # Set index as day of year and hour
+    df_demand = df_demand.set_index([('INDEX', 'DAY_OF_YEAR'), ('INDEX', 'HOUR')])
+
+
+
+    # Update demand
+    df_demand.update(df_last_year, overwrite=False)
+
+    df_demand = df_demand.set_index(('INDEX', 'TIMESTAMP'))
+    df_demand[('DEMAND', 'CAN')].plot()
+
+
+
+
+
+
+
+
+
+
+
+    #
+    # # Hydro traces
+    # df_hydro = format_hydro_traces(output_directory)
+    #
+    # # Solar traces
+    # df_solar = format_solar_traces(output_directory)
+    #
+    # # Merge into single DataFrame
+    # # ---------------------------
+    # # Join datasets
+    # df_dataset = df_hydro.join(df_wind, how='left').join(df_demand, how='left').join(df_solar, how='left')
+    #
+    # # Add timestamp as a column
+    # df_dataset[('INDEX', 'TIMESTAMP')] = df_dataset.index
+    #
+    # # Save to file
+    # df_dataset.to_hdf(os.path.join(output_directory, 'dataset.h5'), key='dataset')
