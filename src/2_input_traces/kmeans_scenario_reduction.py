@@ -1,10 +1,9 @@
 """Apply K-mean scenario algorithm to identify representative set of scenarios"""
 
-from math import sqrt
-
 import numpy as np
 import pandas as pd
 
+import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 
 
@@ -39,11 +38,11 @@ def get_samples_max_demand_days(df):
     """Identify days with greatest demand"""
 
     # Filter days with max demand in each year
-    max_demand_days = df['DEMAND'].sum(level=[1], axis=1).max(axis=1).groupby(('INDEX', 'YEAR')).idxmax()
-    max_demand_days = pd.MultiIndex.from_tuples(max_demand_days)
+    max_demand = df['DEMAND'].sum(level=[1], axis=1).max(axis=1).groupby(('INDEX', 'YEAR')).idxmax()
+    max_demand = pd.MultiIndex.from_tuples(max_demand)
 
     # Samples for days on which max system demand occurs each year
-    df_o = df.loc[max_demand_days, :].copy()
+    df_o = df.loc[max_demand, :].copy()
 
     return df_o
 
@@ -65,70 +64,30 @@ def standardise_samples(df):
     # Check that NaNs are not in standardised DataFrame
     assert not df_o.replace(-np.inf, np.nan).replace(np.inf, np.nan).isna().any().any()
 
-    return df_o
+    return df_o, mean, std
 
 
-def get_centroids(df, year, n_clusters=7):
-    """Apply K-means algorithm to compute centroids for a given year"""
+def get_centroids(samples, samples_max_demand, year, n_clusters=9):
+    """Construct centroids for a given year"""
 
-    # Sample
-    x = df.loc[year].values
-
-    # Construct and fit K-means classifier
-    kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(x)
-
-    # K-means assignment for each sample
-    assignment = kmeans.predict(x)
-
-    # Number of profiles assigned to each centroid
-    assignment_count = np.unique(assignment, return_counts=True)
-
-    # Duration assigned to each profile
-    duration = {i: j for i, j in zip(assignment_count[0], assignment_count[1])}
-
-    # Convert centroid array into DataFrame
-    centroids = pd.DataFrame(kmeans.cluster_centers_, columns=df.columns)
-
-    # Add duration information to DataFrame
-    centroids['DURATION'] = centroids.apply(lambda x: duration[x.name], axis=1)
-
-    return centroids
-
-
-if __name__ == '__main__':
-    # Load dataset
-    dataset = pd.read_hdf('output/dataset.h5')
-
-    # All samples
-    samples = get_all_samples(dataset)
-
-    # Samples for days with max demand
-    df_max_demand = get_samples_max_demand_days(samples)
-
-    # Remaining samples
-    df_s = samples.loc[samples.index.difference(df_max_demand.index), :].copy()
-
-    # Scale sample for one year
-    df = df_s.loc[2016, :].copy()
+    # Extract samples for a given year
+    df = samples.loc[year, :].copy()
 
     # Standardise samples for a given year
-    df_in = standardise_samples(df)
+    df_in, mean, std = standardise_samples(df)
 
     # Samples to be used in K-mean classifier
     X = df_in.values
 
     # Construct and fit K-means classifier
-    n_clusters = 9
     kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(X)
 
     # Assign each sample to a cluster
-    X_pred = kmeans.predict(X)
+    X_prediction = kmeans.predict(X)
 
     # Assign cluster ID to each sample
-    df_in[('K_MEANS', 'METRIC', 'CLUSTER')] = X_pred
+    df_in[('K_MEANS', 'METRIC', 'CLUSTER')] = X_prediction
     df_in[('K_MEANS', 'METRIC', 'CLUSTER')] = df_in[('K_MEANS', 'METRIC', 'CLUSTER')].astype(int)
-
-    # df_in.apply(lambda x: kmeans.cluster_centers_[int(x[('K_MEANS', 'METRIC', 'CLUSTER')])], axis=1)
 
     def _compute_cluster_distance(row):
         """Compute distance between sample and it's assigned centroid"""
@@ -148,42 +107,105 @@ if __name__ == '__main__':
     df_in[('K_MEANS', 'METRIC', 'CENTROID_DISTANCE')] = df_in.apply(_compute_cluster_distance, axis=1)
 
     # Find samples that minimise distance to each respective centroid
-    centroid_samples = df_in.groupby(('K_MEANS', 'METRIC', 'CLUSTER'))[[('K_MEANS', 'METRIC', 'CENTROID_DISTANCE')]].idxmin()
+    centroid_samples = (df_in.groupby(('K_MEANS', 'METRIC', 'CLUSTER'))[[('K_MEANS', 'METRIC', 'CENTROID_DISTANCE')]]
+                        .apply(lambda x: pd.Series({'DURATION': x.size, 'HOUR_ID': x.idxmin()[0]})))
+
+    # Extract clusters that minimise the distance to their respective centroid
+    b = df_in.loc[centroid_samples['HOUR_ID']]
+
+    # Re-scale values
+    df_rescaled = (b.drop('K_MEANS', axis=1) * std) + mean
+
+    # Add duration of each cluster to DataFrame
+    df_rescaled[('K_MEANS', 'METRIC', 'DURATION')] = (df_rescaled.apply(lambda x: centroid_samples.set_index('HOUR_ID')
+                                                                        .loc[x.name, 'DURATION'], axis=1))
+
+    # Add series with max demand
+    df_o = pd.concat([df_rescaled, samples_max_demand.loc[year]])
+
+    # Add duration for day with max demand (1 day)
+    df_o.loc[samples_max_demand.loc[year].index[0], ('K_MEANS', 'METRIC', 'DURATION')] = 1
+
+    # Compute normalised duration (number of days per centroid / total days in year)
+    df_o[('K_MEANS', 'METRIC', 'NORMALISED_DURATION')] = (df_o[('K_MEANS', 'METRIC', 'DURATION')]
+                                                          .div(df_o[('K_MEANS', 'METRIC', 'DURATION')].sum()))
+
+    # Retain day ID in column
+    df_o[('K_MEANS', 'METRIC', 'DAY_ID')] = df_o.index
 
     # Reset index
-    centroid_samples = centroid_samples.reset_index()
+    df_o = df_o.reset_index(drop=True)
 
-    a = centroid_samples.reset_index().droplevel(0, axis=1).droplevel(0, axis=1)
+    # Add year to index
+    df_o['YEAR'] = year
 
-    b = pd.merge(a, df_in, how='left', left_on=['CENTROID_DISTANCE'], right_index=True)
+    # Set index
+    df_o = df_o.set_index('YEAR', append=True).swaplevel(1, 0, 0)
+
+    return df_o
 
 
+def check_plots(centroids, samples):
+    """
+    Plot selected demand, wind, and solar data to visually inspect
+    algorithm output
+    """
+
+    # Plot figures
+    fig, ax = plt.subplots()
+
+    # All demand curves
+    samples[('DEMAND', 'ADE')].T.plot(ax=ax, color='r', alpha=0.2)
+
+    # Clustered demand curves
+    centroids[('DEMAND', 'ADE')].T.plot(ax=ax, color='b', alpha=0.8, legend=False)
+
+    # Plot figures
+    fig, ax = plt.subplots()
+
+    # All demand curves
+    samples[('WIND', 'WEN')].T.plot(ax=ax, color='r', alpha=0.2)
+
+    # Clustered demand curves
+    centroids[('WIND', 'WEN')].T.plot(ax=ax, color='b', alpha=0.8, legend=False)
+
+    # Plot figures
+    fig, ax = plt.subplots()
+
+    # All solar curves
+    samples[('SOLAR', 'ADE|SAT')].T.plot(ax=ax, color='r', alpha=0.2)
+
+    # Clustered solar curves
+    centroids[('SOLAR', 'ADE|SAT')].T.plot(ax=ax, color='b', alpha=0.8, legend=False)
 
 
+if __name__ == '__main__':
+    # Load dataset
+    dataset = pd.read_hdf('output/dataset.h5')
 
-    # # Container for all centroids
-    # all_centroids = []
-    #
-    # for year in range(2016, 2051):
-    #
-    #     try:
-    #         # Compute centroids and associated duration for each sample
-    #         centroids = get_centroids(samples, year)
-    #
-    #         # Add year to index
-    #         centroids['year'] = year
-    #         centroids = centroids.set_index('year', append=True).swaplevel(1, 0, 0)
-    #
-    #         # Append to main container
-    #         all_centroids.append(centroids)
-    #
-    #         print(f'Finished processing centroids for {year}')
-    #
-    #     except:
-    #         print(f'Failed to process year {year}')
-    #
-    # # Combine all centroids into single DataFrame
-    # df_c = pd.concat(all_centroids)
-    #
-    # # Save output
-    # df_c.to_pickle('output/centroids.pickle')
+    # All samples
+    all_samples = get_all_samples(dataset)
+
+    # Samples for days with max demand
+    max_demand_days = get_samples_max_demand_days(all_samples)
+
+    # Remaining samples
+    remaining_samples = all_samples.loc[all_samples.index.difference(max_demand_days.index), :].copy()
+
+    # Container for all centroids
+    all_centroids = []
+
+    for y in range(2016, 2050):
+        print(f'Processing year {y}')
+
+        # Centroids computed for a given year
+        df_c = get_centroids(remaining_samples, max_demand_days, y)
+
+        # Append to main container
+        all_centroids.append(df_c)
+
+    # Compute all centroids
+    df_all_centroids = pd.concat(all_centroids)
+
+    # Save to file
+    df_all_centroids.to_pickle('output/centroids.pickle')
