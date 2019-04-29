@@ -64,6 +64,9 @@ class ConstructDataset:
         # Gas cost
         self.df_ntndp_gas_cost = self._load_ntndp_gas_cost_neutral()
 
+        # Battery properties
+        self.df_ntndp_battery_properties = self._load_ntndp_battery_properties()
+
         # ACIL Allen Data
         # ---------------
         # Fuel costs for existing units
@@ -222,6 +225,16 @@ class ConstructDataset:
 
         # Rename columns and set index
         df = df.rename(columns={'$/kW': 'UNIT_ID'}).set_index('UNIT_ID')
+
+        return df
+
+    def _load_ntndp_battery_properties(self):
+        """Load battery properties from NTNDP database"""
+
+        # Battery properties from NTNDP worksheet
+        df = (pd.read_excel(os.path.join(self.data_dir, 'files', self.ntndp_filename),
+                            sheet_name='Battery Properties', skiprows=1)
+              .rename(columns={'Battery': 'STORAGE_ID'}).set_index('STORAGE_ID'))
 
         return df
 
@@ -1442,14 +1455,41 @@ class ConstructDataset:
 
         return df_build_limits_pivot
 
+    def get_candidate_battery_properties(self):
+        """Get properties for candidate batteries"""
+
+        # Battery properties from NTNDP database
+        df = self.df_ntndp_battery_properties.copy()
+
+        # Rename columns
+        def _column_mapper(text):
+            """Convert column labels to upper-case and replace spaces with underscores"""
+            return text.upper().replace(' ', '_')
+
+        # Rename index
+        def _index_mapper(text):
+            """Convert indices to upper-case and replace spaces with hyphens"""
+            return text.upper().replace(' ', '-')
+
+        # Rename columns and indices
+        df = df.rename(_column_mapper, axis='columns').rename(_index_mapper, axis='index')
+
+        # Divide charge efficiency by 100 (convert to number between 0 and 1)
+        df['CHARGE_EFFICIENCY'] = df['CHARGE_EFFICIENCY'].div(100)
+
+        # Retain selected columns
+        df_o = df[['CHARGE_EFFICIENCY', 'ECONOMIC_LIFE']]
+
+        return df_o
+
 
 if __name__ == '__main__':
 
     # Directory containing core data files
-    data_directory = os.path.join(os.path.curdir, os.path.pardir, os.path.pardir, 'data')
+    data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, 'data')
 
     # Output directory
-    output_directory = os.path.join(os.path.curdir, 'output')
+    output_directory = os.path.join(os.path.dirname(__file__), 'output')
 
     # Object used to construct dataset
     Dataset = ConstructDataset(data_directory, scenario='neutral')
@@ -1465,6 +1505,10 @@ if __name__ == '__main__':
     # Candidate unit build costs
     battery_build_costs = Dataset.get_battery_build_cost()
     battery_build_costs.to_csv(os.path.join(output_directory, 'battery_build_costs.csv'))
+
+    # Candidate battery properties
+    batter_properties = Dataset.get_candidate_battery_properties()
+    batter_properties.to_csv(os.path.join(output_directory, 'battery_properties.csv'))
 
     # Candidate unit build limits
     candidate_unit_build_limits = Dataset.get_candidate_unit_build_limits()
