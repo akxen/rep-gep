@@ -67,6 +67,9 @@ class ConstructDataset:
         # Battery properties
         self.df_ntndp_battery_properties = self._load_ntndp_battery_properties()
 
+        # Minimum reserve levels
+        self.df_ntndp_minimum_reserve_levels = self._load_ntndp_minimum_reserve_levels()
+
         # ACIL Allen Data
         # ---------------
         # Fuel costs for existing units
@@ -235,6 +238,15 @@ class ConstructDataset:
         df = (pd.read_excel(os.path.join(self.data_dir, 'files', self.ntndp_filename),
                             sheet_name='Battery Properties', skiprows=1)
               .rename(columns={'Battery': 'STORAGE_ID'}).set_index('STORAGE_ID'))
+
+        return df
+
+    def _load_ntndp_minimum_reserve_levels(self):
+        """Minimum reserve levels from NTNDP database"""
+
+        # Minimum reserve levels for each NEM region
+        df = (pd.read_excel(os.path.join(self.data_dir, 'files', self.ntndp_filename),
+                            sheet_name='MRL', skiprows=1))
 
         return df
 
@@ -1482,9 +1494,23 @@ class ConstructDataset:
 
         return df_o
 
+    def get_minimum_reserve_levels(self):
+        """Minimum reserve levels for each NEM region"""
+
+        # Load minimum reserve levels
+        df = self._load_ntndp_minimum_reserve_levels()
+
+        # Rename columns and set index as NEM region
+        df_o = (df.rename(columns={'Region': 'NEM_REGION', 'Minimum Reserve Level (MW)': 'MINIMUM_RESERVE_LEVEL'})
+                .set_index('NEM_REGION'))
+
+        # Keep latest minimum reserve values (SA1 has multiple MRL values with different start dates)
+        df_o = df_o.loc[~df_o.index.duplicated(keep='last'), ['MINIMUM_RESERVE_LEVEL']]
+
+        return df_o
+
 
 if __name__ == '__main__':
-
     # Directory containing core data files
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, 'data')
 
@@ -1513,3 +1539,7 @@ if __name__ == '__main__':
     # Candidate unit build limits
     candidate_unit_build_limits = Dataset.get_candidate_unit_build_limits()
     candidate_unit_build_limits.to_csv(os.path.join(output_directory, 'candidate_unit_build_limits.csv'))
+
+    # Minimum reserve levels
+    minimum_reserve_levels = Dataset.get_minimum_reserve_levels()
+    minimum_reserve_levels.to_csv(os.path.join(output_directory, 'minimum_reserve_levels.csv'))
