@@ -316,9 +316,6 @@ class UnitCommitmentModel:
                                  }
 
         return interconnector_limits
-    #
-    # def _get_build_limit_technologies(self):
-    #     """"""
 
     def construct_model(self, year=2016):
         """
@@ -400,51 +397,16 @@ class UnitCommitmentModel:
 
         # Parameters
         # ----------
-        def candidate_thermal_size_options_rule(m, g, n):
-            """Candidate thermal unit discrete size options"""
-
-            if self.candidate_units.loc[g, ('PARAMETERS', 'TECHNOLOGY_PRIMARY')] == 'GAS':
-
-                if n == 0:
-                    return float(0)
-                elif n == 1:
-                    return float(100)
-                elif n == 2:
-                    return float(200)
-                elif n == 3:
-                    return float(300)
-                else:
-                    raise Exception('Unexpected size index')
-
-            elif self.candidate_units.loc[g, ('PARAMETERS', 'TECHNOLOGY_PRIMARY')] == 'COAL':
-
-                if n == 0:
-                    return float(0)
-                elif n == 1:
-                    return float(300)
-                elif n == 2:
-                    return float(500)
-                elif n == 3:
-                    return float(700)
-                else:
-                    raise Exception('Unexpected size index')
-
-            else:
-                raise Exception('Unexpected technology type')
-
-        # Possible size for thermal generators
-        m.X_C_THERM = Param(m.G_C_THERM, m.G_C_THERM_SIZE_OPTIONS, rule=candidate_thermal_size_options_rule)
-
         def emissions_intensity_rule(m, g):
             """Emissions intensity (tCO2/MWh)"""
 
             if g in m.G_E_THERM:
                 # Emissions intensity
-                emissions = self.existing_units.loc[g, ('PARAMETERS', 'EMISSIONS')].astype(float)
+                emissions = float(self.existing_units.loc[g, ('PARAMETERS', 'EMISSIONS')])
 
             elif g in m.G_C_THERM:
                 # Emissions intensity
-                emissions = self.candidate_units.loc[g, ('PARAMETERS', 'EMISSIONS')].astype(float)
+                emissions = float(self.candidate_units.loc[g, ('PARAMETERS', 'EMISSIONS')])
 
             else:
                 # Set emissions intensity = 0 for all solar, wind, hydro, and storage units
@@ -705,14 +667,6 @@ class UnitCommitmentModel:
         # Network incidence matrix
         m.INCIDENCE_MATRIX = Param(m.L, m.Z, rule=network_incidence_matrix_rule)
 
-        def build_limits_rule(m, technology, z):
-            """Build limits for each technology type by zone"""
-
-            return self.candidate_unit_build_limits.loc[technology, z].astype(float)
-
-        # Build limits for each technology and zone
-        m.BUILD_LIMITS = Param(m.BUILD_LIMIT_TECHNOLOGIES, m.Z, rule=build_limits_rule)
-
         # Capacity factor wind (must be updated each time model is run)
         m.Q_WIND = Param(m.B, m.T, initialize=0, mutable=True)
 
@@ -745,11 +699,20 @@ class UnitCommitmentModel:
         # Power output above minimum dispatchable level of output [MW]
         m.p = Var(m.G, m.T)
 
+        # Startup state variable
+        m.v = Var(m.G_E_THERM.union(m.G_C_THERM), m.T, within=Binary)
+
+        # Shutdown state variable
+        m.w = Var(m.G_E_THERM.union(m.G_C_THERM), m.T, within=Binary)
+
+        # On-state variable
+        m.u = Var(m.G_E_THERM.union(m.G_C_THERM), m.T, within=Binary)
+
+        # Upward reserve allocation [MW]
+        m.r_up = Var(m.G_E_THERM.union(m.G_C_THERM).union(m.G_C_STORAGE), m.T, within=NonNegativeReals)
+
         # Variables to be determined in master program (will be fixed in sub-problems)
         # ----------------------------------------------------------------------------
-        # Discrete investment decisions for candidate thermal generators
-        m.d = Var(m.G_C_THERM, m.G_C_THERM_SIZE_OPTIONS, m.I, within=Binary)
-
         # Capacity of candidate units (defined for all years in model horizon)
         m.x_C = Var(m.G_C, m.I, within=NonNegativeReals)
 
@@ -784,157 +747,203 @@ class UnitCommitmentModel:
             t=0. Assume that all generators are at their minimum dispatch level.
             """
 
-            # TODO: Must take into account energy output for storage units
+            # TODO: Must take into account power output for interval preceding t=0
             if t != m.T.first():
-                return (m.P_TOTAL[g, t-1] + m.P_TOTAL[g, t]) / 2
+                return (m.P_TOTAL[g, t - 1] + m.P_TOTAL[g, t]) / 2
             else:
                 return (m.P_MIN[g] + m.P_TOTAL[g, t]) / 2
 
         # Energy output for a given generator
-        m.ENERGY_OUTPUT = Expression(m.G, m.T, rule=generator_energy_output_rule)
+        m.e = Expression(m.G, m.T, rule=generator_energy_output_rule)
+
+        def thermal_operating_costs_rule(m):
+            """Cost to operate existing and candidate thermal units"""
+
+            return (m.SCENARIO_DURATION * sum((m.C_MC[g] + (m.E[g] - m.baseline) * m.permit_price) * m.e[g, t]
+                                              + (m.C_SU[g] * m.v[g, t]) + (m.C_SD[g] * m.w[g, t])
+                                              for g in m.G_E_THERM.union(m.G_C_THERM) for t in m.T))
+
+        # Existing and candidate thermal unit operating costs
+        m.C_OP_THERM = Expression(rule=thermal_operating_costs_rule)
+
+        def hydro_operating_costs_rule(m):
+            """Cost to operate existing hydro generators"""
+
+            return m.SCENARIO_DURATION * sum(m.C_MC[g] * m.e[g, t] for g in m.G_E_HYDRO for t in m.T)
+
+        # Existing hydro unit operating costs (no candidate hydro generators)
+        m.C_OP_HYDRO = Expression(rule=hydro_operating_costs_rule)
+
+        def solar_operating_costs_rule(m):
+            """Cost to operate existing and candidate solar units"""
+
+            return ((sum(m.C_MC[g] * m.e[g, t] for g in m.G_E_SOLAR for t in m.T)
+                     + sum((m.C_MC[g] - m.baseline * m.permit_price) * m.e[g, t] for g in m.G_C_SOLAR for t in m.T)
+                     ) * m.SCENARIO_DURATION)
+
+        # Existing and candidate solar unit operating costs (only candidate solar eligible for credits)
+        m.C_OP_SOLAR = Expression(rule=solar_operating_costs_rule)
+
+        def wind_operating_costs_rule(m):
+            """Cost to operate existing and candidate wind generators"""
+
+            return ((sum(m.C_MC[g] * m.e[g, t] for g in m.G_E_WIND for t in m.T)
+                     + sum((m.C_MC[g] - m.baseline * m.permit_price) * m.e[g, t] for g in m.G_C_WIND for t in m.T)
+                     ) * m.SCENARIO_DURATION)
+
+        # Existing and candidate solar unit operating costs (only candidate solar eligible for credits)
+        m.C_OP_WIND = Expression(rule=wind_operating_costs_rule)
+
+        def storage_operating_costs_rule(m):
+            """Cost to operate candidate storage units"""
+
+            return (sum((m.C_MC[g] - m.baseline * m.permit_price) * m.e[g, t] for g in m.G_C_STORAGE for t in m.T)
+                    * m.SCENARIO_DURATION)
+
+        # Candidate storage unit operating costs
+        m.C_OP_STORAGE = Expression(rule=storage_operating_costs_rule)
+
+        def total_operating_cost(m):
+            """Total operating cost"""
+
+            return m.C_OP_THERM + m.C_OP_HYDRO + m.C_OP_SOLAR + m.C_OP_WIND + m.C_OP_STORAGE
+
+        # Total operating cost
+        m.C_OP_TOTAL = Expression(rule=total_operating_cost)
 
         # Constraints
         # -----------
-        def candidate_thermal_capacity_rule(m, g, i):
-            """Discrete candidate thermal unit investment decisions"""
+        def upward_reserve_rule(m, r, t):
+            """Upward reserve for each reach region"""
 
-            return m.x_C[g, i] == sum(m.d[g, n, i] * m.X_C_THERM[g, n] for n in m.G_C_THERM_SIZE_OPTIONS)
-
-        # Constraining discrete investment sizes for thermal plant
-        m.DISCRETE_THERMAL_OPTIONS = Constraint(m.G_C_THERM, m.I, rule=candidate_thermal_capacity_rule)
-
-        def unique_discrete_choice_rule(m, g, i):
-            """Can only choose one size per technology-year"""
-
-            return sum(m.d[g, n, i] for n in m.G_C_THERM_SIZE_OPTIONS) == 1
-
-        # Can only choose one size option in each year for each candidate size
-        m.UNIQUE_SIZE_CHOICE = Constraint(m.G_C_THERM, m.I, rule=unique_discrete_choice_rule)
-
-
-
-
-
-
+            return sum(m.r_up[g, t] if self.)
 
         # Update class attribute
         self.model = m
 
-    def fix_rolling_window_variables(self):
-        """
-        Fix variables at the start of the rolling window (initial conditions)
-        """
-        pass
 
-    def unfix_rolling_window_variables(self):
-        """
-        Free variables at the start of the rolling window
-        """
-        pass
+def fix_rolling_window_variables(self):
+    """
+    Fix variables at the start of the rolling window (initial conditions)
+    """
+    pass
 
-    def fix_binary_variables(self):
-        """
-        Fix all binary variables. Allows the linear approximation of the UC
-        program to be solved.
-        """
-        pass
 
-    def unfix_binary_variables(self):
-        """
-        Free all binary variables.
-        """
-        pass
+def unfix_rolling_window_variables(self):
+    """
+    Free variables at the start of the rolling window
+    """
+    pass
 
-    def update_parameters(self, start, end, fix_intervals):
-        """
-        Update model parameters. Fix variables at the start of the rolling
-        window to specified values.
 
-        Parameters
-        ----------
-        start : datetime
-            First interval within rolling window horizon
+def fix_binary_variables(self):
+    """
+    Fix all binary variables. Allows the linear approximation of the UC
+    program to be solved.
+    """
+    pass
 
-        end : datetime
-            Last interval within rolling window horizon
 
-        fix_intervals : datetime
-            Number of intervals to fix at the start of the rolling window
-        """
-        pass
+def unfix_binary_variables(self):
+    """
+    Free all binary variables.
+    """
+    pass
 
-    def solve_model(self):
-        """
-        Solve model. First solve the MILP problem. Then fix binary variables
-        to the solution obtained. Re-run the model, allowing dual information
-        to be collected.
-        """
 
-        # Solve MILP problem
+def update_parameters(self, start, end, fix_intervals):
+    """
+    Update model parameters. Fix variables at the start of the rolling
+    window to specified values.
 
-        # Fix binary variables
+    Parameters
+    ----------
+    start : datetime
+        First interval within rolling window horizon
 
-        # Solve LP problem (obtain dual variables)
+    end : datetime
+        Last interval within rolling window horizon
 
-        # Get summary of results that will be passed to master problem
+    fix_intervals : datetime
+        Number of intervals to fix at the start of the rolling window
+    """
+    pass
 
-        # Unfix binary variables
 
-        pass
+def solve_model(self):
+    """
+    Solve model. First solve the MILP problem. Then fix binary variables
+    to the solution obtained. Re-run the model, allowing dual information
+    to be collected.
+    """
 
-    def solve_rolling_window(self, start, end, overlap):
-        """
-        Solve model using rolling-window approach.
+    # Solve MILP problem
 
-        Parameters
-        ----------
-        start : datetime
-            Timestamp for start of rolling window
+    # Fix binary variables
 
-        end : datetime
-            Timestamp for end of rolling window
+    # Solve LP problem (obtain dual variables)
 
-        overlap : int
-            Number of intervals successive windows must overlap with the
-            previous window
-        """
+    # Get summary of results that will be passed to master problem
 
-        # Compute parameters for each window (timestamp for start of window,
-        # timestamp for end of window, number of intervals that must be
-        # fixed at the beginning of each rolling window with values obtained
-        # from the solution of the previous window).
+    # Unfix binary variables
 
-        # Initialise container for model results
+    pass
 
-        # For window in windows
 
-        # Solve the MILP problem
+def solve_rolling_window(self, start, end, overlap):
+    """
+    Solve model using rolling-window approach.
 
-        # Fix binary variables
+    Parameters
+    ----------
+    start : datetime
+        Timestamp for start of rolling window
 
-        # Solve the LP problem
+    end : datetime
+        Timestamp for end of rolling window
 
-        # Get summary of results for selected variables and expressions
-        # (use this information when updating master problem)
+    overlap : int
+        Number of intervals successive windows must overlap with the
+        previous window
+    """
 
-        # Append results to container
+    # Compute parameters for each window (timestamp for start of window,
+    # timestamp for end of window, number of intervals that must be
+    # fixed at the beginning of each rolling window with values obtained
+    # from the solution of the previous window).
 
-        # Parse results so they are in a format which can be easily ingested
-        # by the master problem
+    # Initialise container for model results
 
-        pass
+    # For window in windows
 
-    def get_result_summary(self):
-        """
-        Summarise results for particular primal and dual variables, and
-        evaluate selected expressions.
+    # Solve the MILP problem
 
-        Returns
-        -------
-        result_summary : dict
-            Summary of model results
-        """
-        pass
+    # Fix binary variables
+
+    # Solve the LP problem
+
+    # Get summary of results for selected variables and expressions
+    # (use this information when updating master problem)
+
+    # Append results to container
+
+    # Parse results so they are in a format which can be easily ingested
+    # by the master problem
+
+    pass
+
+
+def get_result_summary(self):
+    """
+    Summarise results for particular primal and dual variables, and
+    evaluate selected expressions.
+
+    Returns
+    -------
+    result_summary : dict
+        Summary of model results
+    """
+    pass
 
 
 if __name__ == '__main__':
