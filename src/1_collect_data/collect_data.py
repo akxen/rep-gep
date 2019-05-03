@@ -1395,7 +1395,7 @@ class ConstructDataset:
         for index, row in df.iterrows():
             if row['Region'] == 'NEM Wide':
                 # Build limit applies to all NEM regions
-                region_zone_combinations = [[r, z] for r in all_regions for z in _get_zones_given_region(r)]
+                region_zone_combinations = [[r.replace('1', ''), z] for r in all_regions for z in _get_zones_given_region(r.replace('1', ''))]
 
             elif row['Zone'] == 'All':
                 # NEM region
@@ -1441,6 +1441,9 @@ class ConstructDataset:
         # Build limits for each technology per zone
         df_build_limits = pd.DataFrame(build_limits, columns=['REGION', 'ZONE', 'ACIL_TECHNOLOGY_ID', 'BUILD_LIMIT'])
 
+        # Drop duplicates (sometimes NEM wide and zone specific limits are specified)
+        df_build_limits = df_build_limits.drop_duplicates(subset=['ACIL_TECHNOLOGY_ID', 'ZONE'])
+
         # Pivot so different technologies comprise the index, and zones the columns. Cell values denote build limit
         # for technology for each zone.
         df_build_limits_pivot = df_build_limits.pivot(index='ACIL_TECHNOLOGY_ID', columns='ZONE',
@@ -1459,7 +1462,8 @@ class ConstructDataset:
                          'Supercritical PC - Brown coal with CCS': 'COAL-SC-CCS BROWN-COAL',
                          'Supercritical PC - Brown coal without CCS': 'COAL-SC BROWN-COAL',
                          'Wave/Ocean': 'WAVE',
-                         'Wind - (100 MW)': 'WIND'
+                         'Wind - (100 MW)': 'WIND',
+                         'Large Scale Battery Storage': 'STORAGE',
                          }
 
         # Update index names (ensure consistency with candidate and existing unit fuel / technology types)

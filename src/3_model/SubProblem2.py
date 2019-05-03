@@ -316,8 +316,11 @@ class UnitCommitmentModel:
                                  }
 
         return interconnector_limits
+    #
+    # def _get_build_limit_technologies(self):
+    #     """"""
 
-    def construct_model(self):
+    def construct_model(self, year=2016):
         """
         Initialise unit commitment model
         """
@@ -326,13 +329,13 @@ class UnitCommitmentModel:
 
         # Sets
         # ----
-        # NEM zones
-        m.Z = Set(initialize=self._get_nem_zones())
-
         # NEM regions
         m.R = Set(initialize=self._get_nem_regions())
 
-        # Links between NEM regions
+        # NEM zones
+        m.Z = Set(initialize=self._get_nem_zones())
+
+        # Links between NEM zones
         m.L = Set(initialize=self._get_network_links())
 
         # NEM wind bubbles
@@ -344,8 +347,8 @@ class UnitCommitmentModel:
         # Candidate thermal units
         m.G_C_THERM = Set(initialize=self._get_candidate_thermal_unit_ids())
 
-        # Candidate thermal unit size options
-        m.G_C_THERM_SIZE_OPTIONS = RangeSet(0, 2, ordered=True)
+        # Index for candidate thermal unit size options
+        m.G_C_THERM_SIZE_OPTIONS = RangeSet(0, 3, ordered=True)
 
         # Existing wind units
         m.G_E_WIND = Set(initialize=self._get_existing_wind_unit_ids())
@@ -374,8 +377,6 @@ class UnitCommitmentModel:
         # Quick start thermal generators (existing and candidate)
         m.G_THERM_QUICK = Set(initialize=self._get_quick_start_thermal_generator_ids())
 
-        # Quick start thermal generators (existing and candidate)
-
         # All existing generators
         m.G_E = m.G_E_THERM.union(m.G_E_WIND).union(m.G_E_SOLAR).union(m.G_E_HYDRO)
 
@@ -385,8 +386,17 @@ class UnitCommitmentModel:
         # All generators + storage units
         m.G = m.G_E.union(m.G_C)
 
-        # Hours within operating scenario
+        # Operating scenario hour
         m.T = RangeSet(0, 23, ordered=True)
+
+        # Years since start of model horizon and year for which model is being run
+        m.Y = RangeSet(2016, year)
+
+        # All years in model horizon
+        m.I = RangeSet(2016, 2049)
+
+        # Build limit technology types
+        m.BUILD_LIMIT_TECHNOLOGIES = Set(initialize=self.candidate_unit_build_limits.index)
 
         # Parameters
         # ----------
@@ -396,10 +406,12 @@ class UnitCommitmentModel:
             if self.candidate_units.loc[g, ('PARAMETERS', 'TECHNOLOGY_PRIMARY')] == 'GAS':
 
                 if n == 0:
-                    return float(100)
+                    return float(0)
                 elif n == 1:
-                    return float(200)
+                    return float(100)
                 elif n == 2:
+                    return float(200)
+                elif n == 3:
                     return float(300)
                 else:
                     raise Exception('Unexpected size index')
@@ -407,10 +419,12 @@ class UnitCommitmentModel:
             elif self.candidate_units.loc[g, ('PARAMETERS', 'TECHNOLOGY_PRIMARY')] == 'COAL':
 
                 if n == 0:
-                    return float(300)
+                    return float(0)
                 elif n == 1:
-                    return float(500)
+                    return float(300)
                 elif n == 2:
+                    return float(500)
+                elif n == 3:
                     return float(700)
                 else:
                     raise Exception('Unexpected size index')
@@ -611,7 +625,7 @@ class UnitCommitmentModel:
                 max_power = float(0)
             return max_power
 
-        # Maximum power output for existing and candidate units.
+        # Maximum power output for existing and candidate units (must be updated each time model is run)
         m.P_MAX = Param(m.G, rule=max_generator_power_output_rule)
 
         def min_power_output_proportion_rule(m, g):
@@ -647,6 +661,7 @@ class UnitCommitmentModel:
             """
 
             if (g in m.G_E_THERM) or (g in m.G_C_THERM):
+                #  Initialise marginal cost for existing and candidate thermal plant = 0
                 marginal_cost = float(0)
 
             elif (g in m.G_E_WIND) or (g in m.G_E_SOLAR) or (g in m.G_E_HYDRO):
@@ -690,6 +705,14 @@ class UnitCommitmentModel:
         # Network incidence matrix
         m.INCIDENCE_MATRIX = Param(m.L, m.Z, rule=network_incidence_matrix_rule)
 
+        def build_limits_rule(m, technology, z):
+            """Build limits for each technology type by zone"""
+
+            return self.candidate_unit_build_limits.loc[technology, z].astype(float)
+
+        # Build limits for each technology and zone
+        m.BUILD_LIMITS = Param(m.BUILD_LIMIT_TECHNOLOGIES, m.Z, rule=build_limits_rule)
+
         # Capacity factor wind (must be updated each time model is run)
         m.Q_WIND = Param(m.B, m.T, initialize=0, mutable=True)
 
@@ -705,7 +728,7 @@ class UnitCommitmentModel:
         # Max MW into storage device - charging (must be updated each time model is run)
         m.P_STORAGE_MAX_IN = Param(m.G_C_STORAGE, initialize=0)
 
-        # Duration of operating scenario (must be updated each time model is run
+        # Duration of operating scenario (must be updated each time model is run)
         m.SCENARIO_DURATION = Param(initialize=0)
 
         # Value of lost-load [$/MWh]
@@ -721,6 +744,14 @@ class UnitCommitmentModel:
 
         # Power output above minimum dispatchable level of output [MW]
         m.p = Var(m.G, m.T)
+
+        # Variables to be determined in master program (will be fixed in sub-problems)
+        # ----------------------------------------------------------------------------
+        # Discrete investment decisions for candidate thermal generators
+        m.d = Var(m.G_C_THERM, m.G_C_THERM_SIZE_OPTIONS, m.I, within=Binary)
+
+        # Capacity of candidate units (defined for all years in model horizon)
+        m.x_C = Var(m.G_C, m.I, within=NonNegativeReals)
 
         # Expressions
         # -----------
@@ -761,6 +792,30 @@ class UnitCommitmentModel:
 
         # Energy output for a given generator
         m.ENERGY_OUTPUT = Expression(m.G, m.T, rule=generator_energy_output_rule)
+
+        # Constraints
+        # -----------
+        def candidate_thermal_capacity_rule(m, g, i):
+            """Discrete candidate thermal unit investment decisions"""
+
+            return m.x_C[g, i] == sum(m.d[g, n, i] * m.X_C_THERM[g, n] for n in m.G_C_THERM_SIZE_OPTIONS)
+
+        # Constraining discrete investment sizes for thermal plant
+        m.DISCRETE_THERMAL_OPTIONS = Constraint(m.G_C_THERM, m.I, rule=candidate_thermal_capacity_rule)
+
+        def unique_discrete_choice_rule(m, g, i):
+            """Can only choose one size per technology-year"""
+
+            return sum(m.d[g, n, i] for n in m.G_C_THERM_SIZE_OPTIONS) == 1
+
+        # Can only choose one size option in each year for each candidate size
+        m.UNIQUE_SIZE_CHOICE = Constraint(m.G_C_THERM, m.I, rule=unique_discrete_choice_rule)
+
+
+
+
+
+
 
         # Update class attribute
         self.model = m
