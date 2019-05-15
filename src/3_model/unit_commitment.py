@@ -1,20 +1,16 @@
 import os
-from math import ceil
-
 import pandas as pd
+from math import ceil
+from collections import OrderedDict
+
 from pyomo.environ import *
-
-
-# Class to instantiate UC model, with methods to solve the model, update
-# parameters, and fix variables.
-
-# Class to run the UC model using a rolling window approach. Accepts as
-# arguments data dictionaries describing demand traces, solar traces, wind
-# traces, and hydro output.
 
 
 class UnitCommitmentModel:
     def __init__(self, data_dir, input_traces_dir):
+        # Initialise model object
+        self.m = ConcreteModel()
+
         # Directory containing core data files
         self.data_dir = data_dir
 
@@ -34,7 +30,7 @@ class UnitCommitmentModel:
         self.battery_build_costs = self._load_battery_build_costs()
 
         # Battery properties
-        self.battery_properties = pd.read_csv(os.path.join(data_dir, 'battery_properties.csv'), header=0, index_col=0)
+        self.battery_properties = self._load_battery_properties()
 
         # Battery build costs
         self.candidate_unit_build_limits = pd.read_csv(os.path.join(data_dir, 'candidate_unit_build_limits.csv'),
@@ -89,6 +85,17 @@ class UnitCommitmentModel:
 
         return df
 
+    def _load_battery_properties(self):
+        """Load battery properties"""
+
+        # Load battery properties from spreadsheet
+        df = pd.read_csv(os.path.join(self.data_dir, 'battery_properties.csv'), header=0, index_col=0)
+
+        # Add NEM zone as column
+        df['NEM_ZONE'] = df.apply(lambda x: x.name.split('-')[0], axis=1)
+
+        return df
+
     def _get_nem_zones(self):
         """Get list of unique NEM zones"""
 
@@ -110,6 +117,19 @@ class UnitCommitmentModel:
         assert len(regions) == 5, 'Unexpected number of NEM regions'
 
         return regions
+
+    def _get_nem_region_zone_map(self):
+        """
+        Construct mapping between NEM regions and the zones belonging to
+        those regions
+        """
+
+        # Map between NEM regions and zones
+        region_zone_map = (self.existing_units[[('PARAMETERS', 'NEM_REGION'), ('PARAMETERS', 'NEM_ZONE')]]
+                           .droplevel(0, axis=1).drop_duplicates(subset=['NEM_REGION', 'NEM_ZONE'])
+                           .groupby('NEM_REGION')['NEM_ZONE'].apply(lambda x: list(x)))
+
+        return region_zone_map
 
     def _get_wind_bubbles(self):
         """Get unique wind bubbles"""
@@ -303,6 +323,23 @@ class UnitCommitmentModel:
 
         return self._get_network_incidence_matrix().index
 
+    def _get_generator_zone_map(self):
+        """Get mapping between existing and candidate generators and NEM zones"""
+
+        # Existing units
+        existing = self.existing_units[('PARAMETERS', 'NEM_ZONE')]
+
+        # Candidate units
+        candidate = self.candidate_units[('PARAMETERS', 'ZONE')]
+
+        # Candidate storage units
+        storage = self.battery_properties['NEM_ZONE']
+
+        # Concatenate series objects
+        generator_zone_map = pd.concat([existing, candidate, storage])
+
+        return generator_zone_map
+
     @staticmethod
     def _get_link_power_flow_limits():
         """Max forward and reverse power flow over links between zones"""
@@ -317,15 +354,9 @@ class UnitCommitmentModel:
 
         return interconnector_limits
 
-    def construct_model(self, year=2016):
-        """
-        Initialise unit commitment model
-        """
-        # Create concrete model
-        m = ConcreteModel()
+    def define_sets(self, m):
+        """Define sets to be used in model"""
 
-        # Sets
-        # ----
         # NEM regions
         m.R = Set(initialize=self._get_nem_regions())
 
@@ -362,9 +393,6 @@ class UnitCommitmentModel:
         # Existing hydro units
         m.G_E_HYDRO = Set(initialize=self._get_existing_hydro_unit_ids())
 
-        # Existing storage units
-        # m.S_E = Set()
-
         # Candidate storage units
         m.G_C_STORAGE = Set(initialize=self._get_candidate_storage_units())
 
@@ -386,17 +414,17 @@ class UnitCommitmentModel:
         # Operating scenario hour
         m.T = RangeSet(0, 23, ordered=True)
 
-        # Years since start of model horizon and year for which model is being run
-        m.Y = RangeSet(2016, year)
-
         # All years in model horizon
         m.I = RangeSet(2016, 2049)
 
         # Build limit technology types
         m.BUILD_LIMIT_TECHNOLOGIES = Set(initialize=self.candidate_unit_build_limits.index)
 
-        # Parameters
-        # ----------
+        return m
+
+    def define_parameters(self, m):
+        """Define model parameters"""
+
         def emissions_intensity_rule(m, g):
             """Emissions intensity (tCO2/MWh)"""
 
@@ -688,8 +716,16 @@ class UnitCommitmentModel:
         # Value of lost-load [$/MWh]
         m.C_L = Param(initialize=float(1e4), mutable=True)
 
-        # Variables
-        # ---------
+        # Initial state for thermal generators
+        # TODO: If unit retires it should be set to 0. Could also consider baseload as being on.
+        m.u0 = Param(m.G_E_THERM.union(m.G_C_THERM), initialize=1, mutable=True)
+
+        return m
+
+    @staticmethod
+    def define_variables(m):
+        """Define model variables"""
+
         # Emissions intensity baseline [tCO2/MWh] (must be fixed each time model is run)
         m.baseline = Var()
 
@@ -697,7 +733,7 @@ class UnitCommitmentModel:
         m.permit_price = Var()
 
         # Power output above minimum dispatchable level of output [MW]
-        m.p = Var(m.G, m.T)
+        m.p = Var(m.G, m.T, within=NonNegativeReals)
 
         # Startup state variable
         m.v = Var(m.G_E_THERM.union(m.G_C_THERM), m.T, within=Binary)
@@ -709,15 +745,19 @@ class UnitCommitmentModel:
         m.u = Var(m.G_E_THERM.union(m.G_C_THERM), m.T, within=Binary)
 
         # Upward reserve allocation [MW]
-        m.r_up = Var(m.G_E_THERM.union(m.G_C_THERM).union(m.G_C_STORAGE), m.T, within=NonNegativeReals)
+        m.r_up = Var(m.G_E_THERM.union(m.G_C_THERM).union(m.G_C_STORAGE), m.T, within=NonNegativeReals, initialize=0)
 
         # Variables to be determined in master program (will be fixed in sub-problems)
         # ----------------------------------------------------------------------------
         # Capacity of candidate units (defined for all years in model horizon)
         m.x_C = Var(m.G_C, m.I, within=NonNegativeReals)
 
-        # Expressions
-        # -----------
+        return m
+
+    @staticmethod
+    def define_expressions(m):
+        """Define model expressions"""
+
         def min_power_output_rule(m, g):
             """
             Minimum generator output in MW
@@ -733,6 +773,38 @@ class UnitCommitmentModel:
 
         def total_power_output_rule(m, g, t):
             """Total power output [MW]"""
+
+            if g in m.G_THERM_QUICK:
+                if t < m.T.last():
+                    return (m.P_MIN[g] * (m.u[g, t] + m.v[g, t+1])) + m.p[g, t]
+                else:
+                    return (m.P_MIN[g] * m.u[g, t]) + m.p[g, t]
+
+            elif g in m.G_THERM_SLOW:
+                # Startup duration
+                SU_D = ceil(m.P_MIN[g].expr() / m.SU_RAMP[g])
+
+                # Startup power output trajectory increment
+                ramp_up_increment = m.P_MIN[g].expr() / SU_D
+
+                # Startup power output trajectory
+                P_SU = OrderedDict({i+1: ramp_up_increment * i for i in range(0, SU_D+1)})
+
+                # Shutdown duration
+                SD_D = ceil(m.P_MIN[g].expr() / m.SD_RAMP[g])
+
+                # Shutdown power output trajectory increment
+                ramp_down_increment = m.P_MIN[g].expr() / SD_D
+
+                # Shutdown power output trajectory
+                P_SD = OrderedDict({i+1: m.P_MIN[g].expr() - (ramp_down_increment * i) for i in range(0, SD_D+1)})
+
+                if t < m.T.last():
+                    return ((m.P_MIN[g] * (m.u[g, t] + m.v[g, t])) + m.p[g, t]
+                            + sum(P_SU[i] * m.v[g, t-i+SU_D+2] if t-i+SU_D+2 <= m.T.last() else 0 for i in range(1, SU_D+1))
+
+                            )
+
 
             return m.P_MIN[g] + m.p[g, t]
 
@@ -811,139 +883,163 @@ class UnitCommitmentModel:
         # Total operating cost
         m.C_OP_TOTAL = Expression(rule=total_operating_cost)
 
-        # Constraints
-        # -----------
-        def upward_reserve_rule(m, r, t):
-            """Upward reserve for each reach region"""
+        return m
 
-            return sum(m.r_up[g, t] if self.)
+    def define_constraints(self, m):
+        """Define model constraints"""
 
-        # Update class attribute
-        self.model = m
+        def upward_power_reserve_rule(m, r, t):
+            """Upward reserve constraint"""
 
+            # NEM region-zone map
+            region_zone_map = self._get_nem_region_zone_map()
 
-def fix_rolling_window_variables(self):
-    """
-    Fix variables at the start of the rolling window (initial conditions)
-    """
-    pass
+            # Mapping describing the zone to which each generator is assigned
+            generator_zone_map = self._get_generator_zone_map()
 
+            # Existing and candidate thermal gens + candidate storage units
+            gens = m.G_E_THERM.union(m.G_C_THERM).union(m.G_C_STORAGE)
 
-def unfix_rolling_window_variables(self):
-    """
-    Free variables at the start of the rolling window
-    """
-    pass
+            #
 
+            return sum(m.r_up[g, t] for g in gens if generator_zone_map.loc[g] in region_zone_map.loc[r]) >= m.D_UP[r]
 
-def fix_binary_variables(self):
-    """
-    Fix all binary variables. Allows the linear approximation of the UC
-    program to be solved.
-    """
-    pass
+        # Upward power reserve rule for each NEM zone
+        m.UPWARD_POWER_RESERVE = Constraint(m.R, m.T, rule=upward_power_reserve_rule)
 
+        def operating_state_logic_rule(m, g, t):
+            """
+            Determine the operating state of the generator (startup, shutdown
+            running, off)
+            """
 
-def unfix_binary_variables(self):
-    """
-    Free all binary variables.
-    """
-    pass
+            if t == m.T.first():
+                # Must use u0 if first period (otherwise index out of range)
+                return m.u[g, t] - m.u0[g] == m.v[g, t] - m.w[g, t]
 
+            else:
+                # Otherwise operating state is coupled to previous period
+                return m.u[g, t] - m.u[g, t-1] == m.v[g, t] - m.w[g, t]
 
-def update_parameters(self, start, end, fix_intervals):
-    """
-    Update model parameters. Fix variables at the start of the rolling
-    window to specified values.
+        # Unit operating state
+        m.OPERATING_STATE = Constraint(m.G_E_THERM.union(m.G_C_THERM), m.T, rule=operating_state_logic_rule)
 
-    Parameters
-    ----------
-    start : datetime
-        First interval within rolling window horizon
+        def minimum_on_time_rule(m, g, t):
+            """Minimum number of hours generator must be on"""
 
-    end : datetime
-        Last interval within rolling window horizon
+            # Hours for existing units
+            if g in self.existing_units.index:
+                hours = self.existing_units.loc[g, ('PARAMETERS', 'MIN_ON_TIME')]
 
-    fix_intervals : datetime
-        Number of intervals to fix at the start of the rolling window
-    """
-    pass
+            # Hours for candidate units
+            elif g in self.candidate_units.index:
+                hours = self.candidate_units.loc[g, ('PARAMETERS', 'MIN_ON_TIME')]
 
+            else:
+                raise Exception(f'Min on time hours not found for generator: {g}')
 
-def solve_model(self):
-    """
-    Solve model. First solve the MILP problem. Then fix binary variables
-    to the solution obtained. Re-run the model, allowing dual information
-    to be collected.
-    """
+            # Time index used in summation
+            time_index = [i for i in range(t - int(hours), t) if i >= 0]
 
-    # Solve MILP problem
+            # Constraint only defined over subset of timestamps
+            if t >= hours:
+                return sum(m.v[g, j] for j in time_index) <= m.u[g, t]
+            else:
+                return Constraint.Skip
 
-    # Fix binary variables
+        # Minimum on time constraint
+        m.MINIMUM_ON_TIME = Constraint(m.G_E_THERM.union(m.G_C_THERM), m.T, rule=minimum_on_time_rule)
 
-    # Solve LP problem (obtain dual variables)
+        def minimum_off_time_rule(m, g, t):
+            """Minimum number of hours generator must be off"""
 
-    # Get summary of results that will be passed to master problem
+            # Hours for existing units
+            if g in self.existing_units.index:
+                hours = self.existing_units.loc[g, ('PARAMETERS', 'MIN_OFF_TIME')]
 
-    # Unfix binary variables
+            # Hours for candidate units
+            elif g in self.candidate_units.index:
+                hours = self.candidate_units.loc[g, ('PARAMETERS', 'MIN_OFF_TIME')]
 
-    pass
+            else:
+                raise Exception(f'Min off time hours not found for generator: {g}')
 
+            # Time index used in summation
+            time_index = [i for i in range(t - int(hours) + 1, t) if i >= 0]
 
-def solve_rolling_window(self, start, end, overlap):
-    """
-    Solve model using rolling-window approach.
+            # Constraint only defined over subset of timestamps
+            if t >= hours:
+                return sum(m.w[g, j] for j in time_index) <= 1 - m.u[g, t]
+            else:
+                return Constraint.Skip
 
-    Parameters
-    ----------
-    start : datetime
-        Timestamp for start of rolling window
+        # Minimum off time constraint
+        m.MINIMUM_OFF_TIME = Constraint(m.G_E_THERM.union(m.G_C_THERM), m.T, rule=minimum_off_time_rule)
 
-    end : datetime
-        Timestamp for end of rolling window
+        def power_production_rule(m, g, t):
+            """Power production rule"""
 
-    overlap : int
-        Number of intervals successive windows must overlap with the
-        previous window
-    """
+            if t < m.T.last():
+                return (m.p[g, t] + m.r_up[g, t]
+                        <= ((m.P_MAX[g] - m.P_MIN[g]) * m.u[g, t])
+                        - ((m.P_MAX[g] - m.SD_RAMP[g]) * m.w[g, t+1])
+                        + ((m.SU_RAMP[g] - m.P_MIN[g]) * m.v[g, t+1]))
+            else:
+                return Constraint.Skip
 
-    # Compute parameters for each window (timestamp for start of window,
-    # timestamp for end of window, number of intervals that must be
-    # fixed at the beginning of each rolling window with values obtained
-    # from the solution of the previous window).
+        # Power production
+        m.POWER_PRODUCTION = Constraint(m.G_E_THERM.union(m.G_C_THERM), m.T, rule=power_production_rule)
 
-    # Initialise container for model results
+        def ramp_rate_up_rule(m, g, t):
+            """Ramp-rate up constraint"""
 
-    # For window in windows
+            if t > m.T.first():
+                return (m.p[g, t] + m.r_up[g, t]) - m.p[g, t-1] <= m.RU[g]
+            else:
+                return Constraint.Skip
 
-    # Solve the MILP problem
+        # Ramp-rate up limit
+        m.RAMP_RATE_UP = Constraint(m.G_E_THERM.union(m.G_C_THERM), m.T, rule=ramp_rate_up_rule)
 
-    # Fix binary variables
+        def ramp_rate_down_rule(m, g, t):
+            """Ramp-rate down constraint"""
 
-    # Solve the LP problem
+            if t > m.T.first():
+                return - m.p[g, t] + m.p[g, t-1] <= m.RD[g]
+            else:
+                return Constraint.Skip
 
-    # Get summary of results for selected variables and expressions
-    # (use this information when updating master problem)
+        # Ramp-rate up limit
+        m.RAMP_RATE_DOWN = Constraint(m.G_E_THERM.union(m.G_C_THERM), m.T, rule=ramp_rate_down_rule)
 
-    # Append results to container
+        return m
 
-    # Parse results so they are in a format which can be easily ingested
-    # by the master problem
+    def construct_model(self):
+        """Assemble model components"""
 
-    pass
+        # Initialise model object
+        m = ConcreteModel()
 
+        # Define sets
+        m = self.define_sets(m)
 
-def get_result_summary(self):
-    """
-    Summarise results for particular primal and dual variables, and
-    evaluate selected expressions.
+        # Define parameters
+        m = self.define_parameters(m)
 
-    Returns
-    -------
-    result_summary : dict
-        Summary of model results
-    """
-    pass
+        # Define variables
+        m = self.define_variables(m)
+
+        # Construct expressions
+        m = self.define_expressions(m)
+
+        # Construct constraints
+        m = self.define_constraints(m)
+
+        return m
+
+    def update_parameters(self, m, year):
+        """Update model parameters for a given year"""
+        pass
 
 
 if __name__ == '__main__':
@@ -957,4 +1053,4 @@ if __name__ == '__main__':
     UC = UnitCommitmentModel(data_directory, input_traces_directory)
 
     # Construct model
-    UC.construct_model()
+    model = UC.construct_model()
