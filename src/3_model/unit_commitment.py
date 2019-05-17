@@ -7,9 +7,12 @@ from pyomo.environ import *
 
 
 class UnitCommitmentModel:
-    def __init__(self, data_dir, input_traces_dir):
+    def __init__(self, raw_data_dir, data_dir, input_traces_dir):
         # Initialise model object
         self.m = ConcreteModel()
+
+        # Directory containing raw data files
+        self.raw_data_dir = raw_data_dir
 
         # Directory containing core data files
         self.data_dir = data_dir
@@ -131,8 +134,22 @@ class UnitCommitmentModel:
 
         return region_zone_map
 
+    def _get_wind_bubble_map(self):
+        """Mapping between wind bubbles and NEM regions and zones"""
+
+        # Load data
+        df = pd.read_csv(os.path.join(self.raw_data_dir, 'maps', 'wind_bubbles.csv'), index_col=0)
+
+        return df
+
     def _get_wind_bubbles(self):
-        """Get unique wind bubbles"""
+        """
+        Get unique wind bubbles
+
+        Note: Not all wind bubbles in dataset are used. Some zones may have more
+        than one wind bubble. Model arbitrarily selects bubbles so there is at
+        most one bubble per zone.
+        """
 
         # Extract wind bubbles from input data traces file
         df = self.input_traces.copy()
@@ -642,6 +659,10 @@ class UnitCommitmentModel:
         # Minimum power output (as a proportion of max capacity) for existing and candidate thermal generators
         m.P_MIN_PROP = Param(m.G, rule=min_power_output_proportion_rule)
 
+        def wind_capacity_factor_rule(m, g):
+            """Capacity factors for each existing and candidate wind generator"""
+
+
         def marginal_cost_rule(m, g):
             """Marginal costs for existing and candidate generators
 
@@ -780,6 +801,7 @@ class UnitCommitmentModel:
                 else:
                     return (m.P_MIN[g] * m.u[g, t]) + m.p[g, t]
 
+            # Define startup and shutdown trajectories for 'slow' generators
             elif g in m.G_THERM_SLOW:
                 # Startup duration
                 SU_D = ceil(m.P_MIN[g].expr() / m.SU_RAMP[g])
@@ -800,13 +822,19 @@ class UnitCommitmentModel:
                 P_SD = OrderedDict({i+1: m.P_MIN[g].expr() - (ramp_down_increment * i) for i in range(0, SD_D+1)})
 
                 if t < m.T.last():
-                    return ((m.P_MIN[g] * (m.u[g, t] + m.v[g, t])) + m.p[g, t]
-                            + sum(P_SU[i] * m.v[g, t-i+SU_D+2] if t-i+SU_D+2 <= m.T.last() else 0 for i in range(1, SU_D+1))
-
+                    return ((m.P_MIN[g] * (m.u[g, t] + m.v[g, t+1])) + m.p[g, t]
+                            + sum(P_SU[i] * m.v[g, t-i+SU_D+2] if t-i+SU_D+2 in m.T else 0 for i in range(1, SU_D+1))
+                            + sum(P_SD[i] * m.w[g, t-i+2] if t-i+2 in m.T else 0 for i in range(2, SD_D+2))
+                            )
+                else:
+                    return ((m.P_MIN[g] * m.u[g, t]) + m.p[g, t]
+                            + sum(P_SU[i] * m.v[g, t-i+SU_D+2] if t-i+SU_D+2 in m.T else 0 for i in range(1, SU_D+1))
+                            + sum(P_SD[i] * m.w[g, t-i+2] if t-i+2 in m.T else 0 for i in range(2, SD_D+2))
                             )
 
-
-            return m.P_MIN[g] + m.p[g, t]
+            # Remaining generators with no startup / shutdown directory defined
+            else:
+                return m.P_MIN[g] + m.p[g, t]
 
         # Total power output [MW]
         m.P_TOTAL = Expression(m.G, m.T, rule=total_power_output_rule)
@@ -1012,6 +1040,21 @@ class UnitCommitmentModel:
         # Ramp-rate up limit
         m.RAMP_RATE_DOWN = Constraint(m.G_E_THERM.union(m.G_C_THERM), m.T, rule=ramp_rate_down_rule)
 
+        def existing_wind_output_min_rule(m, g, t):
+            """Constrain minimum output for existing wind generators"""
+
+            return m.P_TOTAL[g, t] >= 0
+
+        # Minimum wind output for existing generators
+        m.EXISTING_WIND_MIN = Constraint(m.G_E_WIND, m.T, rule=existing_wind_output_min_rule)
+
+        # TODO: Need to map existing and candidate units to wind bubbles
+        # def existing_wind_output_max_rule(m, g, t):
+        #     """Constrain maximum output for existing wind generators"""
+        #
+        #     return m.P_TOTAL[g, t] <= m.
+
+
         return m
 
     def construct_model(self):
@@ -1043,6 +1086,9 @@ class UnitCommitmentModel:
 
 
 if __name__ == '__main__':
+    # Directory containing files from which dataset is derived
+    raw_data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, 'data')
+
     # Directory containing core data files
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '1_collect_data', 'output')
 
@@ -1050,7 +1096,9 @@ if __name__ == '__main__':
     input_traces_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '2_input_traces', 'output')
 
     # Instantiate UC model
-    UC = UnitCommitmentModel(data_directory, input_traces_directory)
+    UC = UnitCommitmentModel(raw_data_directory, data_directory, input_traces_directory)
 
     # Construct model
     model = UC.construct_model()
+
+    #
