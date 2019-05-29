@@ -6,8 +6,17 @@ import DataHandler
 
 
 class ProcessTraces:
-    def __init__(self):
-        pass
+    def __init__(self, core_data_dir):
+        # Core data directory
+        self.core_data_dir = core_data_dir
+
+        # Map between wind bubbles and associated files
+        self.wind_bubble_file_map = self._get_wind_bubble_file_map()
+
+    def _get_wind_bubble_file_map(self):
+        """Map between wind bubbles and associated files"""
+
+        return pd.read_csv(os.path.join(self.core_data_dir, 'maps', 'wind_bubble_file_map.csv'), index_col='BUBBLE_ID')
 
     @staticmethod
     def _process_solar_trace(data_dir, filename):
@@ -116,7 +125,7 @@ class ProcessTraces:
         return df_o
 
     @staticmethod
-    def _process_wind_trace(data_dir, filename):
+    def _process_wind_trace(data_dir, filename, bubble_id):
         """
         Process wind traces for a single file
 
@@ -138,7 +147,16 @@ class ProcessTraces:
         df = pd.read_csv(os.path.join(data_dir, filename))
 
         # Set index and unstack (want year, month, day, and interval ID as index)
-        df = df.set_index(['Year', 'Month', 'Day']).stack().to_frame(name='capacity_factor')
+        df = df.set_index(['Year', 'Month', 'Day'])
+
+        # Total number of intervals per day
+        intervals_per_day = int(df.columns[-1])
+
+        # Interval duration in hours
+        interval_duration = 24 / intervals_per_day
+
+        # Stack columns
+        df = df.stack().to_frame(name='capacity_factor')
 
         # Construct timestamps from index
         def _construct_timestamp(row):
@@ -148,7 +166,7 @@ class ProcessTraces:
             year, month, day, interval_id = [int(i) for i in row.name]
 
             # Construct timestamp
-            timestamp = pd.Timestamp(year, month, day, 0) + pd.Timedelta(hours=interval_id)
+            timestamp = pd.Timestamp(year, month, day, 0) + pd.Timedelta(hours=interval_id * interval_duration)
 
             return timestamp
 
@@ -158,11 +176,12 @@ class ProcessTraces:
         # Set timestamp as index
         df = df.set_index('timestamp')
 
-        # Wind bubble extracted from filename
-        bubble = filename.split(' ')[1]
+        # Re-sample to hourly resolution (if label 04:00:00, this denotes the end
+        # of the trading interval i.e. represents the period from 03:00:00 - 04:00:00)
+        df = df.resample('1h', label='right', closed='right').mean()
 
         # Add wind bubble name to DataFrame
-        df['bubble'] = bubble
+        df['bubble'] = bubble_id
 
         return df
 
@@ -191,17 +210,20 @@ class ProcessTraces:
         # and technology type
         dfs = []
 
-        # All files in directory
-        files = [f for f in os.listdir(data_dir) if f.startswith('Bubble')]
+        # Counter
+        i = 0
 
-        for i, file in enumerate(files):
-            print(f'Processing wind traces, file: {i + 1}/{len(files)}')
+        for index, row in self.wind_bubble_file_map.iterrows():
+            print(f'Processing wind traces, file: {i + 1}/{self.wind_bubble_file_map.shape[0]}')
 
             # Process file
-            df = self._process_wind_trace(data_dir, file)
+            df = self._process_wind_trace(data_dir, row['FILE'], row.name)
 
             # Append to container
             dfs.append(df)
+
+            # Increment counter
+            i += 1
 
         # All wind traces. Drop duplicates.
         df_o = pd.concat(dfs)
@@ -420,9 +442,11 @@ if __name__ == '__main__':
     # Directory in which output files are stored
     output_directory = os.path.join(os.path.curdir, 'output')
 
+    # Core data directory
+    data_directory = os.path.join(os.path.curdir, os.path.pardir, os.path.pardir, 'data')
+
     # Root directory for NTNDP information
-    ntndp_directory = os.path.join(os.path.curdir, os.path.pardir, os.path.pardir,
-                                   'data', 'files', '2016 NTNDP Database Input Data Traces')
+    ntndp_directory = os.path.join(data_directory, 'files', '2016 NTNDP Database Input Data Traces')
 
     # Directory containing solar traces
     solar_data_directory = os.path.join(ntndp_directory, 'Solar traces', 'Solar traces', '2016 Future Solar Traces')
@@ -441,10 +465,13 @@ if __name__ == '__main__':
                                             'egrimod-nem-dataset-v1.3', 'akxen-egrimod-nem-dataset-4806603',
                                             'generators')
 
+    # Map directory
+    map_directory = os.path.join(data_directory, 'maps')
+
     # Data processing objects
     # -----------------------
     # Object used to process different NTNDP traces
-    Traces = ProcessTraces()
+    traces = ProcessTraces(data_directory)
 
     # Initialise object used to extract information from MMSDM data archive
     MMSDM = DataHandler.ParseMMSDMTables(mmsdm_archive_directory)
@@ -452,13 +479,15 @@ if __name__ == '__main__':
     # Process signals
     # ---------------
     # Process solar traces
-    # df_solar = Traces.process_solar_traces(solar_data_directory, output_directory, save=True)
+    # df_solar = traces.process_solar_traces(solar_data_directory, output_directory, save=True)
+    #
+    # # Process wind traces
+    # df_wind = traces.process_wind_traces(wind_data_directory, output_directory, save=True)
+    #
+    # # Process demand traces
+    # df_demand = traces.process_demand_traces(demand_data_directory, output_directory, save=True)
+    #
+    # # Process hydro generator traces
+    # df_hydro = traces.process_hydro_traces(generator_data_directory, output_directory, save=True)
 
-    # Process wind traces
-    # df_wind = Traces.process_wind_traces(wind_data_directory, output_directory, save=True)
-
-    # Process demand traces
-    # df_demand = Traces.process_demand_traces(demand_data_directory, output_directory, save=True)
-
-    # Process hydro generator traces
-    df_hydro = Traces.process_hydro_traces(generator_data_directory, output_directory, save=True)
+    df = pd.read_hdf(os.path.join(output_directory, 'wind_traces.h5'))

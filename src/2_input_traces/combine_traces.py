@@ -81,10 +81,10 @@ def pad_dates_forward(df):
     assert not df_last_year.index.duplicated().any(), 'Duplicated day-hour index'
 
     # Check no missing values before updating (don't want to mistakenly update other years)
-    assert not df.isna().any().any(), 'Missing values'
+    # assert not df.isna().any().any(), 'Missing values'
 
     # New index for end of DataFrame
-    new_index_end = pd.date_range(start=df.index[0], end='2050-01-01 00:00:00', freq='1H')
+    new_index_end = pd.date_range(start=df.index[0], end='2051-01-01 00:00:00', freq='1H')
 
     # Reindex DataFrame
     df_o = df.reindex(new_index_end).copy()
@@ -196,7 +196,7 @@ def format_solar_traces(data_dir):
     # Pad dates backward (ensure data starts from 2016)
     df = pad_dates_backward(df)
 
-    # Pad dates forward (ensure data ends at beginning of 2050
+    # Pad dates forward (ensure data ends at end of 2050)
     df = pad_dates_forward(df)
 
     return df
@@ -222,7 +222,7 @@ def format_hydro_traces(data_dir):
     df['month'] = df.index.month
 
     # Construct new DataFrame with index from 2016 - 2050
-    model_horizon_index = pd.date_range(start='2016-01-01 01:00:00', end='2050-01-01 00:00:00', freq='1H')
+    model_horizon_index = pd.date_range(start='2016-01-01 01:00:00', end='2051-01-01 00:00:00', freq='1H')
 
     # Initialize DataFrame for hydro traces over the entire model horizon
     df_o = pd.DataFrame(index=model_horizon_index, columns=['hour', 'day', 'month'])
@@ -261,50 +261,128 @@ if __name__ == '__main__':
     network_data_directory = os.path.join(os.path.curdir, os.path.pardir, os.path.pardir, 'data', 'files',
                                           'egrimod-nem-dataset-v1.3', 'akxen-egrimod-nem-dataset-4806603', 'network')
 
+    # Load wind traces
+    df_wind = pd.read_hdf(os.path.join(output_directory, 'wind_traces.h5'))
+
+    # Data for a single wind bubble
+    df_wind_zone = df_wind.loc[df_wind['bubble'] == 'FNQ']
+
+    def pad_values(df, direction):
+        """Pad values forwards and backwards"""
+
+        if direction == 'forward':
+            keep = 'last'
+            new_index = pd.date_range(start=df.index[0], end='2051-01-01 00:00:00', freq='1H')
+
+        elif direction == 'backward':
+            keep = 'first'
+            new_index = pd.date_range(start='2016-01-01 01:00:00', end=df.index[-1], freq='1H')
+
+        else:
+            raise Exception(f'Unexpected direction: {direction}')
+
+        # New index - pad dates forward
+        df = df.reindex(new_index)
+
+        # Wind bubble
+        bubble_names = df['bubble'].unique()
+
+        assert len(bubble_names) == 1, 'Should only have 1 element in list of bubble names'
+
+        # Bubble name
+        bubble_name = df_wind_zone['bubble'].unique()[0]
+
+        def get_hour_of_year(row):
+            """Get hour of year"""
+
+            # Get day of year - adjust by 1 minute so last timestamp (2051-01-01 00:00:00)
+            # is assigned to 2050. Note this timestamp actually corresponds to
+            # 2050-12-31 23:00:00 to 2051-01-01 00:00:00
+            day_timestamp = row.name - pd.Timedelta(minutes=1)
+
+            # Day of year
+            day = day_timestamp.dayofyear
+
+            # Hour of year
+            hour = ((day - 1) * 24) + day_timestamp.hour + 1
+
+            return hour
+
+        # Hour of year
+        df['hour_of_year'] = df.apply(get_hour_of_year, axis=1).to_frame('hour_of_year')
+
+        # Last year with complete data
+        fill_year = df.dropna(subset=['capacity_factor']).drop_duplicates(subset=['hour_of_year'], keep=keep)
+
+        # DataFrame that will have values padded forward
+        df = df.drop('bubble', axis=1).reset_index().set_index('hour_of_year')
+
+        # Pad using values from last year with complete data
+        df.update(fill_year.set_index('hour_of_year'), overwrite=False)
+
+        # Set timestamp as index
+        df_o = df.set_index('index')
+
+        # Rename column
+        df_o.rename(columns={'capacity_factor': bubble_name})
+
+        return df_o
+
+
+    wind_zone = pad_values(df_wind_zone, direction='forward')
+
+    wind_zone = pad_values(df_wind_zone, direction='backward')
+
+
+
+
+
+
+
     # Formatted traces
     # ----------------
     # Wind traces
-    df_wind = format_wind_traces(output_directory)
+    # df_wind = format_wind_traces(output_directory)
 
-    # Demand traces
-    df_demand = format_demand_traces(output_directory, network_data_directory)
-
-    # Hydro traces
-    df_hydro = format_hydro_traces(output_directory)
-
-    # Solar traces
-    df_solar = format_solar_traces(output_directory)
-
-    # Merge into single DataFrame
-    # ---------------------------
-    # Join datasets
-    df_dataset = df_hydro.join(df_wind, how='left').join(df_demand, how='left').join(df_solar, how='left')
-
-    # Check for missing values
-    assert not df_dataset.isna().any().any(), 'Missing values in dataset'
-
-    # Check for duplicated indices
-    assert not df_dataset.index.duplicated().any(), 'Dataset has duplicated indices'
-
-    # Check for duplicated columns
-    assert not df_dataset.columns.duplicated().any(), 'Dataset has duplicated columns'
-
-    # Plots of selected series to double check data to double check
-    # -------------------------------------------------------------
-    fig, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=4)
-
-    # Demand
-    df_dataset[('DEMAND', 'CAN')].plot(title='Demand - CAN', ax=ax1)
-
-    # Hydro
-    df_dataset[('HYDRO', 'MEADOWBK')].plot(title='Hydro - MEADOWBK', ax=ax2)
-
-    # Wind
-    df_dataset[('WIND', 'FNQ')].plot(title='Wind - FNQ', ax=ax3)
-
-    # Solar
-    df_dataset[('SOLAR', 'ADE|FFP2')].plot(title='Solar - ADE|FFP2', ax=ax4)
-
-    # Save to file
-    # ------------
-    df_dataset.to_hdf(os.path.join(output_directory, 'dataset.h5'), key='dataset')
+    # # Demand traces
+    # df_demand = format_demand_traces(output_directory, network_data_directory)
+    #
+    # # Hydro traces
+    # df_hydro = format_hydro_traces(output_directory)
+    #
+    # # Solar traces
+    # df_solar = format_solar_traces(output_directory)
+    #
+    # # Merge into single DataFrame
+    # # ---------------------------
+    # # Join datasets
+    # df_dataset = df_hydro.join(df_wind, how='left').join(df_demand, how='left').join(df_solar, how='left')
+    #
+    # # Check for missing values
+    # assert not df_dataset.isna().any().any(), 'Missing values in dataset'
+    #
+    # # Check for duplicated indices
+    # assert not df_dataset.index.duplicated().any(), 'Dataset has duplicated indices'
+    #
+    # # Check for duplicated columns
+    # assert not df_dataset.columns.duplicated().any(), 'Dataset has duplicated columns'
+    #
+    # # Plots of selected series to double check data to double check
+    # # -------------------------------------------------------------
+    # fig, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=4)
+    #
+    # # Demand
+    # df_dataset[('DEMAND', 'CAN')].plot(title='Demand - CAN', ax=ax1)
+    #
+    # # Hydro
+    # df_dataset[('HYDRO', 'MEADOWBK')].plot(title='Hydro - MEADOWBK', ax=ax2)
+    #
+    # # Wind
+    # df_dataset[('WIND', 'FNQ')].plot(title='Wind - FNQ', ax=ax3)
+    #
+    # # Solar
+    # df_dataset[('SOLAR', 'ADE|FFP2')].plot(title='Solar - ADE|FFP2', ax=ax4)
+    #
+    # # Save to file
+    # # ------------
+    # df_dataset.to_hdf(os.path.join(output_directory, 'dataset.h5'), key='dataset')

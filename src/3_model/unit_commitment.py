@@ -662,7 +662,6 @@ class UnitCommitmentModel:
         def wind_capacity_factor_rule(m, g):
             """Capacity factors for each existing and candidate wind generator"""
 
-
         def marginal_cost_rule(m, g):
             """Marginal costs for existing and candidate generators
 
@@ -797,7 +796,7 @@ class UnitCommitmentModel:
 
             if g in m.G_THERM_QUICK:
                 if t < m.T.last():
-                    return (m.P_MIN[g] * (m.u[g, t] + m.v[g, t+1])) + m.p[g, t]
+                    return (m.P_MIN[g] * (m.u[g, t] + m.v[g, t + 1])) + m.p[g, t]
                 else:
                     return (m.P_MIN[g] * m.u[g, t]) + m.p[g, t]
 
@@ -810,7 +809,7 @@ class UnitCommitmentModel:
                 ramp_up_increment = m.P_MIN[g].expr() / SU_D
 
                 # Startup power output trajectory
-                P_SU = OrderedDict({i+1: ramp_up_increment * i for i in range(0, SU_D+1)})
+                P_SU = OrderedDict({i + 1: ramp_up_increment * i for i in range(0, SU_D + 1)})
 
                 # Shutdown duration
                 SD_D = ceil(m.P_MIN[g].expr() / m.SD_RAMP[g])
@@ -819,17 +818,19 @@ class UnitCommitmentModel:
                 ramp_down_increment = m.P_MIN[g].expr() / SD_D
 
                 # Shutdown power output trajectory
-                P_SD = OrderedDict({i+1: m.P_MIN[g].expr() - (ramp_down_increment * i) for i in range(0, SD_D+1)})
+                P_SD = OrderedDict({i + 1: m.P_MIN[g].expr() - (ramp_down_increment * i) for i in range(0, SD_D + 1)})
 
                 if t < m.T.last():
-                    return ((m.P_MIN[g] * (m.u[g, t] + m.v[g, t+1])) + m.p[g, t]
-                            + sum(P_SU[i] * m.v[g, t-i+SU_D+2] if t-i+SU_D+2 in m.T else 0 for i in range(1, SU_D+1))
-                            + sum(P_SD[i] * m.w[g, t-i+2] if t-i+2 in m.T else 0 for i in range(2, SD_D+2))
+                    return ((m.P_MIN[g] * (m.u[g, t] + m.v[g, t + 1])) + m.p[g, t]
+                            + sum(P_SU[i] * m.v[g, t - i + SU_D + 2] if t - i + SU_D + 2 in m.T else 0 for i in
+                                  range(1, SU_D + 1))
+                            + sum(P_SD[i] * m.w[g, t - i + 2] if t - i + 2 in m.T else 0 for i in range(2, SD_D + 2))
                             )
                 else:
                     return ((m.P_MIN[g] * m.u[g, t]) + m.p[g, t]
-                            + sum(P_SU[i] * m.v[g, t-i+SU_D+2] if t-i+SU_D+2 in m.T else 0 for i in range(1, SU_D+1))
-                            + sum(P_SD[i] * m.w[g, t-i+2] if t-i+2 in m.T else 0 for i in range(2, SD_D+2))
+                            + sum(P_SU[i] * m.v[g, t - i + SU_D + 2] if t - i + SU_D + 2 in m.T else 0 for i in
+                                  range(1, SU_D + 1))
+                            + sum(P_SD[i] * m.w[g, t - i + 2] if t - i + 2 in m.T else 0 for i in range(2, SD_D + 2))
                             )
 
             # Remaining generators with no startup / shutdown directory defined
@@ -947,7 +948,7 @@ class UnitCommitmentModel:
 
             else:
                 # Otherwise operating state is coupled to previous period
-                return m.u[g, t] - m.u[g, t-1] == m.v[g, t] - m.w[g, t]
+                return m.u[g, t] - m.u[g, t - 1] == m.v[g, t] - m.w[g, t]
 
         # Unit operating state
         m.OPERATING_STATE = Constraint(m.G_E_THERM.union(m.G_C_THERM), m.T, rule=operating_state_logic_rule)
@@ -1010,8 +1011,8 @@ class UnitCommitmentModel:
             if t < m.T.last():
                 return (m.p[g, t] + m.r_up[g, t]
                         <= ((m.P_MAX[g] - m.P_MIN[g]) * m.u[g, t])
-                        - ((m.P_MAX[g] - m.SD_RAMP[g]) * m.w[g, t+1])
-                        + ((m.SU_RAMP[g] - m.P_MIN[g]) * m.v[g, t+1]))
+                        - ((m.P_MAX[g] - m.SD_RAMP[g]) * m.w[g, t + 1])
+                        + ((m.SU_RAMP[g] - m.P_MIN[g]) * m.v[g, t + 1]))
             else:
                 return Constraint.Skip
 
@@ -1022,7 +1023,7 @@ class UnitCommitmentModel:
             """Ramp-rate up constraint"""
 
             if t > m.T.first():
-                return (m.p[g, t] + m.r_up[g, t]) - m.p[g, t-1] <= m.RU[g]
+                return (m.p[g, t] + m.r_up[g, t]) - m.p[g, t - 1] <= m.RU[g]
             else:
                 return Constraint.Skip
 
@@ -1033,7 +1034,7 @@ class UnitCommitmentModel:
             """Ramp-rate down constraint"""
 
             if t > m.T.first():
-                return - m.p[g, t] + m.p[g, t-1] <= m.RD[g]
+                return - m.p[g, t] + m.p[g, t - 1] <= m.RD[g]
             else:
                 return Constraint.Skip
 
@@ -1054,8 +1055,18 @@ class UnitCommitmentModel:
         #
         #     return m.P_TOTAL[g, t] <= m.
 
-
         return m
+
+    def _nem_zone_wind_bubble_map(self):
+        """Assign wind bubble to existing wind unit"""
+
+        wind_bubbles = self._get_wind_bubble_map()
+
+        wind_bubbles_unique = wind_bubbles.loc[self._get_wind_bubbles()]
+
+        bubbles = wind_bubbles_unique.reset_index().set_index('ZONE')['BUBBLE_ID']
+
+        return bubbles
 
     def construct_model(self):
         """Assemble model components"""
@@ -1096,9 +1107,10 @@ if __name__ == '__main__':
     input_traces_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '2_input_traces', 'output')
 
     # Instantiate UC model
-    UC = UnitCommitmentModel(raw_data_directory, data_directory, input_traces_directory)
+    uc = UnitCommitmentModel(raw_data_directory, data_directory, input_traces_directory)
 
     # Construct model
-    model = UC.construct_model()
+    model = uc.construct_model()
 
-    #
+    # Wind bubbles
+    bubbles = uc._nem_zone_wind_bubble_map()

@@ -195,7 +195,7 @@ if __name__ == '__main__':
     # Container for all centroids
     all_centroids = []
 
-    for y in range(2016, 2050):
+    for y in range(2016, 2051):
         print(f'Processing year {y}')
 
         # Centroids computed for a given year
