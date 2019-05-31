@@ -46,6 +46,19 @@ class UnitCommitmentModel:
         # Initialise unit commitment model
         self.model = None
 
+        # Map between DUIDs and wind bubble IDs for existing generators
+        self.existing_wind_bubble_map = pd.read_csv(os.path.join(raw_data_dir, 'maps', 'existing_wind_bubble_map.csv'),
+                                                    index_col='DUID')
+
+        # Network incidence matrix
+        self.incidence_matrix = self._get_network_incidence_matrix()
+
+        # Flow over interconnectors
+        self.powerflow_limits = self._get_link_powerflow_limits()
+
+        # Unit retirement
+        # self.retirement = {g: 1 for g in }
+
     @staticmethod
     def _col_mapper(text):
         """Try and convert text in columns to int if possible"""
@@ -358,7 +371,7 @@ class UnitCommitmentModel:
         return generator_zone_map
 
     @staticmethod
-    def _get_link_power_flow_limits():
+    def _get_link_powerflow_limits():
         """Max forward and reverse power flow over links between zones"""
 
         # Limits for interconnectors composed of single branches
@@ -382,6 +395,9 @@ class UnitCommitmentModel:
 
         # Links between NEM zones
         m.L = Set(initialize=self._get_network_links())
+
+        # Interconnectors for which flow limits are defined
+        m.L_I = Set(initialize=list(self.powerflow_limits.keys()))
 
         # NEM wind bubbles
         m.B = Set(initialize=self._get_wind_bubbles())
@@ -441,6 +457,9 @@ class UnitCommitmentModel:
 
     def define_parameters(self, m):
         """Define model parameters"""
+
+        # Model year
+        m.YEAR = Param(initialize=2016, mutable=True)
 
         def emissions_intensity_rule(m, g):
             """Emissions intensity (tCO2/MWh)"""
@@ -617,23 +636,13 @@ class UnitCommitmentModel:
         # Ramp-rate down (normal operation)
         m.RD = Param(m.G_E_THERM.union(m.G_C_THERM), rule=ramp_rate_down_rule)
 
-        def max_generator_power_output_rule(m, g):
-            """
-            Maximum power output from existing and candidate generators
+        def existing_generator_registered_capacities_rule(m, g):
+            """Registered capacities of existing generators"""
 
-            Note: candidate units will have their max power output determined by investment decisions which
-            are made known in the master problem. Need to update these values each time model is run. Initialise
-            max power output = 0.
-            """
+            return float(self.existing_units.loc[g, ('PARAMETERS', 'REG_CAP')])
 
-            if g in m.G_E:
-                max_power = self.existing_units.loc[g, ('PARAMETERS', 'REG_CAP')].astype(float)
-            else:
-                max_power = float(0)
-            return max_power
-
-        # Maximum power output for existing and candidate units (must be updated each time model is run)
-        m.P_MAX = Param(m.G, rule=max_generator_power_output_rule)
+        # Registered capacities of existing generators
+        m.EXISTING_GEN_REG_CAP = Param(m.G_E, rule=existing_generator_registered_capacities_rule)
 
         def min_power_output_proportion_rule(m, g):
             """Minimum generator power output as a proportion of maximum output"""
@@ -658,9 +667,6 @@ class UnitCommitmentModel:
 
         # Minimum power output (as a proportion of max capacity) for existing and candidate thermal generators
         m.P_MIN_PROP = Param(m.G, rule=min_power_output_proportion_rule)
-
-        def wind_capacity_factor_rule(m, g):
-            """Capacity factors for each existing and candidate wind generator"""
 
         def marginal_cost_rule(m, g):
             """Marginal costs for existing and candidate generators
@@ -737,8 +743,38 @@ class UnitCommitmentModel:
         m.C_L = Param(initialize=float(1e4), mutable=True)
 
         # Initial state for thermal generators
-        # TODO: If unit retires it should be set to 0. Could also consider baseload as being on.
         m.u0 = Param(m.G_E_THERM.union(m.G_C_THERM), initialize=1, mutable=True)
+        # TODO: If unit retires it should be set to 0. Could also consider baseload as being on.
+
+        def battery_efficiency_rule(m, g):
+            """Charging and discharging efficiency for a given storage unit"""
+
+            return self.battery_properties.loc[g, 'CHARGE_EFFICIENCY']
+
+        # Battery charging / discharging efficiency
+        m.ETA = Param(m.G_C_STORAGE, rule=battery_efficiency_rule)
+
+        # Min state of charge for storage unit at end of operating scenario (assume = 0)
+        m.STORAGE_INTERVAL_END_MIN_ENERGY = Param(m.G_C_STORAGE, initialize=0)
+
+        def powerflow_min_rule(m, l):
+            """Minimum powerflow over network link"""
+
+            return float(-self.powerflow_limits[l]['reverse'])
+
+        # Lower bound for powerflow over link
+        m.POWERFLOW_MIN = Param(m.L_I, rule=powerflow_min_rule)
+
+        def powerflow_max_rule(m, l):
+            """Maximum powerflow over network link"""
+
+            return float(self.powerflow_limits[l]['forward'])
+
+        # Lower bound for powerflow over link
+        m.POWERFLOW_MAX = Param(m.L_I, rule=powerflow_max_rule)
+
+        # Unit retirement indicator (indicates if unit is available for a given year)
+        m.RETIREMENT_INDICATOR = Param(m.G, m.I, initialize=1, mutable=True)
 
         return m
 
@@ -767,6 +803,21 @@ class UnitCommitmentModel:
         # Upward reserve allocation [MW]
         m.r_up = Var(m.G_E_THERM.union(m.G_C_THERM).union(m.G_C_STORAGE), m.T, within=NonNegativeReals, initialize=0)
 
+        # Storage unit charging (power in) [MW]
+        m.p_in = Var(m.G_C_STORAGE, m.T, within=NonNegativeReals)
+
+        # Storage unit discharging (power out) [MW]
+        m.p_out = Var(m.G_C_STORAGE, m.T, within=NonNegativeReals)
+
+        # Energy in storage unit [MWh]
+        m.y = Var(m.G_C_STORAGE, m.T, within=NonNegativeReals)
+
+        # Power flow between NEM zones
+        m.p_L = Var(m.L, m.T)
+
+        # Lost load
+        m.p_LL = Var(m.Z, m.T, within=NonNegativeReals)
+
         # Variables to be determined in master program (will be fixed in sub-problems)
         # ----------------------------------------------------------------------------
         # Capacity of candidate units (defined for all years in model horizon)
@@ -777,6 +828,28 @@ class UnitCommitmentModel:
     @staticmethod
     def define_expressions(m):
         """Define model expressions"""
+
+        def max_generator_power_output_rule(m, g):
+            """
+            Maximum power output from existing and candidate generators
+
+            Note: candidate units will have their max power output determined by investment decisions which
+            are made known in the master problem. Need to update these values each time model is run.
+            """
+
+            # Max output for existing generators equal to registered capacities
+            if g in m.G_E:
+                return m.EXISTING_GEN_REG_CAP[g]
+
+            # Max output for candidate generators equal to installed capacities (variable in master problem)
+            elif g in m.G_C:
+                return sum(m.x_C[g, i] for i in range(2016, m.YEAR.value))
+
+            else:
+                raise Exception(f'Unexpected generator: {g}')
+
+        # Maximum power output for existing and candidate units (must be updated each time model is run)
+        m.P_MAX = Expression(m.G, rule=max_generator_power_output_rule)
 
         def min_power_output_rule(m, g):
             """
@@ -904,13 +977,29 @@ class UnitCommitmentModel:
         # Candidate storage unit operating costs
         m.C_OP_STORAGE = Expression(rule=storage_operating_costs_rule)
 
-        def total_operating_cost(m):
+        def total_operating_cost_rule(m):
             """Total operating cost"""
 
             return m.C_OP_THERM + m.C_OP_HYDRO + m.C_OP_SOLAR + m.C_OP_WIND + m.C_OP_STORAGE
 
         # Total operating cost
-        m.C_OP_TOTAL = Expression(rule=total_operating_cost)
+        m.C_OP_TOTAL = Expression(rule=total_operating_cost_rule)
+
+        def storage_unit_energy_capacity_rule(m, g):
+            """Energy capacity depends on installed capacity (variable in master problem)"""
+
+            return sum(m.x_C[g, i] for i in range(2016, m.YEAR.value+1))
+
+        # Capacity of storage unit [MWh]
+        m.STORAGE_UNIT_ENERGY_CAPACITY = Expression(m.G_C_STORAGE, rule=storage_unit_energy_capacity_rule)
+
+        def storage_unit_max_energy_interval_end_rule(m, g):
+            """Maximum energy at end of storage interval. Assume equal to unit capacity."""
+
+            return m.STORAGE_UNIT_ENERGY_CAPACITY[g]
+
+        # Max state of charge for storage unit at end of operating scenario (assume = unit capacity)
+        m.STORAGE_INTERVAL_END_MAX_ENERGY = Expression(m.G_C_STORAGE, rule=storage_unit_max_energy_interval_end_rule)
 
         return m
 
@@ -1049,11 +1138,171 @@ class UnitCommitmentModel:
         # Minimum wind output for existing generators
         m.EXISTING_WIND_MIN = Constraint(m.G_E_WIND, m.T, rule=existing_wind_output_min_rule)
 
-        # TODO: Need to map existing and candidate units to wind bubbles
-        # def existing_wind_output_max_rule(m, g, t):
-        #     """Constrain maximum output for existing wind generators"""
-        #
-        #     return m.P_TOTAL[g, t] <= m.
+        def wind_output_max_rule(m, g, t):
+            """
+            Constrain maximum output for wind generators
+
+            Note: Candidate unit output depends on investment decisions
+            """
+
+            # Get wind bubble to which generator belongs
+            if g in m.G_E_WIND:
+
+                # If an existing generator
+                bubble = self.existing_wind_bubble_map.loc[g, 'BUBBLE']
+
+            elif g in m.G_C_WIND:
+
+                # If a candidate generator
+                bubble = self.candidate_units.loc[g, ('PARAMETERS', 'WIND_BUBBLE')]
+
+            else:
+                raise Exception(f'Unexpected generator: {g}')
+
+            return m.P_TOTAL[g, t] <= m.Q_WIND[bubble, t] * m.P_MAX[g]
+
+        # Max output from existing wind generators
+        m.P_WIND_MAX = Constraint(m.G_E_WIND.union(m.G_C_WIND), m.T, rule=wind_output_max_rule)
+
+        def solar_output_max_rule(m, g, t):
+            """
+            Constrain maximum output for solar generators
+
+            Note: Candidate unit output depends on investment decisions
+            """
+
+            # Get NEM zone
+            if g in m.G_E_SOLAR:
+                # If an existing generator
+                zone = self.existing_units.loc[g, ('PARAMETERS', 'NEM_ZONE')]
+
+            elif g in m.G_C_SOLAR:
+                # If a candidate generator
+                zone = self.candidate_units.loc[g, ('PARAMETERS', 'ZONE')]
+
+            else:
+                raise Exception(f'Unexpected generator: {g}')
+
+            return m.P_TOTAL[g, t] <= m.Q_SOLAR[zone, t] * m.P_MAX[g]
+
+        # Max output from existing wind generators
+        m.P_SOLAR_MAX = Constraint(m.G_E_SOLAR.union(m.G_C_SOLAR), m.T, rule=solar_output_max_rule)
+
+        def hydro_output_max_rule(m, g, t):
+            """
+            Constrain hydro output to registered capacity of existing plant
+
+            Note: Assume no investment in hydro over model horizon (only consider existing units)
+            """
+
+            return m.P_TOTAL[g, t] <= m.P_MAX[g]
+
+        # Max output from existing hydro generators
+        m.P_HYDRO_MAX = Constraint(m.G_E_HYDRO, m.T, rule=hydro_output_max_rule)
+
+        # TODO: May want to add energy constraint for hydro units
+
+        def storage_max_charge_rate_rule(m, g, t):
+            """Maximum charging power for storage units [MW]"""
+
+            return m.p_in[g, t] <= m.P_STORAGE_MAX_IN[g]
+
+        # Storage unit max charging power
+        m.STORAGE_MAX_CHARGE_RATE = Constraint(m.G_C_STORAGE, m.T, rule=storage_max_charge_rate_rule)
+
+        def storage_max_discharge_rate_rule(m, g, t):
+            """Maximum discharging power for storage units [MW]"""
+
+            return m.p_out[g, t] + m.r_up[g, t] <= m.P_STORAGE_MAX_OUT[g]
+
+        # Storage unit max charging power
+        m.STORAGE_MAX_DISCHARGE_RATE = Constraint(m.G_C_STORAGE, m.T, rule=storage_max_discharge_rate_rule)
+
+        def state_of_charge_rule(m, g, t):
+            """Energy within a given storage unit [MWh]"""
+
+            return m.y[g, t] <= m.STORAGE_UNIT_ENERGY_CAPACITY[g]
+
+        # Energy within storage unit [MWh]
+        m.STATE_OF_CHARGE = Constraint(m.G_C_STORAGE, m.T, rule=state_of_charge_rule)
+
+        def storage_energy_transition_rule(m, g, t):
+            """Constraint that couples energy + power between periods for storage units"""
+
+            if t != m.T.first():
+                return m.y[g, t] == m.y[g, t-1] + (m.ETA[g] * m.p_in[g, t]) - ((1 / m.ETA[g]) * m.p_out[g, t])
+            else:
+                return Constraint.Skip
+
+        # Account for inter-temporal energy transition within storage units
+        m.STORAGE_ENERGY_TRANSITION = Constraint(m.G_C_STORAGE, m.T, rule=storage_energy_transition_rule)
+
+        def storage_interval_end_min_energy_rule(m, g):
+            """Lower bound on permissible amount of energy in storage unit at end of operating scenario"""
+
+            return m.STORAGE_INTERVAL_END_MIN_ENERGY[g] <= m.y[g, m.T.last()]
+
+        # Minimum amount of energy that must be in storage unit at end of operating scenario
+        m.STORAGE_INTERVAL_END_MIN_ENERGY_CONS = Constraint(m.G_C_STORAGE, rule=storage_interval_end_min_energy_rule)
+
+        def storage_interval_end_max_energy_rule(m, g):
+            """Upper bound on permissible amount of energy in storage unit at end of operating scenario"""
+
+            return m.y[g, m.T.last()] <= m.STORAGE_INTERVAL_END_MAX_ENERGY[g]
+
+        # Maximum amount of energy that must be in storage unit at end of operating scenario
+        m.STORAGE_INTERVAL_END_MAX_ENERGY_CONS = Constraint(m.G_C_STORAGE, rule=storage_interval_end_max_energy_rule)
+
+        def power_balance_rule(m, z, t):
+            """Power balance for each NEM zone"""
+
+            # Existing units within zone
+            existing_units = self.existing_units[self.existing_units[('PARAMETERS', 'NEM_ZONE')] == z].index.tolist()
+
+            # Candidate units within zone
+            candidate_units = self.candidate_units[self.candidate_units[('PARAMETERS', 'ZONE')] == z].index.tolist()
+
+            # All generators within a given zone
+            generators = existing_units + candidate_units
+
+            # Storage units within a given zone
+            storage_units = (self.battery_properties.loc[self.battery_properties['NEM_ZONE'] == 'SEQ', 'NEM_ZONE']
+                             .index.tolist())
+
+            return (sum(m.P_TOTAL[g, t] for g in generators) - m.D[z, t]
+                    - sum(m.INCIDENCE_MATRIX[l, z] * m.p_L[l, t] for l in m.L)
+                    + sum(m.p_out[g, t] - m.p_in[g, t] for g in storage_units)
+                    + m.p_LL[z, t] == 0)
+
+        # Power balance constraint for each zone and time period
+        m.POWER_BALANCE = Constraint(m.Z, m.T, rule=power_balance_rule)
+
+        def powerflow_min_constraint_rule(m, l, t):
+            """Minimum powerflow over a link connecting adjacent NEM zones"""
+
+            return m.p_L[l, t] >= m.POWERFLOW_MIN[l]
+
+        # Constrain max power flow over given network link
+        m.POWERFLOW_MIN_CONS = Constraint(m.L_I, m.T, rule=powerflow_min_constraint_rule)
+
+        def powerflow_max_constraint_rule(m, l, t):
+            """Maximum powerflow over a link connecting adjacent NEM zones"""
+
+            return m.p_L[l, t] <= m.POWERFLOW_MAX[l]
+
+        # Constrain max power flow over given network link
+        m.POWERFLOW_MAX_CONS = Constraint(m.L_I, m.T, rule=powerflow_max_constraint_rule)
+
+        def retirement_rule(m, g, t):
+            """Force power output to zero if unit is retired"""
+
+            if m.RETIREMENT_INDICATOR[g, m.YEAR.value] == 0:
+                return m.P_TOTAL[g, t] == 0
+            else:
+                return Constraint.Skip
+
+        # Enforce power output equals zero if unit retires
+        m.RETIREMENT = Constraint(m.G, m.T, rule=retirement_rule)
 
         return m
 
@@ -1111,6 +1360,3 @@ if __name__ == '__main__':
 
     # Construct model
     model = uc.construct_model()
-
-    # Wind bubbles
-    bubbles = uc._nem_zone_wind_bubble_map()
