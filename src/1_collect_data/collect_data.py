@@ -304,13 +304,13 @@ class ConstructDataset:
         # Filter for existing coal units
         mask_coal = self.df_g['FUEL_TYPE'].isin(['Brown coal', 'Black coal'])
 
-        # Filter for exsiting gas units
+        # Filter for existing gas units
         mask_gas = self.df_g['FUEL_TYPE'].isin(['Natural Gas (Pipeline)', 'Coal seam methane'])
 
-        # Filter for exising liquid (e.g. diesel) units
+        # Filter for existing liquid (e.g. diesel) units
         mask_liquid = self.df_g['FUEL_TYPE'].isin(['Kerosene - non aviation', 'Diesel oil'])
 
-        # Filter for exsiting wind units
+        # Filter for existing wind units
         mask_wind = self.df_g['FUEL_TYPE'].isin(['Wind'])
 
         # Filter for existing hydro units
@@ -503,7 +503,7 @@ class ConstructDataset:
         def _get_acil_id(row):
             """Get ACIL Allen technology ID
 
-            Note: Assuming black coal geneators are candidate units
+            Note: Assuming black coal generators are candidate units
             except for LV (brown coal assumed)
             """
 

@@ -255,7 +255,7 @@ if __name__ == '__main__':
     # Paths
     # -----
     # Directory containing output files (contains inputs from previous steps)
-    output_directory = os.path.join(os.path.curdir, 'output')
+    output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output')
 
     # Directory containing network node information
     network_data_directory = os.path.join(os.path.curdir, os.path.pardir, os.path.pardir, 'data', 'files',
@@ -281,7 +281,7 @@ if __name__ == '__main__':
         else:
             raise Exception(f'Unexpected direction: {direction}')
 
-        # New index - pad dates forward
+        # New index - pad dates
         df = df.reindex(new_index)
 
         # Wind bubble
@@ -290,13 +290,13 @@ if __name__ == '__main__':
         assert len(bubble_names) == 1, 'Should only have 1 element in list of bubble names'
 
         # Bubble name
-        bubble_name = df_wind_zone['bubble'].unique()[0]
+        bubble_name = bubble_names[0]
 
         def get_hour_of_year(row):
             """Get hour of year"""
 
             # Get day of year - adjust by 1 minute so last timestamp (2051-01-01 00:00:00)
-            # is assigned to 2050. Note this timestamp actually corresponds to
+            # is assigned to 2050. Note this timestamp actually corresponds to the interval
             # 2050-12-31 23:00:00 to 2051-01-01 00:00:00
             day_timestamp = row.name - pd.Timedelta(minutes=1)
 
@@ -332,9 +332,6 @@ if __name__ == '__main__':
     wind_zone = pad_values(df_wind_zone, direction='forward')
 
     wind_zone = pad_values(df_wind_zone, direction='backward')
-
-
-
 
 
 

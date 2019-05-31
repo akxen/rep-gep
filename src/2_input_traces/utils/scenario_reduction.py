@@ -1,4 +1,6 @@
-"""Apply K-mean scenario algorithm to identify representative set of scenarios"""
+"""Apply K-means scenario reduction algorithm to identify representative set of operating conditions"""
+
+import os
 
 import numpy as np
 import pandas as pd
@@ -181,7 +183,7 @@ def check_plots(centroids, samples):
 
 if __name__ == '__main__':
     # Load dataset
-    dataset = pd.read_hdf('output/dataset.h5')
+    dataset = pd.read_hdf(os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'dataset.h5'))
 
     # All samples
     all_samples = get_all_samples(dataset)
@@ -208,4 +210,4 @@ if __name__ == '__main__':
     df_all_centroids = pd.concat(all_centroids)
 
     # Save to file
-    df_all_centroids.to_pickle('output/centroids.pickle')
+    df_all_centroids.to_pickle(os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'centroids.pickle'))

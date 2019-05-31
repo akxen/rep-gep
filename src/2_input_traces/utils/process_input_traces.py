@@ -2,13 +2,16 @@ import os
 import re
 
 import pandas as pd
-import DataHandler
+from data_handler import ParseMMSDMTables
 
 
-class ProcessTraces:
-    def __init__(self, core_data_dir):
+class ProcessTraces(ParseMMSDMTables):
+    def __init__(self, root_data_dir, mmsdm_archive_dir):
+        # Instantiate inherited class
+        super().__init__(mmsdm_archive_dir)
+
         # Core data directory
-        self.core_data_dir = core_data_dir
+        self.root_data_dir = root_data_dir
 
         # Map between wind bubbles and associated files
         self.wind_bubble_file_map = self._get_wind_bubble_file_map()
@@ -16,7 +19,7 @@ class ProcessTraces:
     def _get_wind_bubble_file_map(self):
         """Map between wind bubbles and associated files"""
 
-        return pd.read_csv(os.path.join(self.core_data_dir, 'maps', 'wind_bubble_file_map.csv'), index_col='BUBBLE_ID')
+        return pd.read_csv(os.path.join(self.root_data_dir, 'maps', 'wind_bubble_file_map.csv'), index_col='BUBBLE_ID')
 
     @staticmethod
     def _process_solar_trace(data_dir, filename):
@@ -347,8 +350,7 @@ class ProcessTraces:
 
         return df_o
 
-    @staticmethod
-    def _process_hydro_trace(archive_name, hydro_duids):
+    def _process_hydro_trace(self, archive_name, hydro_duids):
         """
         Process traces for hydro units for a given month
 
@@ -367,7 +369,7 @@ class ProcessTraces:
         """
 
         # Extract SCADA dispatch data for given archive
-        df = MMSDM.parse_dispatch_unit_scada(archive_name)
+        df = self.parse_dispatch_unit_scada(archive_name)
 
         # Only retain hydro generators
         df = df.reindex(columns=hydro_duids)
@@ -440,13 +442,14 @@ if __name__ == '__main__':
     # Paths
     # -----
     # Directory in which output files are stored
-    output_directory = os.path.join(os.path.curdir, 'output')
+    output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output')
 
-    # Core data directory
-    data_directory = os.path.join(os.path.curdir, os.path.pardir, os.path.pardir, 'data')
+    # Root data directory
+    root_data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
+                                       'data')
 
     # Root directory for NTNDP information
-    ntndp_directory = os.path.join(data_directory, 'files', '2016 NTNDP Database Input Data Traces')
+    ntndp_directory = os.path.join(root_data_directory, 'files', '2016 NTNDP Database Input Data Traces')
 
     # Directory containing solar traces
     solar_data_directory = os.path.join(ntndp_directory, 'Solar traces', 'Solar traces', '2016 Future Solar Traces')
@@ -461,20 +464,16 @@ if __name__ == '__main__':
     mmsdm_archive_directory = r'C:\Users\eee\Desktop\nemweb\Reports\Data_Archive\MMSDM\zipped'
 
     # Directory containing parameters for existing generators
-    generator_data_directory = os.path.join(os.path.curdir, os.path.pardir, os.path.pardir, 'data', 'files',
-                                            'egrimod-nem-dataset-v1.3', 'akxen-egrimod-nem-dataset-4806603',
-                                            'generators')
+    generator_data_directory = os.path.join(root_data_directory, 'files', 'egrimod-nem-dataset-v1.3',
+                                            'akxen-egrimod-nem-dataset-4806603', 'generators')
 
     # Map directory
-    map_directory = os.path.join(data_directory, 'maps')
+    map_directory = os.path.join(root_data_directory, 'maps')
 
     # Data processing objects
     # -----------------------
-    # Object used to process different NTNDP traces
-    traces = ProcessTraces(data_directory)
-
-    # Initialise object used to extract information from MMSDM data archive
-    MMSDM = DataHandler.ParseMMSDMTables(mmsdm_archive_directory)
+    # Object used to process NTNDP traces
+    traces = ProcessTraces(root_data_directory, mmsdm_archive_directory)
 
     # Process signals
     # ---------------
@@ -486,8 +485,6 @@ if __name__ == '__main__':
     #
     # # Process demand traces
     # df_demand = traces.process_demand_traces(demand_data_directory, output_directory, save=True)
-    #
-    # # Process hydro generator traces
-    # df_hydro = traces.process_hydro_traces(generator_data_directory, output_directory, save=True)
 
-    df = pd.read_hdf(os.path.join(output_directory, 'wind_traces.h5'))
+    # Process hydro generator traces
+    df_hydro = traces.process_hydro_traces(generator_data_directory, output_directory, save=True)
