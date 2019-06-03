@@ -4,6 +4,8 @@ from math import ceil
 from collections import OrderedDict
 
 from pyomo.environ import *
+from pyomo.core.expr import current as EXPR
+from pyomo.util.infeasible import log_infeasible_constraints
 
 
 class UnitCommitmentModel:
@@ -56,8 +58,12 @@ class UnitCommitmentModel:
         # Flow over interconnectors
         self.powerflow_limits = self._get_link_powerflow_limits()
 
-        # Unit retirement
-        # self.retirement = {g: 1 for g in }
+        # Solver details
+        solver = 'gurobi'
+        solver_io = 'lp'
+        self.keepfiles = False
+        self.solver_options = {}
+        self.opt = SolverFactory(solver, solver_io=solver_io)
 
     @staticmethod
     def _col_mapper(text):
@@ -423,6 +429,9 @@ class UnitCommitmentModel:
         # Candidate solar units
         m.G_C_SOLAR = Set(initialize=self._get_candidate_solar_unit_ids())
 
+        # Available technologies
+        m.G_C_SOLAR_TECHNOLOGIES = Set(initialize=list(set(i.split('-')[-1] for i in m.G_C_SOLAR)))
+
         # Existing hydro units
         m.G_E_HYDRO = Set(initialize=self._get_existing_hydro_unit_ids())
 
@@ -439,7 +448,7 @@ class UnitCommitmentModel:
         m.G_E = m.G_E_THERM.union(m.G_E_WIND).union(m.G_E_SOLAR).union(m.G_E_HYDRO)
 
         # All candidate generators + storage units
-        m.G_C = m.G_C_THERM.union(m.G_C_WIND).union(m.G_C_SOLAR).union(m.G_C_STORAGE)
+        m.G_C = m.G_C_THERM.union(m.G_C_WIND).union(m.G_C_SOLAR)
 
         # All generators + storage units
         m.G = m.G_E.union(m.G_C)
@@ -458,7 +467,7 @@ class UnitCommitmentModel:
     def define_parameters(self, m):
         """Define model parameters"""
 
-        # Model year
+        # Model year - must update each time model is run
         m.YEAR = Param(initialize=2016, mutable=True)
 
         def emissions_intensity_rule(m, g):
@@ -479,7 +488,7 @@ class UnitCommitmentModel:
             return emissions
 
         # Emissions intensities for all generators
-        m.E = Param(m.G, rule=emissions_intensity_rule)
+        m.E = Param(m.G.union(m.G_C_STORAGE), rule=emissions_intensity_rule)
 
         def startup_cost_rule(m, g):
             """
@@ -678,7 +687,7 @@ class UnitCommitmentModel:
 
             if (g in m.G_E_THERM) or (g in m.G_C_THERM):
                 #  Initialise marginal cost for existing and candidate thermal plant = 0
-                marginal_cost = float(0)
+                marginal_cost = float(1)
 
             elif (g in m.G_E_WIND) or (g in m.G_E_SOLAR) or (g in m.G_E_HYDRO):
                 # Marginal cost = VOM cost for wind and solar generators
@@ -689,7 +698,7 @@ class UnitCommitmentModel:
                 marginal_cost = self.candidate_units.loc[g, ('PARAMETERS', 'VOM')].astype(float)
 
             elif g in m.G_C_STORAGE:
-                # Assume marginal cost = VOM cost of typically hydro generator (7 $/MWh)
+                # Assume marginal cost = VOM cost of typical hydro generator (7 $/MWh)
                 marginal_cost = float(7)
 
             else:
@@ -700,7 +709,7 @@ class UnitCommitmentModel:
             return marginal_cost
 
         # Marginal costs for all generators (must be updated each time model is run)
-        m.C_MC = Param(m.G, rule=marginal_cost_rule, mutable=True)
+        m.C_MC = Param(m.G.union(m.G_C_STORAGE), rule=marginal_cost_rule, mutable=True)
 
         def battery_efficiency_rule(m, g):
             """Battery efficiency"""
@@ -724,8 +733,8 @@ class UnitCommitmentModel:
         # Capacity factor wind (must be updated each time model is run)
         m.Q_WIND = Param(m.B, m.T, initialize=0, mutable=True)
 
-        # Capacity factor solar (must be updated each time model is run)
-        m.Q_SOLAR = Param(m.Z, m.T, initialize=0, mutable=True)
+        # Capacity factor solar, for given technology j (must be updated each time model is run)
+        m.Q_SOLAR = Param(m.Z, m.G_C_SOLAR_TECHNOLOGIES, m.T, initialize=0, mutable=True)
 
         # Zone demand (must be updated each time model is run)
         m.D = Param(m.Z, m.T, initialize=0, mutable=True)
@@ -737,14 +746,20 @@ class UnitCommitmentModel:
         m.P_STORAGE_MAX_IN = Param(m.G_C_STORAGE, initialize=0)
 
         # Duration of operating scenario (must be updated each time model is run)
-        m.SCENARIO_DURATION = Param(initialize=0)
+        m.SCENARIO_DURATION = Param(initialize=0, mutable=True)
 
         # Value of lost-load [$/MWh]
         m.C_L = Param(initialize=float(1e4), mutable=True)
 
         # Initial state for thermal generators
-        m.u0 = Param(m.G_E_THERM.union(m.G_C_THERM), initialize=1, mutable=True)
-        # TODO: If unit retires it should be set to 0. Could also consider baseload as being on.
+        m.u0 = Param(m.G_E_THERM.union(m.G_C_THERM), within=Binary, mutable=True, initialize=1)
+
+        # TODO: If unit retires it should be set to 0. Handle when updating parameters. Consider baseload state also.
+
+        # TODO: how to handle storage unit power and energy?
+
+        # Power output in interval prior to model start (handle when updating parameters)
+        m.p0 = Param(m.G, mutable=True, within=NonNegativeReals, initialize=0)
 
         def battery_efficiency_rule(m, g):
             """Charging and discharging efficiency for a given storage unit"""
@@ -773,8 +788,8 @@ class UnitCommitmentModel:
         # Lower bound for powerflow over link
         m.POWERFLOW_MAX = Param(m.L_I, rule=powerflow_max_rule)
 
-        # Unit retirement indicator (indicates if unit is available for a given year)
-        m.RETIREMENT_INDICATOR = Param(m.G, m.I, initialize=1, mutable=True)
+        # Unit availability indicator (indicates if unit is available / not retired). Must be set each time model run.
+        m.AVAILABILITY_INDICATOR = Param(m.G, initialize=1, within=Binary, mutable=True)
 
         return m
 
@@ -782,46 +797,49 @@ class UnitCommitmentModel:
     def define_variables(m):
         """Define model variables"""
 
-        # Emissions intensity baseline [tCO2/MWh] (must be fixed each time model is run)
-        m.baseline = Var()
-
-        # Permit price [$/tCO2] (must be fixed each time model is run)
-        m.permit_price = Var()
-
         # Power output above minimum dispatchable level of output [MW]
-        m.p = Var(m.G, m.T, within=NonNegativeReals)
+        m.p = Var(m.G, m.T, within=NonNegativeReals, initialize=0)
 
         # Startup state variable
-        m.v = Var(m.G_E_THERM.union(m.G_C_THERM), m.T, within=Binary)
+        m.v = Var(m.G_E_THERM.union(m.G_C_THERM), m.T, within=Binary, initialize=0)
 
         # Shutdown state variable
-        m.w = Var(m.G_E_THERM.union(m.G_C_THERM), m.T, within=Binary)
+        m.w = Var(m.G_E_THERM.union(m.G_C_THERM), m.T, within=Binary, initialize=0)
 
         # On-state variable
-        m.u = Var(m.G_E_THERM.union(m.G_C_THERM), m.T, within=Binary)
+        m.u = Var(m.G_E_THERM.union(m.G_C_THERM), m.T, within=Binary, initialize=1)
 
         # Upward reserve allocation [MW]
         m.r_up = Var(m.G_E_THERM.union(m.G_C_THERM).union(m.G_C_STORAGE), m.T, within=NonNegativeReals, initialize=0)
 
         # Storage unit charging (power in) [MW]
-        m.p_in = Var(m.G_C_STORAGE, m.T, within=NonNegativeReals)
+        m.p_in = Var(m.G_C_STORAGE, m.T, within=NonNegativeReals, initialize=0)
 
         # Storage unit discharging (power out) [MW]
-        m.p_out = Var(m.G_C_STORAGE, m.T, within=NonNegativeReals)
+        m.p_out = Var(m.G_C_STORAGE, m.T, within=NonNegativeReals, initialize=0)
 
         # Energy in storage unit [MWh]
-        m.y = Var(m.G_C_STORAGE, m.T, within=NonNegativeReals)
+        m.y = Var(m.G_C_STORAGE, m.T, within=NonNegativeReals, initialize=0)
 
         # Power flow between NEM zones
-        m.p_L = Var(m.L, m.T)
+        m.p_L = Var(m.L, m.T, initialize=0)
 
-        # Lost load
-        m.p_LL = Var(m.Z, m.T, within=NonNegativeReals)
+        # Lost load - up
+        m.p_LL_up = Var(m.Z, m.T, within=NonNegativeReals, initialize=0)
+
+        # Lost load - down
+        m.p_LL_down = Var(m.Z, m.T, within=NonNegativeReals, initialize=0)
 
         # Variables to be determined in master program (will be fixed in sub-problems)
         # ----------------------------------------------------------------------------
         # Capacity of candidate units (defined for all years in model horizon)
-        m.x_C = Var(m.G_C, m.I, within=NonNegativeReals)
+        m.x_C = Var(m.G_C.union(m.G_C_STORAGE), m.I, within=NonNegativeReals, initialize=0)
+
+        # Emissions intensity baseline [tCO2/MWh] (must be fixed each time model is run)
+        m.baseline = Var(initialize=0)
+
+        # Permit price [$/tCO2] (must be fixed each time model is run)
+        m.permit_price = Var(initialize=0)
 
         return m
 
@@ -842,7 +860,7 @@ class UnitCommitmentModel:
                 return m.EXISTING_GEN_REG_CAP[g]
 
             # Max output for candidate generators equal to installed capacities (variable in master problem)
-            elif g in m.G_C:
+            elif g in m.G_C.union(m.G_C_STORAGE):
                 return sum(m.x_C[g, i] for i in range(2016, m.YEAR.value))
 
             else:
@@ -869,9 +887,9 @@ class UnitCommitmentModel:
 
             if g in m.G_THERM_QUICK:
                 if t < m.T.last():
-                    return (m.P_MIN[g] * (m.u[g, t] + m.v[g, t + 1])) + m.p[g, t]
+                    return ((m.P_MIN[g] * (m.u[g, t] + m.v[g, t + 1])) + m.p[g, t]) * m.AVAILABILITY_INDICATOR[g]
                 else:
-                    return (m.P_MIN[g] * m.u[g, t]) + m.p[g, t]
+                    return ((m.P_MIN[g] * m.u[g, t]) + m.p[g, t]) * m.AVAILABILITY_INDICATOR[g]
 
             # Define startup and shutdown trajectories for 'slow' generators
             elif g in m.G_THERM_SLOW:
@@ -894,21 +912,21 @@ class UnitCommitmentModel:
                 P_SD = OrderedDict({i + 1: m.P_MIN[g].expr() - (ramp_down_increment * i) for i in range(0, SD_D + 1)})
 
                 if t < m.T.last():
-                    return ((m.P_MIN[g] * (m.u[g, t] + m.v[g, t + 1])) + m.p[g, t]
-                            + sum(P_SU[i] * m.v[g, t - i + SU_D + 2] if t - i + SU_D + 2 in m.T else 0 for i in
-                                  range(1, SU_D + 1))
-                            + sum(P_SD[i] * m.w[g, t - i + 2] if t - i + 2 in m.T else 0 for i in range(2, SD_D + 2))
-                            )
+                    return (((m.P_MIN[g] * (m.u[g, t] + m.v[g, t + 1])) + m.p[g, t]
+                             + sum(P_SU[i] * m.v[g, t - i + SU_D + 2] if t - i + SU_D + 2 in m.T else 0 for i in
+                                   range(1, SU_D + 1))
+                             + sum(P_SD[i] * m.w[g, t - i + 2] if t - i + 2 in m.T else 0 for i in range(2, SD_D + 2))
+                             ) * m.AVAILABILITY_INDICATOR[g])
                 else:
-                    return ((m.P_MIN[g] * m.u[g, t]) + m.p[g, t]
-                            + sum(P_SU[i] * m.v[g, t - i + SU_D + 2] if t - i + SU_D + 2 in m.T else 0 for i in
-                                  range(1, SU_D + 1))
-                            + sum(P_SD[i] * m.w[g, t - i + 2] if t - i + 2 in m.T else 0 for i in range(2, SD_D + 2))
-                            )
+                    return (((m.P_MIN[g] * m.u[g, t]) + m.p[g, t]
+                             + sum(P_SU[i] * m.v[g, t - i + SU_D + 2] if t - i + SU_D + 2 in m.T else 0 for i in
+                                   range(1, SU_D + 1))
+                             + sum(P_SD[i] * m.w[g, t - i + 2] if t - i + 2 in m.T else 0 for i in range(2, SD_D + 2))
+                             ) * m.AVAILABILITY_INDICATOR[g])
 
             # Remaining generators with no startup / shutdown directory defined
             else:
-                return m.P_MIN[g] + m.p[g, t]
+                return (m.P_MIN[g] + m.p[g, t]) * m.AVAILABILITY_INDICATOR[g]
 
         # Total power output [MW]
         m.P_TOTAL = Expression(m.G, m.T, rule=total_power_output_rule)
@@ -921,14 +939,27 @@ class UnitCommitmentModel:
             t=0. Assume that all generators are at their minimum dispatch level.
             """
 
-            # TODO: Must take into account power output for interval preceding t=0
             if t != m.T.first():
-                return (m.P_TOTAL[g, t - 1] + m.P_TOTAL[g, t]) / 2
+
+                # If a storage unit
+                if g in m.G_C_STORAGE:
+                    return ((m.p_in[g, t] + m.p_out[g, t]) + (m.p_in[g, t - 1] + m.p_out[g, t - 1])) / 2
+
+                else:
+                    return (m.P_TOTAL[g, t - 1] + m.P_TOTAL[g, t]) / 2
+
+            # Else, first interval (t-1 will be out of range)
             else:
-                return (m.P_MIN[g] + m.P_TOTAL[g, t]) / 2
+
+                # If a storage unit assume no power output in preceding interval
+                if g in m.G_C_STORAGE:
+                    return (m.p_in[g, t] + m.p_out[g, t]) / 2
+
+                else:
+                    return (m.p0[g] + m.P_TOTAL[g, t]) / 2
 
         # Energy output for a given generator
-        m.e = Expression(m.G, m.T, rule=generator_energy_output_rule)
+        m.e = Expression(m.G.union(m.G_C_STORAGE), m.T, rule=generator_energy_output_rule)
 
         def thermal_operating_costs_rule(m):
             """Cost to operate existing and candidate thermal units"""
@@ -977,10 +1008,18 @@ class UnitCommitmentModel:
         # Candidate storage unit operating costs
         m.C_OP_STORAGE = Expression(rule=storage_operating_costs_rule)
 
+        def lost_load_cost_rule(m):
+            """Value of lost-load"""
+
+            return sum((m.p_LL_up[z, t] + m.p_LL_down[z, t]) * m.C_L for z in m.Z for t in m.T)
+
+        # Total cost of lost-load
+        m.C_OP_LOST_LOAD = Expression(rule=lost_load_cost_rule)
+
         def total_operating_cost_rule(m):
             """Total operating cost"""
 
-            return m.C_OP_THERM + m.C_OP_HYDRO + m.C_OP_SOLAR + m.C_OP_WIND + m.C_OP_STORAGE
+            return m.C_OP_THERM + m.C_OP_HYDRO + m.C_OP_SOLAR + m.C_OP_WIND + m.C_OP_STORAGE + m.C_OP_LOST_LOAD
 
         # Total operating cost
         m.C_OP_TOTAL = Expression(rule=total_operating_cost_rule)
@@ -988,7 +1027,7 @@ class UnitCommitmentModel:
         def storage_unit_energy_capacity_rule(m, g):
             """Energy capacity depends on installed capacity (variable in master problem)"""
 
-            return sum(m.x_C[g, i] for i in range(2016, m.YEAR.value+1))
+            return sum(m.x_C[g, i] for i in range(2016, m.YEAR.value + 1))
 
         # Capacity of storage unit [MWh]
         m.STORAGE_UNIT_ENERGY_CAPACITY = Expression(m.G_C_STORAGE, rule=storage_unit_energy_capacity_rule)
@@ -1018,12 +1057,10 @@ class UnitCommitmentModel:
             # Existing and candidate thermal gens + candidate storage units
             gens = m.G_E_THERM.union(m.G_C_THERM).union(m.G_C_STORAGE)
 
-            #
-
             return sum(m.r_up[g, t] for g in gens if generator_zone_map.loc[g] in region_zone_map.loc[r]) >= m.D_UP[r]
 
         # Upward power reserve rule for each NEM zone
-        m.UPWARD_POWER_RESERVE = Constraint(m.R, m.T, rule=upward_power_reserve_rule)
+        # m.UPWARD_POWER_RESERVE = Constraint(m.R, m.T, rule=upward_power_reserve_rule)
 
         def operating_state_logic_rule(m, g, t):
             """
@@ -1176,14 +1213,20 @@ class UnitCommitmentModel:
                 # If an existing generator
                 zone = self.existing_units.loc[g, ('PARAMETERS', 'NEM_ZONE')]
 
+                # Assume existing arrays are single-axis tracking arrays
+                technology = 'SAT'
+
             elif g in m.G_C_SOLAR:
                 # If a candidate generator
                 zone = self.candidate_units.loc[g, ('PARAMETERS', 'ZONE')]
 
+                # Extract technology type from unit ID
+                technology = g.split('-')[-1]
+
             else:
                 raise Exception(f'Unexpected generator: {g}')
 
-            return m.P_TOTAL[g, t] <= m.Q_SOLAR[zone, t] * m.P_MAX[g]
+            return m.P_TOTAL[g, t] <= m.Q_SOLAR[zone, technology, t] * m.P_MAX[g]
 
         # Max output from existing wind generators
         m.P_SOLAR_MAX = Constraint(m.G_E_SOLAR.union(m.G_C_SOLAR), m.T, rule=solar_output_max_rule)
@@ -1230,7 +1273,7 @@ class UnitCommitmentModel:
             """Constraint that couples energy + power between periods for storage units"""
 
             if t != m.T.first():
-                return m.y[g, t] == m.y[g, t-1] + (m.ETA[g] * m.p_in[g, t]) - ((1 / m.ETA[g]) * m.p_out[g, t])
+                return m.y[g, t] == m.y[g, t - 1] + (m.ETA[g] * m.p_in[g, t]) - ((1 / m.ETA[g]) * m.p_out[g, t])
             else:
                 return Constraint.Skip
 
@@ -1266,13 +1309,16 @@ class UnitCommitmentModel:
             generators = existing_units + candidate_units
 
             # Storage units within a given zone
-            storage_units = (self.battery_properties.loc[self.battery_properties['NEM_ZONE'] == 'SEQ', 'NEM_ZONE']
+            storage_units = (self.battery_properties.loc[self.battery_properties['NEM_ZONE'] == z, 'NEM_ZONE']
                              .index.tolist())
+
+            # return (sum(m.P_TOTAL[g, t] for g in m.G) - m.D[z, t]
+            #         + m.p_LL_up[z, t] - m.p_LL_down[z, t] == 0)
 
             return (sum(m.P_TOTAL[g, t] for g in generators) - m.D[z, t]
                     - sum(m.INCIDENCE_MATRIX[l, z] * m.p_L[l, t] for l in m.L)
                     + sum(m.p_out[g, t] - m.p_in[g, t] for g in storage_units)
-                    + m.p_LL[z, t] == 0)
+                    + m.p_LL_up[z, t] == 0)
 
         # Power balance constraint for each zone and time period
         m.POWER_BALANCE = Constraint(m.Z, m.T, rule=power_balance_rule)
@@ -1293,16 +1339,13 @@ class UnitCommitmentModel:
         # Constrain max power flow over given network link
         m.POWERFLOW_MAX_CONS = Constraint(m.L_I, m.T, rule=powerflow_max_constraint_rule)
 
-        def retirement_rule(m, g, t):
-            """Force power output to zero if unit is retired"""
+        return m
 
-            if m.RETIREMENT_INDICATOR[g, m.YEAR.value] == 0:
-                return m.P_TOTAL[g, t] == 0
-            else:
-                return Constraint.Skip
+    @staticmethod
+    def define_objective(m):
+        """Objective function - cost minimisation for each scenario"""
 
-        # Enforce power output equals zero if unit retires
-        m.RETIREMENT = Constraint(m.G, m.T, rule=retirement_rule)
+        m.OBJECTIVE = Objective(expr=m.C_OP_TOTAL, sense=minimize)
 
         return m
 
@@ -1335,14 +1378,214 @@ class UnitCommitmentModel:
         # Construct expressions
         m = self.define_expressions(m)
 
-        # Construct constraints
+        # # Construct constraints
         m = self.define_constraints(m)
+
+        # Construct objective function
+        m = self.define_objective(m)
 
         return m
 
-    def update_parameters(self, m, year):
+    def update_parameters(self, m, year, scenario, installed_storage_capacity):
         """Update model parameters for a given year"""
-        pass
+
+        def _update_model_year(m, year):
+            """Update year for which model is to be run"""
+
+            # Update model year
+            m.YEAR = year
+
+        def _update_short_run_marginal_costs(m, year):
+            """Update short-run marginal costs for generators - based on fuel-cost profiles"""
+
+            for g in m.G_E_THERM:
+
+                # Last year in the dataset for which fuel cost information exists
+                max_year = self.existing_units.loc[g, 'FUEL_COST'].index.max()
+
+                # If year in model horizon exceeds max year for which data are available use values for last
+                # available year
+                if year > max_year:
+                    # Use final year in dataset to max year
+                    year = max_year
+
+                m.C_MC[g] = float(self.existing_units.loc[g, ('FUEL_COST', year)])
+
+            for g in m.G_C_THERM:
+                # Last year in the dataset for which fuel cost information exists
+                max_year = self.candidate_units.loc[g, 'FUEL_COST'].index.max()
+
+                # If year in model horizon exceeds max year for which data are available use values for last
+                # available year
+                if year > max_year:
+                    # Use final year in dataset to max year
+                    year = max_year
+
+                m.C_MC[g] = float(self.candidate_units.loc[g, ('FUEL_COST', year)])
+
+        def _update_u0(m, year):
+            """Update initial on-state for given generators"""
+
+            for g in m.G_E_THERM.union(m.G_C_THERM):
+                m.u0[g] = float(1)
+
+        def _update_generator_availability(m, year):
+            """Update whether unit is retired for a given year"""
+
+            for g in m.G:
+                m.AVAILABILITY_INDICATOR[g] = float(1)
+
+        def _update_wind_capacity_factors(m, year, scenario):
+            """Update capacity factors for wind generators"""
+
+            # For each wind bubble
+            for b in m.B:
+
+                # For each timestamp of a given operating scenario
+                for t in m.T:
+
+                    # Capacity factor
+                    cf = float(self.input_traces.loc[(year, scenario), ('WIND', b, t)])
+
+                    # Set = 0 if smaller than threshold (don't want numerical instability due to small values)
+                    if cf < 0.01:
+                        cf = float(0)
+
+                    # Update wind capacity factor
+                    m.Q_WIND[b, t] = cf
+
+        def _update_solar_capacity_factors(m, year, scenario):
+            """Update capacity factors for solar generators"""
+
+            # For each zone
+            for z in m.Z:
+
+                # For each solar technology
+                for tech in m.G_C_SOLAR_TECHNOLOGIES:
+
+                    # For each timestamp
+                    for t in m.T:
+
+                        # FFP in NTNDP modelling assumptions dataset is FFP2 in trace dataset. Use 'replace' to ensure
+                        # consistency
+                        tech_name = tech.replace('FFP', 'FFP2')
+
+                        # Capacity factor
+                        cf = float(self.input_traces.loc[(year, scenario), ('SOLAR', f"{z}|{tech_name}", t)])
+
+                        # Set = 0 if less than some threshold (don't want very small numbers in model)
+                        if cf < 0.01:
+                            cf = float(0)
+
+                        # Update solar capacity factor for given zone and technology
+                        m.Q_SOLAR[z, tech, t] = cf
+
+        def _update_zone_demand(m, year, scenario):
+            """Update zonal demand"""
+
+            # For each zone
+            for z in m.Z:
+
+                # For each hour in the given operating scenario
+                for t in m.T:
+
+                    # Update zone demand
+                    m.D[z, t] = float(self.input_traces.loc[(year, scenario), ('DEMAND', z, t)])
+
+        def _update_availability_indicator(m, year):
+            """Update generator availability status (set = 0 if unit retires)"""
+
+            for g in m.G:
+                m.AVAILABILITY_INDICATOR[g] = float(1)
+
+        def _update_storage_max_power_output(m, installed_storage_capacity):
+            """Update max power output from storage units"""
+
+            # For each storage unit
+            for g in installed_storage_capacity.keys():
+                # Update max output [MW]
+                m.P_STORAGE_MAX_OUT[g] = installed_storage_capacity[g]
+
+        def _update_storage_max_power_input(m, installed_storage_capacity):
+            """Update max charging power for storage unit"""
+
+            # For each storage unit
+            for g in installed_storage_capacity.keys():
+                # Update max output [MW]
+                m.P_STORAGE_MAX_IN[g] = installed_storage_capacity[g]
+
+        def _update_scenario_duration(m, year, scenario):
+            """Update duration of operating scenario"""
+
+            # TODO: Must figure out how scenario duration is handled in master and sub-problems
+            m.SCENARIO_DURATION = float(1)
+
+        def _update_all_parameters(m, year, scenario, installed_storage_capacity):
+            """Run each function used to update model parameters"""
+
+            _update_model_year(m, year)
+            _update_short_run_marginal_costs(m, year)
+            _update_u0(m, year)
+            _update_generator_availability(m, year)
+            _update_wind_capacity_factors(m, year, scenario)
+            _update_solar_capacity_factors(m, year, scenario)
+            _update_zone_demand(m, year, scenario)
+            _update_availability_indicator(m, year)
+            _update_storage_max_power_output(m, installed_storage_capacity)
+            _update_storage_max_power_input(m, installed_storage_capacity)
+            _update_scenario_duration(m, year, scenario)
+
+        # Update model parameters
+        _update_all_parameters(m, year, scenario, installed_storage_capacity)
+
+        return m
+
+    @staticmethod
+    def fix_variables(m, candidate_unit_capacity, fixed_baseline, fixed_permit_price):
+        """Fix variables in the sub-problem"""
+
+        # For each candidate generator
+        for g in m.G_C.union(m.G_C_STORAGE):
+
+            # Each year in the model horizon
+            for i in m.I:
+                # Fix capacity of candidate generator
+                # m.x_C[g, i].fix(candidate_unit_capacity[g][i])
+                m.x_C[g, i].fix(0)
+
+        # Fix emissions intensity baseline
+        m.baseline.fix(fixed_baseline)
+
+        # Fix permit price
+        m.permit_price.fix(fixed_permit_price)
+
+        return m
+
+    def solve_model(self, m):
+        """Solve model for a given operating scenario"""
+
+        # Solve model
+        self.opt.solve(m, tee=True, options=self.solver_options, keepfiles=self.keepfiles)
+
+        # Log infeasible constraints if they exist
+        log_infeasible_constraints(m)
+
+        return m
+
+    def run_operating_scenario(self, m, year, scenario, installed_storage_capacity, candidate_unit_capacity,
+                               fixed_baseline, fixed_permit_price):
+        """Run model for a given operating scenario"""
+
+        # Update parameters
+        m = self.update_parameters(m, year, scenario, installed_storage_capacity)
+
+        # Fix variables
+        m = self.fix_variables(m, candidate_unit_capacity, fixed_baseline, fixed_permit_price)
+
+        # Solve model
+        m = self.solve_model(m)
+
+        return m
 
 
 if __name__ == '__main__':
@@ -1360,3 +1603,8 @@ if __name__ == '__main__':
 
     # Construct model
     model = uc.construct_model()
+
+    m1 = uc.run_operating_scenario(model, 2018, 1, {}, {}, 0.8, 50)
+
+
+
