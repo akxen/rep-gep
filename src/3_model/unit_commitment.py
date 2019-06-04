@@ -7,6 +7,8 @@ from pyomo.environ import *
 from pyomo.core.expr import current as EXPR
 from pyomo.util.infeasible import log_infeasible_constraints
 
+import matplotlib.pyplot as plt
+
 
 class UnitCommitmentModel:
     def __init__(self, raw_data_dir, data_dir, input_traces_dir):
@@ -62,7 +64,7 @@ class UnitCommitmentModel:
         solver = 'gurobi'
         solver_io = 'lp'
         self.keepfiles = False
-        self.solver_options = {}
+        self.solver_options = {}  # 'MIPGap': 0.0005
         self.opt = SolverFactory(solver, solver_io=solver_io)
 
     @staticmethod
@@ -457,7 +459,7 @@ class UnitCommitmentModel:
         m.T = RangeSet(0, 23, ordered=True)
 
         # All years in model horizon
-        m.I = RangeSet(2016, 2049)
+        m.I = RangeSet(2016, 2050)
 
         # Build limit technology types
         m.BUILD_LIMIT_TECHNOLOGIES = Set(initialize=self.candidate_unit_build_limits.index)
@@ -469,6 +471,68 @@ class UnitCommitmentModel:
 
         # Model year - must update each time model is run
         m.YEAR = Param(initialize=2016, mutable=True)
+
+        # Year indicator - set = 1 for all years <= m.YEAR for years in model horizon, otherwise = 0
+        m.YEAR_INDICATOR = Param(m.I, initialize=0, within=Binary, mutable=True)
+
+        def startup_cost_rule(m, g):
+            """
+            Startup costs for existing and candidate thermal units
+
+            Note: costs are normalised by plant capacity e.g. $/MW
+            """
+
+            if g in m.G_E_THERM:
+                # Startup cost for existing thermal units
+                startup_cost = (self.existing_units.loc[g, ('PARAMETERS', 'SU_COST_WARM')]
+                                / self.existing_units.loc[g, ('PARAMETERS', 'REG_CAP')])
+
+            elif g in m.G_C_THERM:
+                # Startup cost for candidate thermal units
+                startup_cost = self.candidate_units.loc[g, ('PARAMETERS', 'SU_COST_WARM_MW')]
+
+            else:
+                # Assume startup cost = 0 for all solar, wind, hydro generators
+                startup_cost = 0
+
+            # Shutdown cost cannot be negative
+            assert startup_cost >= 0, 'Negative startup cost'
+
+            return float(startup_cost)
+
+        # Generator startup costs - per MW
+        m.C_SU_MW = Param(m.G, rule=startup_cost_rule)
+
+        def shutdown_cost_rule(m, g):
+            """
+            Shutdown costs for existing and candidate thermal units
+
+            Note: costs are normalised by plant capacity e.g. $/MW
+
+            No data for shutdown costs, so assume it is half the value of
+            startup cost for given generator.
+            """
+
+            if g in m.G_E_THERM:
+                # Shutdown cost for existing thermal units
+                shutdown_cost = (self.existing_units.loc[g, ('PARAMETERS', 'SU_COST_WARM')]
+                                 / self.existing_units.loc[g, ('PARAMETERS', 'REG_CAP')])
+
+            elif g in m.G_C_THERM:
+                # Shutdown cost for candidate thermal units
+                shutdown_cost = self.candidate_units.loc[g, ('PARAMETERS', 'SU_COST_WARM_MW')]
+
+            else:
+                # Assume shutdown cost = 0 for all solar, wind, hydro generators
+                shutdown_cost = 0
+
+            # Shutdown cost cannot be negative
+            assert shutdown_cost >= 0, 'Negative shutdown cost'
+
+            return float(shutdown_cost)
+
+        # Generator shutdown costs - per MW
+        m.C_SD_MW = Param(m.G, rule=shutdown_cost_rule)
 
         def emissions_intensity_rule(m, g):
             """Emissions intensity (tCO2/MWh)"""
@@ -489,74 +553,6 @@ class UnitCommitmentModel:
 
         # Emissions intensities for all generators
         m.E = Param(m.G.union(m.G_C_STORAGE), rule=emissions_intensity_rule)
-
-        def startup_cost_rule(m, g):
-            """
-            Startup costs for existing and candidate thermal units
-
-            Note: costs are normalised by plant capacity e.g. $/MW
-            """
-
-            if g in m.G_E_THERM:
-                # Startup cost for existing thermal units
-                startup_cost = (self.existing_units.loc[g, ('PARAMETERS', 'SU_COST_WARM')] /
-                                self.existing_units.loc[g, ('PARAMETERS', 'REG_CAP')])
-
-                # Convert to float
-                startup_cost = float(startup_cost)
-
-            elif g in m.G_C_THERM:
-                # Startup cost for candidate thermal units
-                startup_cost = self.candidate_units.loc[g, ('PARAMETERS', 'SU_COST_WARM_MW')].astype(float)
-
-            else:
-                # Assume startup cost = 0 for all solar, wind, hydro generators
-                startup_cost = float(0)
-
-            # Shutdown cost cannot be negative
-            assert startup_cost >= 0, 'Negative startup cost'
-
-            return startup_cost
-
-        # Generator startup costs
-        m.C_SU = Param(m.G, rule=startup_cost_rule)
-
-        def shutdown_cost_rule(m, g):
-            """
-            Shutdown costs for existing and candidate thermal units
-
-            Note: costs are normalised by plant capacity e.g. $/MW
-
-            No data for shutdown costs, so assume it is half the value of
-            startup cost for given generator.
-            """
-
-            if g in m.G_E_THERM:
-                # Shutdown cost for existing thermal units
-                shutdown_cost = (self.existing_units.loc[g, ('PARAMETERS', 'SU_COST_WARM')] /
-                                 self.existing_units.loc[g, ('PARAMETERS', 'REG_CAP')]) / 2
-
-                # Convert to float
-                shutdown_cost = float(shutdown_cost)
-
-            elif g in m.G_C_THERM:
-                # Shutdown cost for candidate thermal units
-                shutdown_cost = self.candidate_units.loc[g, ('PARAMETERS', 'SU_COST_WARM_MW')] / 2
-
-                # Convert to float
-                shutdown_cost = float(shutdown_cost)
-
-            else:
-                # Assume shutdown cost = 0 for all solar, wind, hydro generators
-                shutdown_cost = float(0)
-
-            # Shutdown cost cannot be negative
-            assert shutdown_cost >= 0, 'Negative shutdown cost'
-
-            return shutdown_cost
-
-        # Generator shutdown costs
-        m.C_SD = Param(m.G, rule=shutdown_cost_rule)
 
         def minimum_region_up_reserve_rule(m, r):
             """Minimum upward reserve rule"""
@@ -687,26 +683,26 @@ class UnitCommitmentModel:
 
             if (g in m.G_E_THERM) or (g in m.G_C_THERM):
                 #  Initialise marginal cost for existing and candidate thermal plant = 0
-                marginal_cost = float(1)
+                marginal_cost = 1
 
             elif (g in m.G_E_WIND) or (g in m.G_E_SOLAR) or (g in m.G_E_HYDRO):
                 # Marginal cost = VOM cost for wind and solar generators
-                marginal_cost = self.existing_units.loc[g, ('PARAMETERS', 'VOM')].astype(float)
+                marginal_cost = self.existing_units.loc[g, ('PARAMETERS', 'VOM')]
 
             elif (g in m.G_C_WIND) or (g in m.G_C_SOLAR):
                 # Marginal cost = VOM cost for wind and solar generators
-                marginal_cost = self.candidate_units.loc[g, ('PARAMETERS', 'VOM')].astype(float)
+                marginal_cost = self.candidate_units.loc[g, ('PARAMETERS', 'VOM')]
 
             elif g in m.G_C_STORAGE:
                 # Assume marginal cost = VOM cost of typical hydro generator (7 $/MWh)
-                marginal_cost = float(7)
+                marginal_cost = 7
 
             else:
                 raise Exception(f'Unexpected generator: {g}')
 
             assert marginal_cost >= 0, 'Cannot have negative marginal cost'
 
-            return marginal_cost
+            return float(marginal_cost)
 
         # Marginal costs for all generators (must be updated each time model is run)
         m.C_MC = Param(m.G.union(m.G_C_STORAGE), rule=marginal_cost_rule, mutable=True)
@@ -714,7 +710,7 @@ class UnitCommitmentModel:
         def battery_efficiency_rule(m, g):
             """Battery efficiency"""
 
-            return self.battery_properties.loc[g, 'CHARGE_EFFICIENCY'].astype(float)
+            return float(self.battery_properties.loc[g, 'CHARGE_EFFICIENCY'])
 
         # Battery efficiency
         m.BATTERY_EFFICIENCY = Param(m.G_C_STORAGE, rule=battery_efficiency_rule)
@@ -739,12 +735,6 @@ class UnitCommitmentModel:
         # Zone demand (must be updated each time model is run)
         m.D = Param(m.Z, m.T, initialize=0, mutable=True)
 
-        # Max MW out of storage device - discharging (must be updated each time model is run)
-        m.P_STORAGE_MAX_OUT = Param(m.G_C_STORAGE, initialize=0)
-
-        # Max MW into storage device - charging (must be updated each time model is run)
-        m.P_STORAGE_MAX_IN = Param(m.G_C_STORAGE, initialize=0)
-
         # Duration of operating scenario (must be updated each time model is run)
         m.SCENARIO_DURATION = Param(initialize=0, mutable=True)
 
@@ -752,14 +742,24 @@ class UnitCommitmentModel:
         m.C_L = Param(initialize=float(1e4), mutable=True)
 
         # Initial state for thermal generators
-        m.u0 = Param(m.G_E_THERM.union(m.G_C_THERM), within=Binary, mutable=True, initialize=1)
+        def initial_on_state_rule(m, g):
+            """Defines which units should be on in period preceding model start"""
+
+            if g in m.G_THERM_SLOW:
+                return float(1)
+            else:
+                return float(0)
+
+        # Initial on-state rule - assumes slow-start (effectively baseload) units are on in period prior to model start
+        m.u0 = Param(m.G_E_THERM.union(m.G_C_THERM), within=Binary, mutable=True, rule=initial_on_state_rule)
 
         # TODO: If unit retires it should be set to 0. Handle when updating parameters. Consider baseload state also.
 
-        # TODO: how to handle storage unit power and energy?
-
         # Power output in interval prior to model start (handle when updating parameters)
         m.p0 = Param(m.G, mutable=True, within=NonNegativeReals, initialize=0)
+
+        # Energy in battering in interval prior to model start (assume battery initially completely discharged)
+        m.y0 = Param(m.G_C_STORAGE, initialize=0)
 
         def battery_efficiency_rule(m, g):
             """Charging and discharging efficiency for a given storage unit"""
@@ -861,7 +861,7 @@ class UnitCommitmentModel:
 
             # Max output for candidate generators equal to installed capacities (variable in master problem)
             elif g in m.G_C.union(m.G_C_STORAGE):
-                return sum(m.x_C[g, i] for i in range(2016, m.YEAR.value))
+                return sum(m.x_C[g, i] * m.YEAR_INDICATOR[i] for i in m.I)
 
             else:
                 raise Exception(f'Unexpected generator: {g}')
@@ -940,33 +940,61 @@ class UnitCommitmentModel:
             """
 
             if t != m.T.first():
-
-                # If a storage unit
-                if g in m.G_C_STORAGE:
-                    return ((m.p_in[g, t] + m.p_out[g, t]) + (m.p_in[g, t - 1] + m.p_out[g, t - 1])) / 2
-
-                else:
-                    return (m.P_TOTAL[g, t - 1] + m.P_TOTAL[g, t]) / 2
+                return (m.P_TOTAL[g, t - 1] + m.P_TOTAL[g, t]) / 2
 
             # Else, first interval (t-1 will be out of range)
             else:
-
-                # If a storage unit assume no power output in preceding interval
-                if g in m.G_C_STORAGE:
-                    return (m.p_in[g, t] + m.p_out[g, t]) / 2
-
-                else:
-                    return (m.p0[g] + m.P_TOTAL[g, t]) / 2
+                return (m.p0[g] + m.P_TOTAL[g, t]) / 2
 
         # Energy output for a given generator
-        m.e = Expression(m.G.union(m.G_C_STORAGE), m.T, rule=generator_energy_output_rule)
+        m.e = Expression(m.G, m.T, rule=generator_energy_output_rule)
+
+        def storage_unit_energy_output_rule(m, g, t):
+            """Energy output from storage units"""
+
+            if t != m.T.first():
+                return (m.p_out[g, t] + m.p_out[g, t - 1]) / 2
+
+            else:
+                return m.p_out[g, t] / 2
+
+        # Energy output for a given storage unit
+        m.e_out = Expression(m.G_C_STORAGE, m.T, rule=storage_unit_energy_output_rule)
+
+        def storage_unit_energy_input_rule(m, g, t):
+            """Energy input (charging) from storage units"""
+
+            if t != m.T.first():
+                return (m.p_in[g, t] + m.p_in[g, t - 1]) / 2
+
+            else:
+                return m.p_in[g, t] / 2
+
+        # Energy input for a given storage unit
+        m.e_in = Expression(m.G_C_STORAGE, m.T, rule=storage_unit_energy_input_rule)
+
+        def thermal_startup_cost_rule(m, g):
+            """Startup cost for existing and candidate thermal generators"""
+
+            return m.C_SU_MW[g] * m.P_MAX[g]
+
+        # Startup cost - absolute cost [$]
+        m.C_SU = Expression(m.G_E_THERM.union(m.G_C_THERM), rule=thermal_startup_cost_rule)
+
+        def thermal_shutdown_cost_rule(m, g):
+            """Startup cost for existing and candidate thermal generators"""
+            # TODO: For now set shutdown cost = 0
+            return m.C_SD_MW[g] * 0
+
+        # Startup cost - absolute cost [$]
+        m.C_SD = Expression(m.G_E_THERM.union(m.G_C_THERM), rule=thermal_shutdown_cost_rule)
 
         def thermal_operating_costs_rule(m):
             """Cost to operate existing and candidate thermal units"""
 
-            return (m.SCENARIO_DURATION * sum((m.C_MC[g] + (m.E[g] - m.baseline) * m.permit_price) * m.e[g, t]
-                                              + (m.C_SU[g] * m.v[g, t]) + (m.C_SD[g] * m.w[g, t])
-                                              for g in m.G_E_THERM.union(m.G_C_THERM) for t in m.T))
+            return (sum((m.C_MC[g] + (m.E[g] - m.baseline) * m.permit_price) * m.e[g, t]
+                        + (m.C_SU[g] * m.v[g, t]) + (m.C_SD[g] * m.w[g, t])
+                        for g in m.G_E_THERM.union(m.G_C_THERM) for t in m.T))
 
         # Existing and candidate thermal unit operating costs
         m.C_OP_THERM = Expression(rule=thermal_operating_costs_rule)
@@ -974,7 +1002,7 @@ class UnitCommitmentModel:
         def hydro_operating_costs_rule(m):
             """Cost to operate existing hydro generators"""
 
-            return m.SCENARIO_DURATION * sum(m.C_MC[g] * m.e[g, t] for g in m.G_E_HYDRO for t in m.T)
+            return sum(m.C_MC[g] * m.e[g, t] for g in m.G_E_HYDRO for t in m.T)
 
         # Existing hydro unit operating costs (no candidate hydro generators)
         m.C_OP_HYDRO = Expression(rule=hydro_operating_costs_rule)
@@ -982,9 +1010,8 @@ class UnitCommitmentModel:
         def solar_operating_costs_rule(m):
             """Cost to operate existing and candidate solar units"""
 
-            return ((sum(m.C_MC[g] * m.e[g, t] for g in m.G_E_SOLAR for t in m.T)
-                     + sum((m.C_MC[g] - m.baseline * m.permit_price) * m.e[g, t] for g in m.G_C_SOLAR for t in m.T)
-                     ) * m.SCENARIO_DURATION)
+            return (sum(m.C_MC[g] * m.e[g, t] for g in m.G_E_SOLAR for t in m.T)
+                    + sum((m.C_MC[g] - m.baseline * m.permit_price) * m.e[g, t] for g in m.G_C_SOLAR for t in m.T))
 
         # Existing and candidate solar unit operating costs (only candidate solar eligible for credits)
         m.C_OP_SOLAR = Expression(rule=solar_operating_costs_rule)
@@ -992,21 +1019,37 @@ class UnitCommitmentModel:
         def wind_operating_costs_rule(m):
             """Cost to operate existing and candidate wind generators"""
 
-            return ((sum(m.C_MC[g] * m.e[g, t] for g in m.G_E_WIND for t in m.T)
-                     + sum((m.C_MC[g] - m.baseline * m.permit_price) * m.e[g, t] for g in m.G_C_WIND for t in m.T)
-                     ) * m.SCENARIO_DURATION)
+            return (sum(m.C_MC[g] * m.e[g, t] for g in m.G_E_WIND for t in m.T)
+                    + sum((m.C_MC[g] - m.baseline * m.permit_price) * m.e[g, t] for g in m.G_C_WIND for t in m.T))
 
         # Existing and candidate solar unit operating costs (only candidate solar eligible for credits)
         m.C_OP_WIND = Expression(rule=wind_operating_costs_rule)
 
-        def storage_operating_costs_rule(m):
-            """Cost to operate candidate storage units"""
+        def storage_unit_charging_cost_rule(m):
+            """Cost to charge storage unit"""
 
-            return (sum((m.C_MC[g] - m.baseline * m.permit_price) * m.e[g, t] for g in m.G_C_STORAGE for t in m.T)
-                    * m.SCENARIO_DURATION)
+            return sum(m.C_MC[g] * m.e_in[g, t] for g in m.G_C_STORAGE for t in m.T)
+
+        # Charging cost rule - no subsidy received when purchasing energy
+        m.C_OP_STORAGE_CHARGING = Expression(rule=storage_unit_charging_cost_rule)
+
+        def storage_unit_discharging_cost_rule(m):
+            """
+            Cost to charge storage unit
+
+            Note: If storage units are included in the scheme this could create an undesirable outcome. Units
+            would be subsidised for each MWh they generate. Therefore they could be incentivised to continually charge
+            and then immediately discharge in order to receive the subsidy. For now assume the storage units are not
+            eligible to receive a subsidy for each MWh under the policy.
+            """
+            # - (m.baseline * m.permit_price))
+            return sum(m.C_MC[g] * m.e_out[g, t] for g in m.G_C_STORAGE for t in m.T)
+
+        # Discharging cost rule - assumes storage units are eligible under REP scheme
+        m.C_OP_STORAGE_DISCHARGING = Expression(rule=storage_unit_discharging_cost_rule)
 
         # Candidate storage unit operating costs
-        m.C_OP_STORAGE = Expression(rule=storage_operating_costs_rule)
+        m.C_OP_STORAGE = Expression(expr=m.C_OP_STORAGE_CHARGING + m.C_OP_STORAGE_DISCHARGING)
 
         def lost_load_cost_rule(m):
             """Value of lost-load"""
@@ -1027,7 +1070,7 @@ class UnitCommitmentModel:
         def storage_unit_energy_capacity_rule(m, g):
             """Energy capacity depends on installed capacity (variable in master problem)"""
 
-            return sum(m.x_C[g, i] for i in range(2016, m.YEAR.value + 1))
+            return sum(m.x_C[g, i] * m.YEAR_INDICATOR[i] for i in m.I)
 
         # Capacity of storage unit [MWh]
         m.STORAGE_UNIT_ENERGY_CAPACITY = Expression(m.G_C_STORAGE, rule=storage_unit_energy_capacity_rule)
@@ -1039,6 +1082,28 @@ class UnitCommitmentModel:
 
         # Max state of charge for storage unit at end of operating scenario (assume = unit capacity)
         m.STORAGE_INTERVAL_END_MAX_ENERGY = Expression(m.G_C_STORAGE, rule=storage_unit_max_energy_interval_end_rule)
+
+        def storage_unit_max_power_out_rule(m, g):
+            """
+            Maximum discharging power of storage unit - set equal to energy capacity. Assumes
+            storage unit can completely discharge in 1 hour
+            """
+
+            return m.STORAGE_UNIT_ENERGY_CAPACITY[g]
+
+        # Max MW out of storage device - discharging
+        m.P_STORAGE_MAX_OUT = Expression(m.G_C_STORAGE, rule=storage_unit_max_power_out_rule)
+
+        def storage_unit_max_power_in_rule(m, g):
+            """
+            Maximum charging power of storage unit - set equal to energy capacity. Assumes
+            storage unit can completely charge in 1 hour
+            """
+
+            return m.STORAGE_UNIT_ENERGY_CAPACITY[g]
+
+        # Max MW into storage device - charging
+        m.P_STORAGE_MAX_IN = Expression(m.G_C_STORAGE, rule=storage_unit_max_power_in_rule)
 
         return m
 
@@ -1060,7 +1125,7 @@ class UnitCommitmentModel:
             return sum(m.r_up[g, t] for g in gens if generator_zone_map.loc[g] in region_zone_map.loc[r]) >= m.D_UP[r]
 
         # Upward power reserve rule for each NEM zone
-        # m.UPWARD_POWER_RESERVE = Constraint(m.R, m.T, rule=upward_power_reserve_rule)
+        m.UPWARD_POWER_RESERVE = Constraint(m.R, m.T, rule=upward_power_reserve_rule)
 
         def operating_state_logic_rule(m, g, t):
             """
@@ -1150,8 +1215,10 @@ class UnitCommitmentModel:
 
             if t > m.T.first():
                 return (m.p[g, t] + m.r_up[g, t]) - m.p[g, t - 1] <= m.RU[g]
+
             else:
-                return Constraint.Skip
+                # Ramp-rate for first interval
+                return m.p[g, t] - m.p0[g] <= m.RU[g]
 
         # Ramp-rate up limit
         m.RAMP_RATE_UP = Constraint(m.G_E_THERM.union(m.G_C_THERM), m.T, rule=ramp_rate_up_rule)
@@ -1161,8 +1228,10 @@ class UnitCommitmentModel:
 
             if t > m.T.first():
                 return - m.p[g, t] + m.p[g, t - 1] <= m.RD[g]
+
             else:
-                return Constraint.Skip
+                # Ramp-rate for first interval
+                return - m.p[g, t] + m.p0[g] <= m.RD[g]
 
         # Ramp-rate up limit
         m.RAMP_RATE_DOWN = Constraint(m.G_E_THERM.union(m.G_C_THERM), m.T, rule=ramp_rate_down_rule)
@@ -1245,6 +1314,14 @@ class UnitCommitmentModel:
 
         # TODO: May want to add energy constraint for hydro units
 
+        def thermal_generator_max_output_rule(m, g, t):
+            """Max MW output for thermal generators"""
+
+            return m.P_TOTAL[g, t] <= m.P_MAX[g]
+
+        # Max output for existing and candidate thermal generators
+        m.P_THERMAL_MAX = Constraint(m.G_E_THERM.union(m.G_C_THERM), m.T, rule=thermal_generator_max_output_rule)
+
         def storage_max_charge_rate_rule(m, g, t):
             """Maximum charging power for storage units [MW]"""
 
@@ -1273,9 +1350,10 @@ class UnitCommitmentModel:
             """Constraint that couples energy + power between periods for storage units"""
 
             if t != m.T.first():
-                return m.y[g, t] == m.y[g, t - 1] + (m.ETA[g] * m.p_in[g, t]) - ((1 / m.ETA[g]) * m.p_out[g, t])
+                return m.y[g, t] == m.y[g, t - 1] + (m.ETA[g] * m.p_in[g, t]) - (m.p_out[g, t] / m.ETA[g])
             else:
-                return Constraint.Skip
+                # Assume battery completely discharged in first period
+                return m.y[g, t] == m.y0[g] + (m.ETA[g] * m.p_in[g, t]) - (m.p_out[g, t] / m.ETA[g])
 
         # Account for inter-temporal energy transition within storage units
         m.STORAGE_ENERGY_TRANSITION = Constraint(m.G_C_STORAGE, m.T, rule=storage_energy_transition_rule)
@@ -1345,6 +1423,7 @@ class UnitCommitmentModel:
     def define_objective(m):
         """Objective function - cost minimisation for each scenario"""
 
+        # Minimise total operating cost
         m.OBJECTIVE = Objective(expr=m.C_OP_TOTAL, sense=minimize)
 
         return m
@@ -1386,7 +1465,7 @@ class UnitCommitmentModel:
 
         return m
 
-    def update_parameters(self, m, year, scenario, installed_storage_capacity):
+    def update_parameters(self, m, year, scenario):
         """Update model parameters for a given year"""
 
         def _update_model_year(m, year):
@@ -1394,6 +1473,15 @@ class UnitCommitmentModel:
 
             # Update model year
             m.YEAR = year
+
+        def _update_year_indicator(m, year):
+            """Update year indicator parameter - used to control available capacity of candidate units"""
+
+            for i in m.I:
+                if i <= year:
+                    m.YEAR_INDICATOR[i] = 1
+                else:
+                    m.YEAR_INDICATOR[i] = 0
 
         def _update_short_run_marginal_costs(m, year):
             """Update short-run marginal costs for generators - based on fuel-cost profiles"""
@@ -1409,7 +1497,8 @@ class UnitCommitmentModel:
                     # Use final year in dataset to max year
                     year = max_year
 
-                m.C_MC[g] = float(self.existing_units.loc[g, ('FUEL_COST', year)])
+                m.C_MC[g] = float(self.existing_units.loc[g, ('FUEL_COST', year)]
+                                  * self.existing_units.loc[g, ('PARAMETERS', 'HEAT_RATE')])
 
             for g in m.G_C_THERM:
                 # Last year in the dataset for which fuel cost information exists
@@ -1428,12 +1517,6 @@ class UnitCommitmentModel:
 
             for g in m.G_E_THERM.union(m.G_C_THERM):
                 m.u0[g] = float(1)
-
-        def _update_generator_availability(m, year):
-            """Update whether unit is retired for a given year"""
-
-            for g in m.G:
-                m.AVAILABILITY_INDICATOR[g] = float(1)
 
         def _update_wind_capacity_factors(m, year, scenario):
             """Update capacity factors for wind generators"""
@@ -1488,7 +1571,6 @@ class UnitCommitmentModel:
 
                 # For each hour in the given operating scenario
                 for t in m.T:
-
                     # Update zone demand
                     m.D[z, t] = float(self.input_traces.loc[(year, scenario), ('DEMAND', z, t)])
 
@@ -1498,60 +1580,43 @@ class UnitCommitmentModel:
             for g in m.G:
                 m.AVAILABILITY_INDICATOR[g] = float(1)
 
-        def _update_storage_max_power_output(m, installed_storage_capacity):
-            """Update max power output from storage units"""
-
-            # For each storage unit
-            for g in installed_storage_capacity.keys():
-                # Update max output [MW]
-                m.P_STORAGE_MAX_OUT[g] = installed_storage_capacity[g]
-
-        def _update_storage_max_power_input(m, installed_storage_capacity):
-            """Update max charging power for storage unit"""
-
-            # For each storage unit
-            for g in installed_storage_capacity.keys():
-                # Update max output [MW]
-                m.P_STORAGE_MAX_IN[g] = installed_storage_capacity[g]
-
         def _update_scenario_duration(m, year, scenario):
             """Update duration of operating scenario"""
 
             # TODO: Must figure out how scenario duration is handled in master and sub-problems
             m.SCENARIO_DURATION = float(1)
 
-        def _update_all_parameters(m, year, scenario, installed_storage_capacity):
+        def _update_all_parameters(m, year, scenario):  # installed_storage_capacity
             """Run each function used to update model parameters"""
 
             _update_model_year(m, year)
+            _update_year_indicator(m, year)
             _update_short_run_marginal_costs(m, year)
             _update_u0(m, year)
-            _update_generator_availability(m, year)
             _update_wind_capacity_factors(m, year, scenario)
             _update_solar_capacity_factors(m, year, scenario)
             _update_zone_demand(m, year, scenario)
             _update_availability_indicator(m, year)
-            _update_storage_max_power_output(m, installed_storage_capacity)
-            _update_storage_max_power_input(m, installed_storage_capacity)
             _update_scenario_duration(m, year, scenario)
 
         # Update model parameters
-        _update_all_parameters(m, year, scenario, installed_storage_capacity)
+        _update_all_parameters(m, year, scenario)
 
         return m
 
     @staticmethod
-    def fix_variables(m, candidate_unit_capacity, fixed_baseline, fixed_permit_price):
+    def fix_master_problem_variables(m, candidate_capacity, fixed_baseline, fixed_permit_price):
         """Fix variables in the sub-problem"""
 
         # For each candidate generator
         for g in m.G_C.union(m.G_C_STORAGE):
 
+            # m.x_C[g, i].fix(sum(candidate_capacity[g][i] for i in candidate_capacity[g].keys() if i <= m.YEAR))
+
             # Each year in the model horizon
             for i in m.I:
                 # Fix capacity of candidate generator
-                # m.x_C[g, i].fix(candidate_unit_capacity[g][i])
-                m.x_C[g, i].fix(0)
+                m.x_C[g, i].fix(float(candidate_capacity[g][i]))
 
         # Fix emissions intensity baseline
         m.baseline.fix(fixed_baseline)
@@ -1572,18 +1637,14 @@ class UnitCommitmentModel:
 
         return m
 
-    def run_operating_scenario(self, m, year, scenario, installed_storage_capacity, candidate_unit_capacity,
-                               fixed_baseline, fixed_permit_price):
+    def construct_operating_scenario(self, m, year, scenario, candidate_capacity, fixed_baseline, fixed_permit_price):
         """Run model for a given operating scenario"""
 
         # Update parameters
-        m = self.update_parameters(m, year, scenario, installed_storage_capacity)
+        m = self.update_parameters(m, year, scenario)
 
         # Fix variables
-        m = self.fix_variables(m, candidate_unit_capacity, fixed_baseline, fixed_permit_price)
-
-        # Solve model
-        m = self.solve_model(m)
+        m = self.fix_master_problem_variables(m, candidate_capacity, fixed_baseline, fixed_permit_price)
 
         return m
 
@@ -1604,7 +1665,47 @@ if __name__ == '__main__':
     # Construct model
     model = uc.construct_model()
 
-    m1 = uc.run_operating_scenario(model, 2018, 1, {}, {}, 0.8, 50)
+    # Initialise dictionary of installed capacities for candidate technologies
+    installed_capacities = {g: {i: 0 for i in range(2016, 2051)} for g in model.G_C.union(model.G_C_STORAGE)}
 
+    # Update installed capacities dictionary
+    # installed_capacities['ADE-STORAGE'][2016] = 100
+    # installed_capacities['ADE-STORAGE'][2018] = 20
+    # installed_capacities['ADE-STORAGE'][2020] = 50
+    #
+    # installed_capacities['NSA-STORAGE'][2016] = 100
+    # installed_capacities['NSA-STORAGE'][2018] = 20
+    # installed_capacities['NSA-STORAGE'][2020] = 50
 
+    # First model
+    model_in = model.clone()
+    m1 = uc.construct_operating_scenario(model_in, 2018, 1, installed_capacities, 0.8, 50)
 
+    # Updated model
+    model_in = model.clone()
+    m2 = uc.construct_operating_scenario(model_in, 2020, 1, installed_capacities, 0.8, 50)
+
+    # Solve model
+    uc.solve_model(m2)
+
+    # Get values
+    df_y = pd.DataFrame.from_dict(m2.y.get_values(), orient='index')
+    df_y.index = pd.MultiIndex.from_tuples(df_y.index)
+
+    df_p_in = pd.DataFrame.from_dict(m2.p_in.get_values(), orient='index')
+    df_p_in.index = pd.MultiIndex.from_tuples(df_p_in.index)
+
+    df_p_out = pd.DataFrame.from_dict(m2.p_out.get_values(), orient='index')
+    df_p_out.index = pd.MultiIndex.from_tuples(df_p_out.index)
+
+    ax = df_y.loc['NSA-STORAGE'].plot(color='r')
+    df_p_in.loc['NSA-STORAGE'].plot(color='b', drawstyle='steps', ax=ax)
+    df_p_out.loc['NSA-STORAGE'].plot(color='k', drawstyle='steps', ax=ax)
+
+    df_P_TOTAL = pd.DataFrame.from_dict({i: j.expr() for i, j in m2.P_TOTAL.iteritems()}, orient='index')
+    df_P_TOTAL.index = pd.MultiIndex.from_tuples(df_P_TOTAL.index)
+
+    ax2 = df_P_TOTAL.loc['YWPS1'].plot()
+    plt.show()
+
+    EXPR.expression_to_string(m2.STORAGE_UNIT_ENERGY_CAPACITY['NSA-STORAGE'])
