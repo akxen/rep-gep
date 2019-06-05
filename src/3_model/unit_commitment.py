@@ -652,10 +652,14 @@ class UnitCommitmentModel:
         def min_power_output_proportion_rule(m, g):
             """Minimum generator power output as a proportion of maximum output"""
 
-            if g in m.G_E:
+            if g in m.G_E_THERM:
                 # Minimum power output for existing generators
                 min_output = (self.existing_units.loc[g, ('PARAMETERS', 'MIN_GEN')] /
                               self.existing_units.loc[g, ('PARAMETERS', 'REG_CAP')])
+
+            elif g in m.G_E_HYDRO:
+                # Set minimum power output for existing hydro generators = 0
+                min_output = 0
 
             elif g in m.G_C_THERM:
                 # Minimum power output for candidate thermal generators
@@ -775,7 +779,7 @@ class UnitCommitmentModel:
         def powerflow_min_rule(m, l):
             """Minimum powerflow over network link"""
 
-            return float(-self.powerflow_limits[l]['reverse'])
+            return float(-self.powerflow_limits[l]['reverse']*100)
 
         # Lower bound for powerflow over link
         m.POWERFLOW_MIN = Param(m.L_I, rule=powerflow_min_rule)
@@ -783,13 +787,25 @@ class UnitCommitmentModel:
         def powerflow_max_rule(m, l):
             """Maximum powerflow over network link"""
 
-            return float(self.powerflow_limits[l]['forward'])
+            return float(self.powerflow_limits[l]['forward']*100)
 
         # Lower bound for powerflow over link
         m.POWERFLOW_MAX = Param(m.L_I, rule=powerflow_max_rule)
 
         # Unit availability indicator (indicates if unit is available / not retired). Must be set each time model run.
         m.AVAILABILITY_INDICATOR = Param(m.G, initialize=1, within=Binary, mutable=True)
+
+        # Historic output for existing hydro generators
+        m.P_HYDRO_HISTORIC = Param(m.G_E_HYDRO, m.T, initialize=0, mutable=True)
+
+        # Fixed emissions intensity baseline [tCO2/MWh]
+        m.FIXED_BASELINE = Param(initialize=0, mutable=True)
+
+        # Fixed permit price [$/tCO2]
+        m.FIXED_PERMIT_PRICE = Param(initialize=0, mutable=True)
+
+        # Fixed capacities for candidate units
+        m.FIXED_X_C = Param(m.G_C.union(m.G_C_STORAGE), m.I, initialize=0, mutable=True)
 
         return m
 
@@ -1110,6 +1126,20 @@ class UnitCommitmentModel:
     def define_constraints(self, m):
         """Define model constraints"""
 
+        # Fix emissions intensity baseline to given value in sub-problems
+        m.FIXED_BASELINE_CONS = Constraint(expr=m.baseline == m.FIXED_BASELINE)
+
+        # Fix permit price to given value in sub-problems
+        m.FIXED_PERMIT_PRICE_CONS = Constraint(expr=m.permit_price == m.FIXED_PERMIT_PRICE)
+
+        def installed_capacity_rule(m, g, i):
+            """Fixed installed capacities"""
+
+            return m.FIXED_X_C[g, i] == m.x_C[g, i]
+
+        # Fixed installed capacity for candidate units
+        m.FIXED_CANDIDATE_CAPACITY_CONS = Constraint(m.G_C.union(m.G_C_STORAGE), m.I, rule=installed_capacity_rule)
+
         def upward_power_reserve_rule(m, r, t):
             """Upward reserve constraint"""
 
@@ -1307,7 +1337,7 @@ class UnitCommitmentModel:
             Note: Assume no investment in hydro over model horizon (only consider existing units)
             """
 
-            return m.P_TOTAL[g, t] <= m.P_MAX[g]
+            return m.P_TOTAL[g, t] <= m.P_HYDRO_HISTORIC[g, t]
 
         # Max output from existing hydro generators
         m.P_HYDRO_MAX = Constraint(m.G_E_HYDRO, m.T, rule=hydro_output_max_rule)
@@ -1390,13 +1420,10 @@ class UnitCommitmentModel:
             storage_units = (self.battery_properties.loc[self.battery_properties['NEM_ZONE'] == z, 'NEM_ZONE']
                              .index.tolist())
 
-            # return (sum(m.P_TOTAL[g, t] for g in m.G) - m.D[z, t]
-            #         + m.p_LL_up[z, t] - m.p_LL_down[z, t] == 0)
-
             return (sum(m.P_TOTAL[g, t] for g in generators) - m.D[z, t]
                     - sum(m.INCIDENCE_MATRIX[l, z] * m.p_L[l, t] for l in m.L)
                     + sum(m.p_out[g, t] - m.p_in[g, t] for g in storage_units)
-                    + m.p_LL_up[z, t] == 0)
+                    + m.p_LL_up[z, t] - m.p_LL_down[z, t] == 0)
 
         # Power balance constraint for each zone and time period
         m.POWER_BALANCE = Constraint(m.Z, m.T, rule=power_balance_rule)
@@ -1465,8 +1492,32 @@ class UnitCommitmentModel:
 
         return m
 
-    def update_parameters(self, m, year, scenario):
+    def update_parameters(self, m, year, scenario, fixed_baseline, fixed_permit_price, candidate_capacity):
         """Update model parameters for a given year"""
+
+        def _update_fixed_baseline(m, fixed_baseline):
+            """Fix emissions intensity baseline to given value in sub-problems"""
+
+            # Fixed emissions intensity baseline
+            m.FIXED_BASELINE = float(fixed_baseline)
+
+        def _update_fixed_permit_price(m, fixed_permit_price):
+            """Fix emissions intensity baseline to given value in sub-problems"""
+
+            # Fixed emissions intensity baseline
+            m.FIXED_PERMIT_PRICE = float(fixed_permit_price)
+
+        def _update_candidate_unit_capacity(m, candidate_capacity):
+            """Update candidate unit capacity"""
+
+            # For each candidate generator
+            for g in m.G_C.union(m.G_C_STORAGE):
+
+                # Each year in the model horizon
+                for i in m.I:
+
+                    # Fix capacity of candidate generator
+                    m.FIXED_X_C[g, i] = float(candidate_capacity[g][i])
 
         def _update_model_year(m, year):
             """Update year for which model is to be run"""
@@ -1586,9 +1637,27 @@ class UnitCommitmentModel:
             # TODO: Must figure out how scenario duration is handled in master and sub-problems
             m.SCENARIO_DURATION = float(1)
 
-        def _update_all_parameters(m, year, scenario):  # installed_storage_capacity
+        def _update_hydro_output(m, year, scenario):
+            """Update hydro output based on historic values"""
+
+            # Update historic hydro output for each operating scenario
+            for g in m.G_E_HYDRO:
+
+                for t in m.T:
+                    output = self.input_traces.loc[(year, scenario), ('HYDRO', g, t)]
+
+                    # Set output = 0 if value too small (prevent numerical instability if numbers are too small)
+                    if output < 0.01:
+                        output = 0
+
+                    m.P_HYDRO_HISTORIC[g, t] = output
+
+        def _update_all_parameters(m, year, scenario, fixed_baseline, fixed_permit_price, candidate_capacity):
             """Run each function used to update model parameters"""
 
+            _update_fixed_baseline(m, fixed_baseline)
+            _update_fixed_permit_price(m, fixed_permit_price)
+            _update_candidate_unit_capacity(m, candidate_capacity)
             _update_model_year(m, year)
             _update_year_indicator(m, year)
             _update_short_run_marginal_costs(m, year)
@@ -1598,31 +1667,184 @@ class UnitCommitmentModel:
             _update_zone_demand(m, year, scenario)
             _update_availability_indicator(m, year)
             _update_scenario_duration(m, year, scenario)
+            _update_hydro_output(m, year, scenario)
 
         # Update model parameters
-        _update_all_parameters(m, year, scenario)
+        _update_all_parameters(m, year, scenario, fixed_baseline, fixed_permit_price, candidate_capacity)
 
         return m
 
     @staticmethod
-    def fix_master_problem_variables(m, candidate_capacity, fixed_baseline, fixed_permit_price):
+    def fix_baseline(m):
+        """Fix emissions intensity baseline"""
+
+        # Fix emissions intensity baseline
+        m.baseline.fix(m.FIXED_BASELINE.value)
+
+        return m
+
+    @staticmethod
+    def unfix_baseline(m):
+        """Unfix emissions intensity baseline"""
+
+        # Fix emissions intensity baseline
+        m.baseline.unfix()
+
+        return m
+
+    @staticmethod
+    def fix_permit_price(m):
+        """Fix permit price"""
+
+        # Fix permit price
+        m.permit_price.fix(m.FIXED_PERMIT_PRICE.value)
+
+        return m
+
+    @staticmethod
+    def unfix_permit_price(m):
+        """Unfix permit price"""
+
+        # Fix permit price
+        m.permit_price.unfix()
+
+        return m
+
+    def fix_policy_variables(self, m):
+        """Fix policy variables"""
+
+        # Fix baseline
+        m = self.fix_baseline(m)
+
+        # Fix permit price
+        m = self.fix_permit_price(m)
+
+        return m
+
+    def unfix_policy_variables(self, m):
+        """Unfix policy variables"""
+
+        # Unfix baseline
+        m = self.unfix_baseline(m)
+
+        # Fix permit price
+        m = self.unfix_permit_price(m)
+
+        return m
+
+    @staticmethod
+    def fix_candidate_unit_capacity_variables(m):
         """Fix variables in the sub-problem"""
 
         # For each candidate generator
         for g in m.G_C.union(m.G_C_STORAGE):
 
-            # m.x_C[g, i].fix(sum(candidate_capacity[g][i] for i in candidate_capacity[g].keys() if i <= m.YEAR))
+            # Each year in the model horizon
+            for i in m.I:
+
+                # Fix capacity of candidate generator
+                m.x_C[g, i].fix(m.FIXED_X_C[g, i].value)
+
+        return m
+
+    @staticmethod
+    def unfix_candidate_unit_capacity_variables(m):
+        """Fix variables in the sub-problem"""
+
+        # For each candidate generator
+        for g in m.G_C.union(m.G_C_STORAGE):
 
             # Each year in the model horizon
             for i in m.I:
+
                 # Fix capacity of candidate generator
-                m.x_C[g, i].fix(float(candidate_capacity[g][i]))
+                m.x_C[g, i].unfix()
 
-        # Fix emissions intensity baseline
-        m.baseline.fix(fixed_baseline)
+        return m
 
-        # Fix permit price
-        m.permit_price.fix(fixed_permit_price)
+    @staticmethod
+    def fix_integer_variables(m):
+        """
+        Fix integer variables
+
+        Note: These values should be fixed to those obtained from the MILP solution.
+        This effectively means a linear program is being solved, allowing dual variables
+        (marginal prices) to be extracted.
+        """
+
+        for g in m.G_E_THERM.union(m.G_C_THERM):
+            for t in m.T:
+                # Fix integer variables
+                m.u[g, t].fix()
+                m.v[g, t].fix()
+                m.w[g, t].fix()
+
+        return m
+
+    @staticmethod
+    def fix_sub_problem_primal_variables(m):
+        """Fix sub-problem primal variables"""
+
+        for t in m.T:
+
+            for g in m.G:
+
+                # Power output above minimum dispatchable level of output [MW]
+                m.p[g, t].fix()
+
+            for g in m.G_E_THERM.union(m.G_C_THERM):
+
+                # Upward reserve allocation [MW]
+                m.r_up[g, t].fix()
+
+            for g in m.G_C_STORAGE:
+
+                # Storage unit charging (power in) [MW]
+                m.p_in[g, t].fix()
+
+                # Storage unit discharging (power out) [MW]
+                m.p_out[g, t].fix()
+
+                # Energy in storage unit [MWh]
+                m.y[g, t].fix()
+
+            for l in m.L:
+
+                # Power flow between NEM zones
+                m.p_L[l, t].fix()
+
+            for z in m.Z:
+
+                # Lost load - up
+                m.p_LL_up[z, t].fix()
+
+                # Lost load - down
+                m.p_LL_down[z, t].fix()
+
+        return m
+
+    @staticmethod
+    def unfix_integer_variables(m):
+        """
+        Unfix integer variables
+
+        Note: This must be done prior to solving the MILP for different parameters
+        """
+
+        for g in m.G_E_THERM.union(m.G_C_THERM):
+            for t in m.T:
+                # Fix integer variables
+                m.u[g, t].unfix()
+                m.v[g, t].unfix()
+                m.w[g, t].unfix()
+
+        return m
+
+    def construct_operating_scenario(self, m, year, scenario, fixed_baseline, fixed_permit_price, candidate_capacity):
+        """Run model for a given operating scenario"""
+
+        # Update parameters
+        m = self.update_parameters(m, year, scenario, fixed_baseline, fixed_permit_price, candidate_capacity)
 
         return m
 
@@ -1634,19 +1856,6 @@ class UnitCommitmentModel:
 
         # Log infeasible constraints if they exist
         log_infeasible_constraints(m)
-
-        return m
-
-    def construct_operating_scenario(self, m, year, scenario, candidate_capacity, fixed_baseline, fixed_permit_price):
-        """Run model for a given operating scenario"""
-
-        # Update parameters
-        m = self.update_parameters(m, year, scenario)
-
-        # Fix variables
-        m = self.fix_master_problem_variables(m, candidate_capacity, fixed_baseline, fixed_permit_price)
-
-        return m
 
 
 if __name__ == '__main__':
@@ -1667,45 +1876,40 @@ if __name__ == '__main__':
 
     # Initialise dictionary of installed capacities for candidate technologies
     installed_capacities = {g: {i: 0 for i in range(2016, 2051)} for g in model.G_C.union(model.G_C_STORAGE)}
+    installed_capacities['TAS-WIND'][2020] = 100
 
-    # Update installed capacities dictionary
-    # installed_capacities['ADE-STORAGE'][2016] = 100
-    # installed_capacities['ADE-STORAGE'][2018] = 20
-    # installed_capacities['ADE-STORAGE'][2020] = 50
+    # Clone the base model
+    m1 = model.clone()
+
+    # Stage 1 - Solve MILP
+    # --------------------
+    # Construct operating scenario by updating parameters
+    m1 = uc.construct_operating_scenario(m1, 2020, 1, 0.8, 50, installed_capacities)
+
+    # Fix master problem variables
+    m1 = uc.fix_policy_variables(m1)
+
+    # First stage - solve MILP
+    uc.solve_model(m1)
+
+    # # Stage 2 - Get marginal prices (solve LP)
+    # # ----------------------------------------
+    # # Fix integer variables
+    # uc.fix_integer_variables(m1)
     #
-    # installed_capacities['NSA-STORAGE'][2016] = 100
-    # installed_capacities['NSA-STORAGE'][2018] = 20
-    # installed_capacities['NSA-STORAGE'][2020] = 50
+    # # Import dual variables when obtaining solution to second stage linear program
+    # m1.dual = Suffix(direction=Suffix.IMPORT)
+    #
+    # # Re-solve model - obtain dual variables
+    # uc.solve_model(m1)
 
-    # First model
-    model_in = model.clone()
-    m1 = uc.construct_operating_scenario(model_in, 2018, 1, installed_capacities, 0.8, 50)
-
-    # Updated model
-    model_in = model.clone()
-    m2 = uc.construct_operating_scenario(model_in, 2020, 1, installed_capacities, 0.8, 50)
-
-    # Solve model
-    uc.solve_model(m2)
-
-    # Get values
-    df_y = pd.DataFrame.from_dict(m2.y.get_values(), orient='index')
-    df_y.index = pd.MultiIndex.from_tuples(df_y.index)
-
-    df_p_in = pd.DataFrame.from_dict(m2.p_in.get_values(), orient='index')
-    df_p_in.index = pd.MultiIndex.from_tuples(df_p_in.index)
-
-    df_p_out = pd.DataFrame.from_dict(m2.p_out.get_values(), orient='index')
-    df_p_out.index = pd.MultiIndex.from_tuples(df_p_out.index)
-
-    ax = df_y.loc['NSA-STORAGE'].plot(color='r')
-    df_p_in.loc['NSA-STORAGE'].plot(color='b', drawstyle='steps', ax=ax)
-    df_p_out.loc['NSA-STORAGE'].plot(color='k', drawstyle='steps', ax=ax)
-
-    df_P_TOTAL = pd.DataFrame.from_dict({i: j.expr() for i, j in m2.P_TOTAL.iteritems()}, orient='index')
-    df_P_TOTAL.index = pd.MultiIndex.from_tuples(df_P_TOTAL.index)
-
-    ax2 = df_P_TOTAL.loc['YWPS1'].plot()
-    plt.show()
-
-    EXPR.expression_to_string(m2.STORAGE_UNIT_ENERGY_CAPACITY['NSA-STORAGE'])
+    # # Stage 3 - Get master problem variable sensitivities
+    # # ---------------------------------------------------
+    # # Fix primal variables
+    # m1 = uc.fix_sub_problem_primal_variables(m1)
+    #
+    # # Unfix master problem variables
+    # m1 = uc.unfix_master_problem_variables(m1)
+    #
+    # # Re-solve model
+    # uc.solve_model(m1)
