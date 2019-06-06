@@ -1,7 +1,9 @@
 import os
-import pandas as pd
+import time
 from math import ceil
 from collections import OrderedDict
+
+import pandas as pd
 
 from pyomo.environ import *
 from pyomo.core.expr import current as EXPR
@@ -1492,8 +1494,13 @@ class UnitCommitmentModel:
 
         return m
 
-    def update_parameters(self, m, year, scenario, fixed_baseline, fixed_permit_price, candidate_capacity):
-        """Update model parameters for a given year"""
+    @staticmethod
+    def update_iteration_parameters(m, fixed_baseline, fixed_permit_price, candidate_capacity):
+        """
+        Update variables determined in master problem which will be fixed for entire iteration
+
+        Note: Only needs to be done once per iteration
+        """
 
         def _update_fixed_baseline(m, fixed_baseline):
             """Fix emissions intensity baseline to given value in sub-problems"""
@@ -1518,6 +1525,26 @@ class UnitCommitmentModel:
 
                     # Fix capacity of candidate generator
                     m.FIXED_X_C[g, i] = float(candidate_capacity[g][i])
+
+        def _update_all_parameters(m, fixed_baseline, fixed_permit_price, candidate_capacity):
+            """Run each function used to update model parameters"""
+
+            _update_fixed_baseline(m, fixed_baseline)
+            _update_fixed_permit_price(m, fixed_permit_price)
+            _update_candidate_unit_capacity(m, candidate_capacity)
+
+        # Update model parameters
+        _update_all_parameters(m, fixed_baseline, fixed_permit_price, candidate_capacity)
+
+        return m
+
+    def update_year_parameters(self, m, year):
+        """
+        Update model parameters for a given year
+
+        Note: This only needs to be called once per year e.g. before the operating
+        scenarios for a given year are run
+        """
 
         def _update_model_year(m, year):
             """Update year for which model is to be run"""
@@ -1568,6 +1595,33 @@ class UnitCommitmentModel:
 
             for g in m.G_E_THERM.union(m.G_C_THERM):
                 m.u0[g] = float(1)
+
+        def _update_availability_indicator(m, year):
+            """Update generator availability status (set = 0 if unit retires)"""
+
+            for g in m.G:
+                m.AVAILABILITY_INDICATOR[g] = float(1)
+
+        def _update_all_parameters(m, year):
+            """Run each function used to update model parameters"""
+
+            _update_model_year(m, year)
+            _update_year_indicator(m, year)
+            _update_short_run_marginal_costs(m, year)
+            _update_u0(m, year)
+            _update_availability_indicator(m, year)
+
+        # Update model parameters
+        _update_all_parameters(m, year)
+
+        return m
+
+    def update_scenario_parameters(self, m, year, scenario):
+        """
+        Update parameters for a given operating scenario
+
+        Note: should be called prior to running each operating scenario
+        """
 
         def _update_wind_capacity_factors(m, year, scenario):
             """Update capacity factors for wind generators"""
@@ -1625,18 +1679,6 @@ class UnitCommitmentModel:
                     # Update zone demand
                     m.D[z, t] = float(self.input_traces.loc[(year, scenario), ('DEMAND', z, t)])
 
-        def _update_availability_indicator(m, year):
-            """Update generator availability status (set = 0 if unit retires)"""
-
-            for g in m.G:
-                m.AVAILABILITY_INDICATOR[g] = float(1)
-
-        def _update_scenario_duration(m, year, scenario):
-            """Update duration of operating scenario"""
-
-            # TODO: Must figure out how scenario duration is handled in master and sub-problems
-            m.SCENARIO_DURATION = float(1)
-
         def _update_hydro_output(m, year, scenario):
             """Update hydro output based on historic values"""
 
@@ -1652,25 +1694,27 @@ class UnitCommitmentModel:
 
                     m.P_HYDRO_HISTORIC[g, t] = output
 
-        def _update_all_parameters(m, year, scenario, fixed_baseline, fixed_permit_price, candidate_capacity):
+        def _update_scenario_duration(m, year, scenario):
+            """Update duration of operating scenario"""
+
+            # TODO: Must figure out how scenario duration is handled in master and sub-problems
+            m.SCENARIO_DURATION = float(1)
+
+            return m
+
+        def _update_all_parameters(m, year, scenario):
             """Run each function used to update model parameters"""
 
-            _update_fixed_baseline(m, fixed_baseline)
-            _update_fixed_permit_price(m, fixed_permit_price)
-            _update_candidate_unit_capacity(m, candidate_capacity)
-            _update_model_year(m, year)
-            _update_year_indicator(m, year)
-            _update_short_run_marginal_costs(m, year)
-            _update_u0(m, year)
             _update_wind_capacity_factors(m, year, scenario)
             _update_solar_capacity_factors(m, year, scenario)
             _update_zone_demand(m, year, scenario)
-            _update_availability_indicator(m, year)
-            _update_scenario_duration(m, year, scenario)
             _update_hydro_output(m, year, scenario)
+            _update_scenario_duration(m,  year, scenario)
+
+            return m
 
         # Update model parameters
-        _update_all_parameters(m, year, scenario, fixed_baseline, fixed_permit_price, candidate_capacity)
+        _update_all_parameters(m, year, scenario)
 
         return m
 
@@ -1840,11 +1884,27 @@ class UnitCommitmentModel:
 
         return m
 
-    def construct_operating_scenario(self, m, year, scenario, fixed_baseline, fixed_permit_price, candidate_capacity):
+    def construct_model_iteration(self, m, fixed_baseline, fixed_permit_price, candidate_capacity):
         """Run model for a given operating scenario"""
 
         # Update parameters
-        m = self.update_parameters(m, year, scenario, fixed_baseline, fixed_permit_price, candidate_capacity)
+        m = self.update_iteration_parameters(m, fixed_baseline, fixed_permit_price, candidate_capacity)
+
+        return m
+
+    def construct_model_year(self, m, year):
+        """Update model parameters that will entire all operating scenarios for a given year"""
+
+        # Update parameters
+        m = self.update_year_parameters(m, year)
+
+        return m
+
+    def construct_model_scenario(self, m, year, scenario):
+        """Update model parameters applying to a given operating scenario"""
+
+        # Update parameters
+        m = self.update_scenario_parameters(m, year, scenario)
 
         return m
 
@@ -1878,38 +1938,50 @@ if __name__ == '__main__':
     installed_capacities = {g: {i: 0 for i in range(2016, 2051)} for g in model.G_C.union(model.G_C_STORAGE)}
     installed_capacities['TAS-WIND'][2020] = 100
 
+    # Construct model objects
     # Clone the base model
-    m1 = model.clone()
+    m_base = model.clone()
+
+    # Construct base model object used in each iteration
+    m_iteration = uc.construct_model_iteration(m_base, 0.8, 50, installed_capacities)
+
+    # Construct base model used to solve a given year
+    m_year = uc.construct_model_year(m_iteration, 2020)
+
+    # Construct model used to solve a given scenario
+    m_scenario = uc.construct_model_scenario(m_year, 2020, 1)
 
     # Stage 1 - Solve MILP
     # --------------------
-    # Construct operating scenario by updating parameters
-    m1 = uc.construct_operating_scenario(m1, 2020, 1, 0.8, 50, installed_capacities)
+    start = time.time()
 
     # Fix master problem variables
-    m1 = uc.fix_policy_variables(m1)
+    m_scenario = uc.fix_policy_variables(m_scenario)
 
     # First stage - solve MILP
-    uc.solve_model(m1)
+    uc.solve_model(m_scenario)
 
-    # # Stage 2 - Get marginal prices (solve LP)
-    # # ----------------------------------------
-    # # Fix integer variables
-    # uc.fix_integer_variables(m1)
-    #
-    # # Import dual variables when obtaining solution to second stage linear program
-    # m1.dual = Suffix(direction=Suffix.IMPORT)
-    #
-    # # Re-solve model - obtain dual variables
-    # uc.solve_model(m1)
+    # Stage 2 - Get marginal prices (solve LP)
+    # ----------------------------------------
+    # Fix integer variables
+    m_scenario = uc.fix_integer_variables(m_scenario)
 
-    # # Stage 3 - Get master problem variable sensitivities
-    # # ---------------------------------------------------
-    # # Fix primal variables
-    # m1 = uc.fix_sub_problem_primal_variables(m1)
-    #
-    # # Unfix master problem variables
-    # m1 = uc.unfix_master_problem_variables(m1)
-    #
-    # # Re-solve model
-    # uc.solve_model(m1)
+    # Import dual variables when obtaining solution to second stage linear program
+    m_scenario.dual = Suffix(direction=Suffix.IMPORT)
+
+    # Re-solve model - obtain dual variables
+    uc.solve_model(m_scenario)
+
+    # Stage 3 - Get master problem variable sensitivities
+    # ---------------------------------------------------
+    # Fix primal variables
+    m_scenario = uc.fix_sub_problem_primal_variables(m_scenario)
+
+    # Unfix master problem variables
+    m_scenario = uc.unfix_permit_price(m_scenario)
+    m_scenario = uc.unfix_baseline(m_scenario)
+
+    # Re-solve model
+    uc.solve_model(m_scenario)
+
+    print(f'Solved in: {time.time() - start}s')
