@@ -10,12 +10,17 @@ class MasterProblem(BaseComponents):
         # Inherit model data and common model components
         super().__init__(raw_data_dir, data_dir, input_traces_dir)
 
-    def define_variables(self, m):
+    @staticmethod
+    def define_variables(m):
         """Master problem variables"""
 
         # Investment decisions - binary for thermal, continuous for other plant types
+        m.x_c = Var(m.G_C_WIND.union(m.G_C_SOLAR).union(m.G_C_STORAGE), m.I, within=NonNegativeReals)
 
-        pass
+        # Investment decisions for thermal plant
+        m.d = Var(m.G_C_THERM, m.I, m.G_C_THERM_SIZE_OPTIONS, within=Binary)
+
+        return m
 
     def define_parameters(self, m):
         """Master problem parameters"""
