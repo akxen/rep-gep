@@ -1,6 +1,7 @@
 """Class used to construct investment planning master problem"""
 
 import time
+import pickle
 
 from pyomo.environ import *
 
@@ -21,84 +22,6 @@ class MasterProblem:
     @staticmethod
     def define_expressions(m):
         """Define master problem expressions"""
-
-        def capacity_sizing_rule(_m, g, i):
-            """Size of candidate units"""
-
-            # Continuous size option for wind, solar, and storage units
-            if g in m.G_C_WIND.union(m.G_C_SOLAR).union(m.G_C_STORAGE):
-                return m.x_c[g, i]
-
-            # Discrete size options for candidate thermal units
-            elif g in m.G_C_THERM:
-                return sum(m.d[g, i, n] * m.X_C_THERM_SIZE[g, n] for n in m.G_C_THERM_SIZE_OPTIONS)
-
-            else:
-                raise Exception(f'Unidentified generator: {g}')
-
-        # Capacity sizing for candidate units
-        m.X_C = Expression(m.G_C.union(m.G_C_STORAGE), m.I, rule=capacity_sizing_rule)
-
-        def fom_cost_rule(_m):
-            """Fixed operating and maintenance cost for candidate generators over model horizon"""
-
-            return sum(m.C_FOM[g] * m.X_C[g, i] for g in m.G_C.union(m.G_C_SOLAR) for i in m.I)
-
-        # Fixed operation and maintenance cost - absolute cost [$]
-        m.C_FOM_TOTAL = Expression(rule=fom_cost_rule)
-
-        def investment_cost_rule(_m):
-            """Cost to invest in candidate technologies"""
-
-            return sum(m.C_INV[g, i] * m.X_C[g, i] for g in m.G_C.union(m.G_C_STORAGE) for i in m.I)
-
-        # Investment cost (fixed in subproblem) - absolute cost [$]
-        m.C_INV_TOTAL = Expression(rule=investment_cost_rule)
-
-        def max_generator_power_output_rule(_m, g, i):
-            """
-            Maximum power output from existing and candidate generators
-
-            Note: candidate units will have their max power output determined by investment decisions which
-            are made known in the master problem. Need to update these values each time model is run.
-            """
-
-            # Max output for existing generators equal to registered capacities
-            if g in m.G_E:
-                return m.EXISTING_GEN_REG_CAP[g]
-
-            # Max output for candidate generators equal to installed capacities (variable in master problem)
-            elif g in m.G_C.union(m.G_C_STORAGE):
-                return sum(m.X_C[g, y] for y in m.I if y <= i)
-
-            else:
-                raise Exception(f'Unexpected generator: {g}')
-
-        # Maximum power output for existing and candidate units (must be updated each time model is run)
-        m.P_MAX = Expression(m.G, m.I, rule=max_generator_power_output_rule)
-
-        def thermal_startup_cost_rule(_m, g, i):
-            """Startup cost for existing and candidate thermal generators"""
-
-            return m.C_SU_MW[g] * m.P_MAX[g, i]
-
-        # Startup cost - absolute cost [$]
-        m.C_SU = Expression(m.G_E_THERM.union(m.G_C_THERM), m.I, rule=thermal_startup_cost_rule)
-
-        def thermal_shutdown_cost_rule(_m, g, i):
-            """Startup cost for existing and candidate thermal generators"""
-            # TODO: For now set shutdown cost = 0
-            return m.C_SD_MW[g] * 0
-
-        # Shutdown cost - absolute cost [$]
-        m.C_SD = Expression(m.G_E_THERM.union(m.G_C_THERM), m.I, rule=thermal_shutdown_cost_rule)
-
-        # Penalty imposed for violating emissions constraint
-        m.C_EMISSIONS_VIOLATION = Expression(expr=m.emissions_target_exceeded * m.EMISSIONS_EXCEEDED_PENALTY)
-
-        # Penalty imposed for violating revenue constraint
-        m.C_REVENUE_VIOLATION = Expression(expr=m.revenue_shortfall * m.REVENUE_SHORTFALL_PENALTY)
-
         return m
 
     def define_blocks(self, m):
@@ -125,6 +48,9 @@ class MasterProblem:
                 # Fixed lost load (down)
                 s.FIXED_p_lost_down = Param(m.Z, m.T, initialize=0, mutable=True)
 
+                # Amount by which upward reserve constraint is violated
+                s.FIXED_upward_reserve_violation = Param(m.R, m.T, initialize=0, mutable=True)
+
                 return s
 
             def define_block_variables(s):
@@ -148,7 +74,8 @@ class MasterProblem:
                     """Cost to operate existing and candidate thermal units"""
 
                     return (
-                        sum((m.C_MC[g, i] + (m.EMISSIONS_RATE[g] - m.baseline[i]) * m.permit_price[i]) * s.FIXED_ENERGY[g, t]
+                        sum((m.C_MC[g, i] + (m.EMISSIONS_RATE[g] - m.baseline[i]) * m.permit_price[i]) * s.FIXED_ENERGY[
+                            g, t]
                             + (m.C_SU[g, i] * s.v[g, t]) + (m.C_SD[g, i] * s.w[g, t])
                             for g in m.G_E_THERM.union(m.G_C_THERM) for t in m.T))
 
@@ -168,7 +95,8 @@ class MasterProblem:
 
                     return (sum(m.C_MC[g, i] * s.FIXED_ENERGY[g, t] for g in m.G_E_SOLAR for t in m.T)
                             + sum(
-                                (m.C_MC[g, i] - m.baseline[i] * m.permit_price[i]) * s.FIXED_ENERGY[g, t] for g in m.G_C_SOLAR
+                                (m.C_MC[g, i] - m.baseline[i] * m.permit_price[i]) * s.FIXED_ENERGY[g, t] for g in
+                                m.G_C_SOLAR
                                 for t in
                                 m.T))
 
@@ -180,7 +108,8 @@ class MasterProblem:
 
                     return (sum(m.C_MC[g, i] * s.FIXED_ENERGY[g, t] for g in m.G_E_WIND for t in m.T)
                             + sum(
-                                (m.C_MC[g, i] - m.baseline[i] * m.permit_price[i]) * s.FIXED_ENERGY[g, t] for g in m.G_C_WIND
+                                (m.C_MC[g, i] - m.baseline[i] * m.permit_price[i]) * s.FIXED_ENERGY[g, t] for g in
+                                m.G_C_WIND
                                 for t in
                                 m.T))
 
@@ -204,7 +133,7 @@ class MasterProblem:
                     and then immediately discharge in order to receive the subsidy. For now assume the storage units are not
                     eligible to receive a subsidy for each MWh under the policy.
                     """
-                    # - (m.baseline * m.permit_price))
+
                     return sum(m.C_MC[g, i] * s.FIXED_ENERGY_OUT[g, t] for g in m.G_C_STORAGE for t in m.T)
 
                 # Discharging cost rule - assumes storage units are eligible under REP scheme
@@ -216,7 +145,8 @@ class MasterProblem:
                 def lost_load_cost_rule(_s):
                     """Value of lost-load"""
 
-                    return sum((s.FIXED_p_lost_up[z, t] + s.FIXED_p_lost_down[z, t]) * m.C_LOST_LOAD for z in m.Z for t in m.T)
+                    return sum(
+                        (s.FIXED_p_lost_up[z, t] + s.FIXED_p_lost_down[z, t]) * m.C_LOST_LOAD for z in m.Z for t in m.T)
 
                 # Total cost of lost-load
                 s.C_OP_LOST_LOAD = Expression(rule=lost_load_cost_rule)
@@ -228,6 +158,10 @@ class MasterProblem:
 
                 # Total operating cost
                 s.C_OP_TOTAL = Expression(rule=total_operating_cost_rule)
+
+                # Penalty imposed on violating upward reserve requirement
+                s.UPWARD_RESERVE_VIOLATION_PENALTY = Expression(
+                    expr=sum(m.C_LOST_LOAD * s.FIXED_upward_reserve_violation[r, t] for r in m.R for t in m.T))
 
                 return s
 
@@ -392,11 +326,14 @@ class MasterProblem:
             # TODO: Need to extract energy output values from subproblem
             return (sum(
                 (m.EMISSIONS_RATE[g] * m.SCENARIO[i, o].FIXED_ENERGY[g, t] for i in m.I for o in m.O
-                 for g in m.G_E_THERM.union(m.G_C_THERM).union(m.G_C_WIND).union(m.G_C_SOLAR) for t in m.T))
+                 for g in m.G_E_THERM.union(m.G_C) for t in m.T))
                     <= m.EMISSIONS_TARGET + m.emissions_target_exceeded)
 
         # Emissions constraint - must be less than some target, else penalty imposed for each unit above target
         m.EMISSIONS_CONSTRAINT = Constraint(rule=scheme_emissions_constraint_rule)
+
+        # Initialise list of constraints used to contain Benders cuts
+        m.CUTS = ConstraintList()
 
         return m
 
@@ -406,6 +343,7 @@ class MasterProblem:
 
         # Minimise total operating cost - include penalty for revenue / emissions constraint violations
         m.OBJECTIVE = Objective(expr=sum(m.SCENARIO[i, o].C_OP_TOTAL for i in m.I for o in m.O)
+                                     + sum(m.SCENARIO[i, o].UPWARD_RESERVE_VIOLATION_PENALTY for i in m.I for o in m.O)
                                      + m.C_FOM_TOTAL
                                      + m.C_INV_TOTAL
                                      + m.C_EMISSIONS_VIOLATION + m.C_REVENUE_VIOLATION, sense=minimize)
@@ -429,6 +367,9 @@ class MasterProblem:
 
         # Define variables - common to both master and master problem
         m = common_components.define_variables(m)
+
+        # Define expressions - common to both master and subproblem
+        m = common_components.define_expressions(m)
 
         # Define expressions
         m = self.define_expressions(m)
@@ -471,7 +412,16 @@ class MasterProblem:
         # Solve model
         self.opt.solve(m, tee=True, options=self.solver_options, keepfiles=self.keepfiles)
 
-        return m
+        results = {'d': m.d.get_values(),
+                   'x_c': m.x_c.get_values(),
+                   'baseline': m.baseline.get_values(),
+                   'permit_price': m.permit_price.get_values(),
+                   'u': {i: {o: m.SCENARIO[i, o].u.get_values() for o in m.O} for i in m.I},
+                   'v': {i: {o: m.SCENARIO[i, o].v.get_values() for o in m.O} for i in m.I},
+                   'w': {i: {o: m.SCENARIO[i, o].w.get_values() for o in m.O} for i in m.I},
+                   }
+
+        return m, results
 
 
 if __name__ == '__main__':
@@ -481,5 +431,12 @@ if __name__ == '__main__':
     # Create master problem
     master_problem = master.construct_model()
 
-    # Solve model
-    master_problem = master.solve_model(master_problem)
+    with open('subproblem_results.pickle', 'rb') as f:
+        subproblem_results = pickle.load(f)
+
+    # # Solve model
+    # master_problem, model_results = master.solve_model(master_problem)
+    #
+    # # Save results
+    # with open('master_results.pickle', 'wb') as f:
+    #     pickle.dump(model_results, f)

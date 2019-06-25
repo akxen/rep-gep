@@ -492,3 +492,84 @@ class CommonComponents:
 
         return m
 
+    def define_expressions(self, m):
+        """Define expressions common to both master and subproblem"""
+
+        def capacity_sizing_rule(_m, g, i):
+            """Size of candidate units"""
+
+            # Continuous size option for wind, solar, and storage units
+            if g in m.G_C_WIND.union(m.G_C_SOLAR).union(m.G_C_STORAGE):
+                return m.x_c[g, i]
+
+            # Discrete size options for candidate thermal units
+            elif g in m.G_C_THERM:
+                return sum(m.d[g, i, n] * m.X_C_THERM_SIZE[g, n] for n in m.G_C_THERM_SIZE_OPTIONS)
+
+            else:
+                raise Exception(f'Unidentified generator: {g}')
+
+        # Capacity sizing for candidate units
+        m.X_C = Expression(m.G_C.union(m.G_C_STORAGE), m.I, rule=capacity_sizing_rule)
+
+        def fom_cost_rule(_m):
+            """Fixed operating and maintenance cost for candidate generators over model horizon"""
+
+            return sum(m.C_FOM[g] * m.X_C[g, i] for g in m.G_C.union(m.G_C_SOLAR) for i in m.I)
+
+        # Fixed operation and maintenance cost - absolute cost [$]
+        m.C_FOM_TOTAL = Expression(rule=fom_cost_rule)
+
+        def investment_cost_rule(_m):
+            """Cost to invest in candidate technologies"""
+
+            return sum(m.C_INV[g, i] * m.X_C[g, i] for g in m.G_C.union(m.G_C_STORAGE) for i in m.I)
+
+        # Investment cost (fixed in subproblem) - absolute cost [$]
+        m.C_INV_TOTAL = Expression(rule=investment_cost_rule)
+
+        # Penalty imposed for violating emissions constraint
+        m.C_EMISSIONS_VIOLATION = Expression(expr=m.emissions_target_exceeded * m.EMISSIONS_EXCEEDED_PENALTY)
+
+        # Penalty imposed for violating revenue constraint
+        m.C_REVENUE_VIOLATION = Expression(expr=m.revenue_shortfall * m.REVENUE_SHORTFALL_PENALTY)
+
+        def max_generator_power_output_rule(_m, g, i):
+            """
+            Maximum power output from existing and candidate generators
+
+            Note: candidate units will have their max power output determined by investment decisions which
+            are made known in the master problem. Need to update these values each time model is run.
+            """
+
+            # Max output for existing generators equal to registered capacities
+            if g in m.G_E:
+                return m.EXISTING_GEN_REG_CAP[g]
+
+            # Max output for candidate generators equal to installed capacities (variable in master problem)
+            elif g in m.G_C.union(m.G_C_STORAGE):
+                return sum(m.X_C[g, y] for y in m.I if y <= i)
+
+            else:
+                raise Exception(f'Unexpected generator: {g}')
+
+        # Maximum power output for existing and candidate units (must be updated each time model is run)
+        m.P_MAX = Expression(m.G, m.I, rule=max_generator_power_output_rule)
+
+        def thermal_startup_cost_rule(_m, g, i):
+            """Startup cost for existing and candidate thermal generators"""
+
+            return m.C_SU_MW[g] * m.P_MAX[g, i]
+
+        # Startup cost - absolute cost [$]
+        m.C_SU = Expression(m.G_E_THERM.union(m.G_C_THERM), m.I, rule=thermal_startup_cost_rule)
+
+        def thermal_shutdown_cost_rule(_m, g, i):
+            """Startup cost for existing and candidate thermal generators"""
+            # TODO: For now set shutdown cost = 0
+            return m.C_SD_MW[g] * 0
+
+        # Shutdown cost - absolute cost [$]
+        m.C_SD = Expression(m.G_E_THERM.union(m.G_C_THERM), m.I, rule=thermal_shutdown_cost_rule)
+
+        return m

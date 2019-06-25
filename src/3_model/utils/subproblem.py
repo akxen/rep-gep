@@ -1,6 +1,8 @@
 """Classes used to construct investment planning subproblem"""
 
 import time
+import pickle
+import logging
 from collections import OrderedDict
 
 from pyomo.environ import *
@@ -20,6 +22,15 @@ class Subproblem:
         self.solver_options = {'Method': 1}  # 'MIPGap': 0.0005
         self.opt = SolverFactory('gurobi', solver_io='lp')
 
+        # Setup logger
+        logging.basicConfig(filename='subproblem.log', filemode='a',
+                            format='%(asctime)s %(name)s %(levelname)s %(message)s',
+                            datefmt='%Y-%m-%d %H:%M:%S',
+                            level=logging.DEBUG)
+
+        logging.info("Running subproblem")
+        self.logger = logging.getLogger('Subproblem')
+
     def construct_model(self):
         """Construct subproblem model components"""
 
@@ -37,6 +48,9 @@ class Subproblem:
 
         # Define variables - common to both master and subproblem
         m = common_components.define_variables(m)
+
+        # Define expressions - common to both master and subproblem
+        m = common_components.define_expressions(m)
 
         # Define expressions
         m = self.define_expressions(m)
@@ -56,45 +70,6 @@ class Subproblem:
     def define_expressions(m):
         """Define subproblem expressions"""
 
-        def capacity_sizing_rule(_m, g, i):
-            """Size of candidate units"""
-
-            # Continuous size option for wind, solar, and storage units
-            if g in m.G_C_WIND.union(m.G_C_SOLAR).union(m.G_C_STORAGE):
-                return m.x_c[g, i]
-
-            # Discrete size options for candidate thermal units
-            elif g in m.G_C_THERM:
-                return sum(m.d[g, i, n] * m.X_C_THERM_SIZE[g, n] for n in m.G_C_THERM_SIZE_OPTIONS)
-
-            else:
-                raise Exception(f'Unidentified generator: {g}')
-
-        # Capacity sizing for candidate units
-        m.X_C = Expression(m.G_C.union(m.G_C_STORAGE), m.I, rule=capacity_sizing_rule)
-
-        def max_generator_power_output_rule(_m, g, i):
-            """
-            Maximum power output from existing and candidate generators
-
-            Note: candidate units will have their max power output determined by investment decisions which
-            are made known in the master problem. Need to update these values each time model is run.
-            """
-
-            # Max output for existing generators equal to registered capacities
-            if g in m.G_E:
-                return m.EXISTING_GEN_REG_CAP[g]
-
-            # Max output for candidate generators equal to installed capacities (variable in master problem)
-            elif g in m.G_C.union(m.G_C_STORAGE):
-                return sum(m.X_C[g, y] for y in m.I if y <= i)
-
-            else:
-                raise Exception(f'Unexpected generator: {g}')
-
-        # Maximum power output for existing and candidate units (must be updated each time model is run)
-        m.P_MAX = Expression(m.G, m.I, rule=max_generator_power_output_rule)
-
         def min_power_output_rule(_m, g, i):
             """
             Minimum generator output in MW
@@ -108,44 +83,6 @@ class Subproblem:
         # Expression for minimum power output
         m.P_MIN = Expression(m.G, m.I, rule=min_power_output_rule)
 
-        def thermal_startup_cost_rule(_m, g, i):
-            """Startup cost for existing and candidate thermal generators"""
-
-            return m.C_SU_MW[g] * m.P_MAX[g, i]
-
-        # Startup cost - absolute cost [$]
-        m.C_SU = Expression(m.G_E_THERM.union(m.G_C_THERM), m.I, rule=thermal_startup_cost_rule)
-
-        def thermal_shutdown_cost_rule(_m, g, i):
-            """Startup cost for existing and candidate thermal generators"""
-            # TODO: For now set shutdown cost = 0
-            return m.C_SD_MW[g] * 0
-
-        # Shutdown cost - absolute cost [$]
-        m.C_SD = Expression(m.G_E_THERM.union(m.G_C_THERM), m.I, rule=thermal_shutdown_cost_rule)
-
-        def fom_cost_rule(_m):
-            """Fixed operating and maintenance cost for candidate generators over model horizon"""
-
-            return sum(m.C_FOM[g] * m.X_C[g, i] for g in m.G_C.union(m.G_C_SOLAR) for i in m.I)
-
-        # Fixed operation and maintenance cost - absolute cost [$]
-        m.C_FOM_TOTAL = Expression(rule=fom_cost_rule)
-
-        def investment_cost_rule(_m):
-            """Cost to invest in candidate technologies"""
-
-            return sum(m.C_INV[g, i] * m.X_C[g, i] for g in m.G_C.union(m.G_C_STORAGE) for i in m.I)
-
-        # Investment cost (fixed in subproblem) - absolute cost [$]
-        m.C_INV_TOTAL = Expression(rule=investment_cost_rule)
-
-        # Penalty imposed for violating emissions constraint
-        m.C_EMISSIONS_VIOLATION = Expression(expr=m.emissions_target_exceeded * m.EMISSIONS_EXCEEDED_PENALTY)
-
-        # Penalty imposed for violating revenue constraint
-        m.C_REVENUE_VIOLATION = Expression(expr=m.revenue_shortfall * m.REVENUE_SHORTFALL_PENALTY)
-
         return m
 
     def define_blocks(self, m):
@@ -158,34 +95,22 @@ class Subproblem:
                 """Define all parameters within a given block"""
 
                 # Fixed shutdown indicator binary variable value
-                start = time.time()
                 s.FIXED_W = Param(m.G_E_THERM.union(m.G_C_THERM), m.T, initialize=0, within=Binary, mutable=True)
-                print(f'Constructed FIXED_W in: {time.time() - start}s')
 
                 # Fixed startup indicator binary variable value
-                start = time.time()
                 s.FIXED_V = Param(m.G_E_THERM.union(m.G_C_THERM), m.T, initialize=0, within=Binary, mutable=True)
-                print(f'Constructed FIXED_V in: {time.time() - start}s')
 
                 # Fixed on-state binary variable value
-                start = time.time()
                 s.FIXED_U = Param(m.G_E_THERM.union(m.G_C_THERM), m.T, initialize=0, within=Binary, mutable=True)
-                print(f'Constructed FIXED_U in: {time.time() - start}s')
 
                 # Indicates if unit is available (assume available for all periods for now)
-                start = time.time()
                 s.AVAILABILITY_INDICATOR = Param(m.G, initialize=1, within=Binary, mutable=True)
-                print(f'Constructed AVAILABILITY_INDICATOR in: {time.time() - start}s')
 
                 # Power output in interval prior to model start (assume = 0 for now)
-                start = time.time()
                 s.P0 = Param(m.G, mutable=True, within=NonNegativeReals, initialize=0)
-                print(f'Constructed P0 in: {time.time() - start}s')
 
                 # Energy in battering in interval prior to model start (assume battery initially completely discharged)
-                start = time.time()
                 s.Y0 = Param(m.G_C_STORAGE, initialize=0)
-                print(f'Constructed Y0 in: {time.time() - start}s')
 
                 def wind_capacity_factor_rule(_s, b, t):
                     """Wind capacity factors for each operating scenario"""
@@ -201,9 +126,7 @@ class Subproblem:
                         return capacity_factor
 
                 # Wind capacity factors
-                start = time.time()
                 s.Q_WIND = Param(m.B, m.T, rule=wind_capacity_factor_rule)
-                print(f'Constructed Q_WIND in: {time.time() - start}s')
 
                 def solar_capacity_factor_rule(_s, z, g, t):
                     """Solar capacity factors in each NEM zone"""
@@ -224,9 +147,7 @@ class Subproblem:
                         return capacity_factor
 
                 # Solar capacity factors
-                start = time.time()
                 s.Q_SOLAR = Param(m.Z, m.G_C_SOLAR_TECHNOLOGIES, m.T, rule=solar_capacity_factor_rule)
-                print(f'Constructed Q_SOLAR in: {time.time() - start}s')
 
                 def demand_rule(_s, z, t):
                     """NEM demand in each zone"""
@@ -238,9 +159,7 @@ class Subproblem:
                     return demand
 
                 # Demand in each NEM zone
-                start = time.time()
                 s.DEMAND = Param(m.Z, m.T, rule=demand_rule)
-                print(f'Constructed DEMAND in: {time.time() - start}s')
 
                 def scenario_duration_rule(_s):
                     """Normalised duration for each operation scenario"""
@@ -248,9 +167,7 @@ class Subproblem:
                     return float(self.data.input_traces.loc[(i, o), ('K_MEANS', 'METRIC', 'NORMALISED_DURATION')])
 
                 # Normalised duration for each operating scenario
-                start = time.time()
                 s.NORMALISED_DURATION = Param(rule=scenario_duration_rule)
-                print(f'Constructed NORMALISED_DURATION in: {time.time() - start}s')
 
                 def historic_hydro_output_rule(_s, g, t):
                     """Historic output for existing hydro generators"""
@@ -264,9 +181,7 @@ class Subproblem:
                         return output
 
                 # Assumed output for hydro generators (based on historic values)
-                start = time.time()
                 s.P_HYDRO_HISTORIC = Param(m.G_E_HYDRO, m.T, rule=historic_hydro_output_rule)
-                print(f'Constructed P_HYDRO_HISTORIC in: {time.time() - start}s')
 
                 return s
 
@@ -274,13 +189,13 @@ class Subproblem:
                 """Define variables for each block"""
 
                 # Startup state variable
-                s.v = Var(m.G_E_THERM.union(m.G_C_THERM), m.T, within=Binary, initialize=0)
+                s.v = Var(m.G_E_THERM.union(m.G_C_THERM), m.T, within=NonNegativeReals, initialize=0)
 
                 # Shutdown state variable
-                s.w = Var(m.G_E_THERM.union(m.G_C_THERM), m.T, within=Binary, initialize=0)
+                s.w = Var(m.G_E_THERM.union(m.G_C_THERM), m.T, within=NonNegativeReals, initialize=0)
 
                 # On-state variable
-                s.u = Var(m.G_E_THERM.union(m.G_C_THERM), m.T, within=Binary, initialize=1)
+                s.u = Var(m.G_E_THERM.union(m.G_C_THERM), m.T, within=NonNegativeReals, initialize=1)
 
                 # Power output above minimum dispatchable level of output [MW]
                 s.p = Var(m.G, m.T, within=NonNegativeReals, initialize=0)
@@ -306,6 +221,9 @@ class Subproblem:
 
                 # Lost load - down [MW]
                 s.p_lost_down = Var(m.Z, m.T, within=NonNegativeReals, initialize=0)
+
+                # Amount by which upward reserve is violated [MW]
+                s.upward_reserve_violation = Var(m.R, m.T, within=NonNegativeReals, initialize=0)
 
                 return s
 
@@ -560,6 +478,10 @@ class Subproblem:
                 # TODO: Figure out how to handle scenario duration here
                 s.TOTAL_REVENUE = Expression(rule=scenario_revenue_rule)
 
+                # Penalty imposed on violating upward reserve requirement
+                s.UPWARD_RESERVE_VIOLATION_PENALTY = Expression(
+                    expr=sum(m.C_LOST_LOAD * s.upward_reserve_violation[r, t] for r in m.R for t in m.T))
+
                 return s
 
             def define_block_constraints(s):
@@ -580,7 +502,7 @@ class Subproblem:
                     gens = m.G_E_THERM.union(m.G_C_THERM).union(m.G_C_STORAGE)
 
                     return (sum(s.r_up[g, t] for g in gens if gen_zone_map[g] in region_zone_map[r])
-                            >= m.RESERVE_UP[r])
+                            + s.upward_reserve_violation[r, t] == m.RESERVE_UP[r])
 
                 # Upward power reserve rule for each NEM region
                 s.UPWARD_POWER_RESERVE = Constraint(m.R, m.T, rule=upward_power_reserve_rule)
@@ -823,6 +745,30 @@ class Subproblem:
                 # Constrain max power flow over given network link
                 s.POWERFLOW_MAX_CONS = Constraint(m.L_I, m.T, rule=powerflow_max_constraint_rule)
 
+                def fixed_on_state_rule(_s, g, t):
+                    """Used to obtain sensitivities for fixed on-state binary variables in master problem"""
+
+                    return s.u[g, t] == s.FIXED_U[g, t]
+
+                # Set fixed on-state variables to given value - used to recover sensitivities
+                s.FIXED_U_CONS = Constraint(m.G_E_THERM.union(m.G_C_THERM), m.T, rule=fixed_on_state_rule)
+
+                def fixed_startup_state_rule(_s, g, t):
+                    """Used to obtain sensitivities for fixed startup state binary variables in master problem"""
+
+                    return s.v[g, t] == s.FIXED_V[g, t]
+
+                # Set fixed on-state variables to given value - used to recover sensitivities
+                s.FIXED_V_CONS = Constraint(m.G_E_THERM.union(m.G_C_THERM), m.T, rule=fixed_startup_state_rule)
+
+                def fixed_shutdown_state_rule(_s, g, t):
+                    """Used to obtain sensitivities for fixed shutdown state binary variables in master problem"""
+
+                    return s.w[g, t] == s.FIXED_W[g, t]
+
+                # Set fixed on-state variables to given value - used to recover sensitivities
+                s.FIXED_W_CONS = Constraint(m.G_E_THERM.union(m.G_C_THERM), m.T, rule=fixed_shutdown_state_rule)
+
             def construct_block(s):
                 """Construct block for each operating scenario"""
                 print(f'Constructing block: Year - {i}, Scenario - {o}')
@@ -914,9 +860,6 @@ class Subproblem:
         # Emissions constraint - must be less than some target, else penalty imposed for each unit above target
         m.EMISSIONS_CONSTRAINT = Constraint(rule=scheme_emissions_constraint_rule)
 
-        def fixed_on_state_rule(m, g, i, t):
-            """Fixed on state for a given generator"""
-
         return m
 
     @staticmethod
@@ -925,6 +868,7 @@ class Subproblem:
 
         # Minimise total operating cost - include penalty for revenue / emissions constraint violations
         m.OBJECTIVE = Objective(expr=sum(m.SCENARIO[i, o].C_OP_TOTAL for i in m.I for o in m.O)
+                                     + sum(m.SCENARIO[i, o].UPWARD_RESERVE_VIOLATION_PENALTY for i in m.I for o in m.O)
                                      + m.C_FOM_TOTAL
                                      + m.C_INV_TOTAL
                                      + m.C_EMISSIONS_VIOLATION + m.C_REVENUE_VIOLATION, sense=minimize)
@@ -932,83 +876,83 @@ class Subproblem:
         return m
 
     @staticmethod
-    def update_fixed_baseline(m, fixed_baseline):
+    def update_fixed_baseline(m, fixed_baselines):
         """Update fixed baseline - obtained from master problem"""
 
         for i in m.I:
-            # m.FIXED_BASELINE[i] = fixed_baseline[i]
-            m.FIXED_BASELINE[i] = 0
+            m.FIXED_BASELINE[i] = fixed_baselines[i]
+            # m.FIXED_BASELINE[i] = 0
 
         return m
 
     @staticmethod
-    def update_fixed_permit_price(m, fixed_permit_price):
+    def update_fixed_permit_price(m, fixed_permit_prices):
         """Update fixed permit price - obtained from master problem"""
 
         for i in m.I:
-            # m.FIXED_PERMIT_PRICE[i] = fixed_permit_price[i]
-            m.FIXED_PERMIT_PRICE[i] = 0
+            m.FIXED_PERMIT_PRICE[i] = fixed_permit_prices[i]
+            # m.FIXED_PERMIT_PRICE[i] = 0
         return m
 
     @staticmethod
-    def update_fixed_capacity_continuous(m, continuous_capacity):
+    def update_fixed_capacity_continuous(m, continuous_capacities):
         """Update installed capacity for units with continuous capacity sizing option"""
 
         for i in m.I:
             for g in m.G_C_WIND.union(m.G_C_SOLAR).union(m.G_C_STORAGE):
-                # m.FIXED_X_C[g, i] = continuous_capacity[g][i]
-                m.FIXED_X_C[g, i] = 0
+                m.FIXED_X_C[g, i] = continuous_capacities[(g, i)]
+                # m.FIXED_X_C[g, i] = 0
 
         return m
 
     @staticmethod
-    def update_fixed_capacity_discrete(m, discrete_capacity):
+    def update_fixed_capacity_discrete(m, discrete_capacities):
         """Update installed capacity for units with discrete capacity sizing option"""
 
         for i in m.I:
             for g in m.G_C_THERM:
                 for n in m.G_C_THERM_SIZE_OPTIONS:
-                    # m.FIXED_D[g, i, n] = discrete_capacity[g][i][n]
-                    if n == 0:
-                        m.FIXED_D[g, i, n] = 1
-                    else:
-                        m.FIXED_D[g, i, n] = 0
+                    m.FIXED_D[g, i, n] = discrete_capacities[(g, i, n)]
+                    # if n == 0:
+                    #     m.FIXED_D[g, i, n] = 1
+                    # else:
+                    #     m.FIXED_D[g, i, n] = 0
 
         return m
 
     @staticmethod
-    def update_fixed_shutdown_state(m, shutdown_state):
+    def update_fixed_shutdown_state(m, shutdown_states):
         """Update fixed shutdown state variables"""
         for g in m.G_E_THERM.union(m.G_C_THERM):
             for i in m.I:
                 for o in m.O:
                     for t in m.T:
-                        # m.SCENARIO[i, o].FIXED_W[g, t] = shutdown_state[g][i][o][t]
-                        m.SCENARIO[i, o].FIXED_W[g, t] = 0
+                        m.SCENARIO[i, o].FIXED_W[g, t] = shutdown_states[i][o][(g, t)]
+                        # m.SCENARIO[i, o].FIXED_W[g, t] = 0
 
         return m
 
     @staticmethod
-    def update_fixed_startup_state(m, startup_state):
+    def update_fixed_startup_state(m, startup_states):
         """Update fixed startup state variables"""
         for g in m.G_E_THERM.union(m.G_C_THERM):
             for i in m.I:
                 for o in m.O:
                     for t in m.T:
-                        # m.SCENARIO[i, o].FIXED_V[g, t] = startup_state[g][i][o][t]
-                        m.SCENARIO[i, o].FIXED_V[g, t] = 0
+                        m.SCENARIO[i, o].FIXED_V[g, t] = startup_states[i][o][(g, t)]
+                        # m.SCENARIO[i, o].FIXED_V[g, t] = 0
 
         return m
 
     @staticmethod
-    def update_fixed_on_state(m, on_state):
+    def update_fixed_on_state(m, on_states):
         """Update fixed startup state variables"""
         for g in m.G_E_THERM.union(m.G_C_THERM):
             for i in m.I:
                 for o in m.O:
                     for t in m.T:
-                        # m.SCENARIO[i, o].FIXED_U[g, t] = on_state[g][i][o][t]
-                        m.SCENARIO[i, o].FIXED_U[g, t] = 1
+                        m.SCENARIO[i, o].FIXED_U[g, t] = on_states[i][o][(g, t)]
+                        # m.SCENARIO[i, o].FIXED_U[g, t] = 1
 
         return m
 
@@ -1198,31 +1142,42 @@ class Subproblem:
 
         return m
 
-    def _solve_for_output(self, m):
-        """Solve for output"""
-
-        # Solve model
-        self.opt.solve(m, tee=True, options=self.solver_options, keepfiles=self.keepfiles)
-        result = None
-
-        # Log infeasible constraints if they exist
-        log_infeasible_constraints(m)
-
-        return m, result
-
-    @staticmethod
-    def _solve_for_prices(m):
-        """Solve for marginal prices"""
-        results = None
-        return m, results
-
-    @staticmethod
-    def _unfix_variables(m):
+    def _unfix_variables(self, m):
         """Unfix subproblem variables - return model variable fixed state to what it was prior to first solve"""
+
+        # Unfix policy variables
+        m = self.unfix_permit_price(m)
+        m = self.unfix_baseline(m)
+
+        # Unfix capacity sizing option variables
+        m = self.unfix_discrete_capacity_options(m)
+        m = self.unfix_continuous_capacity_options(m)
+
+        # Unfix UC integer variables
+        m = self.unfix_uc_integer_variables(m)
+
+        return m
+
+    def update_subproblem_parameters(self, m, master_results):
+        """Update parameters - values obtained from master problem"""
+
+        # Policy variables
+        m = self.update_fixed_baseline(m, master_results['baseline'])
+        m = self.update_fixed_permit_price(m, master_results['permit_price'])
+
+        # Capacity sizing variables
+        m = self.update_fixed_capacity_discrete(m, master_results['d'])
+        m = self.update_fixed_capacity_continuous(m, master_results['x_c'])
+
+        # UC binary variables
+        m = self.update_fixed_on_state(m, master_results['u'])
+        m = self.update_fixed_startup_state(m, master_results['v'])
+        m = self.update_fixed_shutdown_state(m, master_results['w'])
+
         return m
 
     @staticmethod
-    def _save_results(results):
+    def save_results(results):
         """
         Save (potentially intermediary) results
 
@@ -1233,31 +1188,10 @@ class Subproblem:
         """
 
         # Save results
-
-        pass
+        with open('subproblem_results.pickle', 'wb') as f:
+            pickle.dump(results, f)
 
     def solve_model(self, m):
-        """Solve model"""
-
-        # Container for model results
-        results = {}
-
-        # Solve for output
-        m, output_results = self._solve_for_output(m)
-
-        # Solve for prices
-        m, output_prices = self._solve_for_output(m)
-
-        # Store results in dictionary
-        results['output'] = output_results
-        results['prices'] = output_prices
-
-        # Unfix variables - returning model to state prior to first solve
-        m = self._unfix_variables(m)
-
-        return m, results
-
-    def _solve_model(self, m):
         """Solve model"""
 
         # Solve model
@@ -1268,10 +1202,172 @@ class Subproblem:
 
         return m
 
+    def solve_subproblem(self, m, master_results):
+        """Solve subproblem"""
+
+        # Update model parameters (values obtained from master problem solution)
+        # ----------------------------------------------------------------------
+        self.logger.info('Updating subproblem parameters')
+        m = self.update_subproblem_parameters(m, master_results)
+        self.logger.info('Finished updating subproblem parameters')
+
+        # Solve model for primal variables (energy output etc.)
+        # -----------------------------------------------------
+        # Fix master problem variables
+        self.logger.info('Fixing master problem variables')
+        m = self.fix_permit_price(m)
+        m = self.fix_baseline(m)
+        m = self.fix_discrete_capacity_options(m)
+        m = self.fix_continuous_capacity_options(m)
+        m = self.fix_uc_integer_variables(m, last_value=False)
+        self.logger.info('Finished fixing master problem variables')
+
+        # Solve model
+        self.logger.info('Solving model for primal variables')
+        start = time.time()
+        m = self.solve_model(m)
+        primal_variable_results = self._extract_primal_varialble_results(m)
+        print(f'Solved model for primal variables in: {time.time() - start}s')
+        self.logger.info(f'Solved model for primal variables in: {time.time() - start}s')
+
+        # Get sensitivities for fixed capacity sizing options
+        # ---------------------------------------------------
+        self.logger.info(f'Fixing variables to obtain capacity sizing option sensitivities')
+
+        # Fix UC integer variables
+        m = self.fix_uc_integer_variables(m, last_value=True)
+
+        # Unfix capacity variables
+        m = self.unfix_continuous_capacity_options(m)
+        m = self.unfix_discrete_capacity_options(m)
+
+        # Solve model
+        self.logger.info(f'Solving model to obtain capacity sizing option sensitivities')
+        start = time.time()
+        m = self.solve_model(m)
+        print(f'Solved model for capacity sizing sensitivities in: {time.time() - start}s')
+        self.logger.info(f'Solved model to obtain capacity sizing option sensitivities in: {time.time() - start}s')
+
+        capacity_dual_variable_results = self._extract_capacity_dual_variable_results(m)
+
+        # Get sensitivities for permit price and baseline
+        # -----------------------------------------------
+        self.logger.info('Get sensitivities for permit price and baseline')
+
+        # Fix capacity variables
+        m = self.fix_continuous_capacity_options(m)
+        m = self.fix_discrete_capacity_options(m)
+
+        # Fix all unit commitment primal variables
+        m = self.fix_uc_continuous_variables(m)
+
+        # Unfix permit price and baseline
+        m = self.unfix_permit_price(m)
+        m = self.unfix_baseline(m)
+
+        # Solve model
+        self.logger.info('Solving model for permit price and baseline sensitivities')
+        start = time.time()
+        m = self.solve_model(m)
+        print(f'Solved model for policy variable sensitivities in: {time.time() - start}s')
+        self.logger.info(f'Solved model for permit price and baseline sensitivities in: {time.time() - start}s')
+
+        policy_variable_results = self._extract_policy_dual_variable_results(m)
+
+        # Get sensitivities for UC binary variables
+        # -----------------------------------------
+        self.logger.info('Obtaining sensitivities for UC binary variables')
+
+        # Fixing policy variables
+        m = self.fix_permit_price(m)
+        m = self.fix_baseline(m)
+
+        # Unfix UC integer variables
+        m = self.unfix_uc_integer_variables(m)
+
+        # Solve model
+        self.logger.info('Solving model to obtain sensitivities for UC binary variables')
+        start = time.time()
+        m = self.solve_model(m)
+        print(f'Solved model for UC integer variable sensitivities in: {time.time() - start}')
+        self.logger.info(f'Solved model to obtain sensitivities for UC binary variables in: {time.time() - start}s')
+
+        uc_integer_variable_results = self._extract_uc_integer_dual_variable_results(m)
+
+        # Combine all results
+        results = {'primal': primal_variable_results,
+                   'dual': {**capacity_dual_variable_results, **policy_variable_results, **uc_integer_variable_results}}
+
+        return m, results
+
+    @staticmethod
+    def _extract_primal_varialble_results(m):
+        """Extract results"""
+
+        results = {
+            'ENERGY': {
+                i: {o: {key: val.expr() for key, val in m.SCENARIO[i, o].ENERGY.items()} for o in m.O} for i in m.I},
+            'ENERGY_IN':
+                {i: {o: {key: val.expr() for key, val in m.SCENARIO[i, o].ENERGY_IN.items()} for o in m.O} for i in
+                 m.I},
+            'ENERGY_OUT':
+                {i: {o: {key: val.expr() for key, val in m.SCENARIO[i, o].ENERGY_OUT.items()} for o in m.O} for i in
+                 m.I},
+            'p_lost_up': {i: {o: m.SCENARIO[i, o].p_lost_up.get_values() for o in m.O} for i in m.I},
+            'p_lost_down': {i: {o: m.SCENARIO[i, o].p_lost_down.get_values() for o in m.O} for i in m.I},
+            'upward_reserve_violation':
+                {i: {o: m.SCENARIO[i, o].upward_reserve_violation.get_values() for o in m.O} for i in m.I},
+        }
+
+        return results
+
+    @staticmethod
+    def _extract_capacity_dual_variable_results(m):
+        """Extract sensitivities associated with capacity sizing decisions"""
+
+        results = {'x_c': {i: {g: m.dual[m.FIXED_CAPACITY_CONT[(g, i)]] for g in
+                               m.G_C_STORAGE.union(m.G_C_WIND).union(m.G_C_SOLAR)} for i in m.I},
+                   'd': {key: m.dual[m.FIXED_CAPACITY_DISC[key]] for key in
+                         m.G_C_THERM.cross(m.I).cross(m.G_C_THERM_SIZE_OPTIONS)}
+                   }
+
+        return results
+
+    @staticmethod
+    def _extract_policy_dual_variable_results(m):
+        """Extract sensitivities associated with the emissions intensity baseline and the permit price"""
+
+        results = {'permit_price': {i: m.dual[m.FIXED_PERMIT_PRICE_CONS[i]] for i in m.I},
+                   'baseline': {i: m.dual[m.FIXED_BASELINE_CONS[i]] for i in m.I},
+                   }
+
+        return results
+
+    @staticmethod
+    def _extract_uc_integer_dual_variable_results(m):
+        """Extract sensitivities associated with integer variables in the UC problem"""
+
+        results = {
+            'u': {i: {
+                o: {key: m.dual[m.SCENARIO[i, o].FIXED_U_CONS[key]] for key in
+                    m.G_E_THERM.union(m.G_C_THERM).cross(m.T)}
+                for o in m.O} for i in m.I},
+            'v': {i: {
+                o: {key: m.dual[m.SCENARIO[i, o].FIXED_V_CONS[key]] for key in
+                    m.G_E_THERM.union(m.G_C_THERM).cross(m.T)}
+                for o in m.O} for i in m.I},
+            'w': {i: {
+                o: {key: m.dual[m.SCENARIO[i, o].FIXED_W_CONS[key]] for key in
+                    m.G_E_THERM.union(m.G_C_THERM).cross(m.T)}
+                for o in m.O} for i in m.I},
+        }
+
+        return results
+
 
 if __name__ == '__main__':
     # Start timer
-    start = time.time()
+    start_timer = time.time()
 
     # Define object used to construct subproblem model
     subproblem = Subproblem()
@@ -1281,97 +1377,11 @@ if __name__ == '__main__':
 
     # Prepare to read suffix values (dual values)
     subproblem_model.dual = Suffix(direction=Suffix.IMPORT)
+    print(f'Constructed model in: {time.time() - start_timer}s')
 
-    start_iteration = time.time()
+    # Data from master problem
+    with open('master_results.pickle', 'rb') as f:
+        master_results = pickle.load(f)
 
-    # Update fixed variables obtained from master program
-    subproblem_model = subproblem.update_fixed_baseline(subproblem_model, 'test')
-    subproblem_model = subproblem.update_fixed_permit_price(subproblem_model, 'test')
-    subproblem_model = subproblem.update_fixed_capacity_discrete(subproblem_model, 'test')
-    subproblem_model = subproblem.update_fixed_capacity_continuous(subproblem_model, 'test')
-
-    subproblem_model = subproblem.update_fixed_on_state(subproblem_model, 'test')
-    subproblem_model = subproblem.update_fixed_startup_state(subproblem_model, 'test')
-    subproblem_model = subproblem.update_fixed_shutdown_state(subproblem_model, 'test')
-
-    print(f'Constructed model in: {time.time() - start}s')
-
-    # Fix master problem variables
-    start = time.time()
-    subproblem_model = subproblem.fix_permit_price(subproblem_model)
-    print(f'Fixed permit_price in: {time.time() - start}s')
-
-    start = time.time()
-    subproblem_model = subproblem.fix_baseline(subproblem_model)
-    print(f'Fixed baseline in: {time.time() - start}s')
-
-    start = time.time()
-    subproblem_model = subproblem.fix_discrete_capacity_options(subproblem_model)
-    print(f'Fixed discrete_capacity_options in: {time.time() - start}s')
-
-    start = time.time()
-    subproblem_model = subproblem.fix_continuous_capacity_options(subproblem_model)
-    print(f'Fixed continuous_capacity_options in: {time.time() - start}s')
-
-    start = time.time()
-    subproblem_model = subproblem.fix_uc_integer_variables(subproblem_model, last_value=False)
-    print(f'Fixed uc_integer_variables in: {time.time() - start}s')
-
-    # Solve model
-    start = time.time()
-    subproblem_model = subproblem._solve_model(subproblem_model)
-    print(f'Solved model in: {time.time() - start}')
-
-    # Get sensitivities for fixed capacity sizing options
-    start = time.time()
-    subproblem.fix_uc_integer_variables(subproblem_model, last_value=True)
-    print(f'Fixed UC integer variables in: {time.time() - start}')
-
-    # Unfix capacity variables
-    start = time.time()
-    subproblem_model = subproblem.unfix_continuous_capacity_options(subproblem_model)
-    print(f'Unfixed continuous capacity option variables in: {time.time() - start}')
-
-    start = time.time()
-    subproblem_model = subproblem.unfix_discrete_capacity_options(subproblem_model)
-    print(f'Unfixed discrete capacity option variables in: {time.time() - start}')
-
-    start = time.time()
-    subproblem_model = subproblem._solve_model(subproblem_model)
-    print(f'Solved model (to obtain sensitivities) in: {time.time() - start}')
-
-    # # Fix integer variables
-    # subproblem_model = subproblem.fix_uc_integer_variables(subproblem_model)
-    #
-    # # Re-solve model (obtain dual variables0
-    # subproblem.solve_model(subproblem_model)
-
-    # # Get sensitivities for unit capacities and marginal prices
-    # # ---------------------------------------------------------
-    # # Fix integer variables for unit commitment problem
-    # subproblem_model = subproblem.fix_uc_integer_variables(subproblem_model)
-    #
-    # # Unfix capacity variables
-    # subproblem_model = subproblem.unfix_continuous_capacity_options(subproblem_model)
-    # subproblem_model = subproblem.unfix_discrete_capacity_options(subproblem_model)
-    #
-    # # Solve model
-    # subproblem.solve_model(subproblem_model)
-    #
-    # # Get sensitivities for permit price and baseline
-    # # -----------------------------------------------
-    # # Fix capacity variables
-    # subproblem_model = subproblem.fix_continuous_capacity_options(subproblem_model)
-    # subproblem_model = subproblem.fix_discrete_capacity_options(subproblem_model)
-    #
-    # # Fix all unit commitment primal variables
-    # subproblem_model = subproblem.fix_uc_continuous_variables(subproblem_model)
-    #
-    # # Unfix permit price and baseline
-    # m_scenario = subproblem.unfix_permit_price(subproblem_model)
-    # m_scenario = subproblem.unfix_baseline(subproblem_model)
-    #
-    # # Solve model
-    # subproblem.solve_model(subproblem_model)
-    #
-    # print(f'Completed iteration in: {time.time() - start_iteration}s')
+    # Solve subproblem
+    subproblem.solve_subproblem(subproblem_model, master_results)
