@@ -39,9 +39,8 @@ class ModelData:
         self.battery_properties = self._load_battery_properties()
         self.battery_properties_dict = self.battery_properties.to_dict()
 
-        # Candidate unit build limits
+        # Battery build costs
         self.candidate_unit_build_limits = self._load_candidate_unit_build_limits()
-        self.candidate_unit_build_limits_dict = self.candidate_unit_build_limits.to_dict()
 
         # Region minimum reserve levels
         self.minimum_reserve_levels = self._load_minimum_reserve_levels()
