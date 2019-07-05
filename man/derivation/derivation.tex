@@ -1,0 +1,768 @@
+\documentclass{article}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{8pt}
+
+%\usepackage{../notation/notation}
+\usepackage{notation}
+\usepackage{geometry,amsmath,amssymb,bm,mathtools,graphicx,pdfpages,tikz,float,blkarray,longtable,titlesec,cases,bm}
+%\setcounter{secnumdepth}{4}
+\geometry{
+	a4paper,
+	total={170mm,257mm},
+	left=15mm,
+	top=30mm,
+	right=15mm,
+	bottom=30mm
+}
+
+\title{Refunded Emissions Payment Scheme: Long-run Parameter Calibration}
+%\widehat{}\textasciicaron
+
+% Sets
+\newcommand{\sGenerators}{G}
+\newcommand{\sGeneratorsExisting}{G^{\mathrm{E}}}
+\newcommand{\sGeneratorsExistingThermal}{G^{\mathrm{E,T}}}
+\newcommand{\sGeneratorsExistingWind}{G^{\mathrm{E,W}}}
+\newcommand{\sGeneratorsExistingSolar}{G^{\mathrm{E,S}}}
+\newcommand{\sGeneratorsCandidate}{G^{\mathrm{C}}}
+\newcommand{\sGeneratorsCandidateThermal}{G^{\mathrm{C,T}}}
+\newcommand{\sGeneratorsCandidateWind}{G^{\mathrm{C,W}}}
+\newcommand{\sGeneratorsCandidateSolar}{G^{\mathrm{C,S}}}
+\newcommand{\sGeneratorsThermal}{G^{\mathrm{T}}}
+\newcommand{\sGeneratorsHydro}{G^{\mathrm{H}}}
+\newcommand{\sStorage}{G^{\mathrm{Q}}}
+\newcommand{\sStorageExisting}{G^{\mathrm{E,Q}}}
+\newcommand{\sStorageCandidate}{G^{\mathrm{C,Q}}}
+\newcommand{\sYears}{Y}
+\newcommand{\sScenarios}{S}
+\newcommand{\sIntervals}{T}
+\newcommand{\sZones}{Z}
+\newcommand{\sRegions}{R}
+\newcommand{\sInvestmentSizeOptions}{N^{\mathrm{C}}}
+\newcommand{\sInvestmentSizeOptionsGenerator}[1][\iGenerator]{\sInvestmentSizeOptions_{#1}}
+\newcommand{\sGeneratorsExistingThermalQuickStart}{G^{\mathrm{E,T}}_\mathrm{Q}}
+\newcommand{\sGeneratorsCandidateThermalQuickStart}{G^{\mathrm{C,T}}_\mathrm{Q}}
+\newcommand{\sGeneratorsThermalQuickStart}{G^{\mathrm{T}}_\mathrm{Q}}
+\newcommand{\sGeneratorsExistingThermalSlowStart}{G^{\mathrm{E,T}}_\mathrm{S}}
+\newcommand{\sLinks}{L}
+\newcommand{\sScenariosYear}{\sScenarios_{\iYear}}
+
+% Indices
+\newcommand{\iGenerator}{g}
+\newcommand{\iYear}{y}
+\newcommand{\iYearTerminal}{\overline{\iYear}}
+\newcommand{\iYearAlias}{j}
+\newcommand{\iScenario}{s}
+\newcommand{\iScenarioAlias}{m}
+\newcommand{\iInterval}{t}
+\newcommand{\iIntervalAlias}{k}
+\newcommand{\iIntervalTerminal}{\overline{\iInterval}}
+
+\newcommand{\iZone}{z}
+\newcommand{\iRegion}{r}
+\newcommand{\iInvestmentSizeOption}{n}
+\newcommand{\iLink}{l}
+
+% Parameters
+\newcommand{\cOperatingCost}[1][\iYear,\iScenario]{\mathrm{OP}_{#1}}
+\newcommand{\cOperatingCostThermal}[1][\iYear,\iScenario]{\mathrm{OP}^{\mathrm{T}}_{#1}}
+\newcommand{\cOperatingCostHydro}[1][\iYear,\iScenario]{\mathrm{OP}^{\mathrm{H}}_{#1}}
+\newcommand{\cOperatingCostWind}[1][\iYear,\iScenario]{\mathrm{OP}^{\mathrm{W}}_{#1}}
+\newcommand{\cOperatingCostSolar}[1][\iYear,\iScenario]{\mathrm{OP}^{\mathrm{S}}_{#1}}
+\newcommand{\cOperatingCostStorage}[1][\iYear,\iScenario]{\mathrm{OP}^{\mathrm{Q}}_{#1}}
+\newcommand{\cFixedOperationsMaintenanceCost}[1][\iGenerator]{\mathrm{FOM}_{#1}}
+\newcommand{\cScenarioDuration}[1][\iYear,\iScenario]{\rho_{#1}}
+\newcommand{\cMarginalCost}[1][\iGenerator,\iYear]{C^{\mathrm{MC}}_{#1}}
+\newcommand{\cStartupCost}[1][\iGenerator,\iYear]{C^{\mathrm{SU}}_{#1}}
+\newcommand{\cShutdownCost}[1][\iGenerator,\iYear]{C^{\mathrm{SD}}_{#1}}
+\newcommand{\cEmissionsIntensity}[1][\iGenerator]{E_{#1}}
+\newcommand{\cPowerOutputMax}[1][\iGenerator,\iYear]{\overline{P}_{#1}}
+\newcommand{\cAmortisationRate}[1][\iGenerator]{\gamma_{#1}}
+\newcommand{\cCandidateInvestmentCost}[1][\iGenerator,\iYear]{I^{\mathrm{C}}_{#1}}
+\newcommand{\cInvestmentCost}[1][\iYear]{\mathrm{INV}_{#1}}
+\newcommand{\cInterestRate}{i}
+\newcommand{\cAssetLifetime}[1][\iGenerator]{A_{#1}}
+\newcommand{\cTotalPresentValue}[1][]{\mathrm{TPV}_{#1}}
+\newcommand{\cInvestmentSize}{X^{\mathrm{C,T}}_{\iGenerator,\iInvestmentSizeOption}}
+\newcommand{\cBuildLimit}[1][]{B^{\mathrm{C,#1}}_{\iZone}}
+\newcommand{\cReserveUpRequirement}[1][\iRegion]{D^{+}_{#1}}
+\newcommand{\cUpTimeMin}[1][\iGenerator]{TU_{#1}}
+\newcommand{\cDownTimeMin}[1][\iGenerator]{TD_{#1}}
+\newcommand{\cRampRateUp}[1][\iGenerator]{RU_{#1}}
+\newcommand{\cRampRateDown}[1][\iGenerator]{RD_{#1}}
+\newcommand{\cPowerOutputMin}[1][\iGenerator]{\underline{P}_{#1}}
+\newcommand{\cStartupDuration}[1][\iGenerator]{SU_{#1}}
+\newcommand{\cStartupTrajectory}[1][\iGenerator,\iIntervalAlias]{P^{\mathrm{SU}}_{#1}}
+\newcommand{\cShutdownDuration}[1][\iGenerator]{SD_{#1}}
+\newcommand{\cShutdownTrajectory}[1][\iGenerator,\iIntervalAlias]{P^{\mathrm{SD}}_{#1}}
+\newcommand{\cCapacityFactor}[1][\iGenerator,\iYear,\iScenario,\iInterval]{Q_{#1}}
+\newcommand{\cPowerChargingMax}[1][\iGenerator]{\overline{P}^{\mathrm{in}}_{#1}}
+\newcommand{\cPowerDischargingMax}[1][\iGenerator]{\overline{P}^{\mathrm{out}}_{#1}}
+\newcommand{\cStorageUnitEnergyMax}[1][\iGenerator]{\overline{Q}_{#1}}
+\newcommand{\cStorageUnitEnergyIntervalEndMax}[1][\iGenerator]{\overline{Q}^{\mathrm{end}}_{#1}}
+\newcommand{\cStorageUnitEnergyIntervalEndMin}[1][\iGenerator]{\underline{Q}^{\mathrm{end}}_{#1}}
+\newcommand{\cStorageUnitEfficiencyCharging}{\eta_{\iGenerator}^{\mathrm{in}}}
+\newcommand{\cStorageUnitEfficiencyDischarging}{\eta_{\iGenerator}^{\mathrm{out}}}
+\newcommand{\cDemand}[1][\iZone,\iYear,\iScenario,\iInterval]{D_{#1}}
+\newcommand{\cIncidenceMatrix}[1][\iZone,\iLink]{K_{#1}}
+\newcommand{\cOperatingCostLostLoad}[1][\iYear,\iScenario]{\mathrm{OP}^{\mathrm{L}}_{#1}}
+\newcommand{\cPowerFlowMin}{\underline{P}_{\iLink}^{L}}
+\newcommand{\cPowerFlowMax}{\overline{P}_{\iLink}^{L}}
+\newcommand{\cEmmissionsCumulativeTarget}{\overline{E}}
+\newcommand{\cSchemeRevenueCumulativeTarget}{\overline{R}}
+\newcommand{\cLostLoadCost}{C^{\mathrm{L}}}
+\newcommand{\cReserveUpViolationPenalty}{C^{\mathrm{R}}}
+\newcommand{\cOperatingCostReserveUpViolation}[1][\iYear,\iScenario]{\mathrm{OP}^{\mathrm{R}}_{#1}}
+\newcommand{\cPowerOutputMinProportion}{\cPowerOutputMin^{\mathrm{f}}}
+\newcommand{\cEmissionsTargetViolationPenalty}{C^{\mathrm{E}}}
+\newcommand{\cEmissionsViolationTotalCost}{\mathrm{PEN}}
+\newcommand{\cObjectiveFunction}{\mathrm{OBJ}}
+\newcommand{\cOperatingCostScenario}[1][\iYear,\iScenario]{\mathrm{OP}^{\mathrm{\sScenarios}}_{#1}}
+
+
+% Variables
+\newcommand{\vBaseline}[1][\iYear]{\phi_{#1}}
+\newcommand{\vPermitPrice}[1][\iYear]{\tau_{#1}}
+\newcommand{\vEnergy}[1][\iGenerator,\iYear,\iScenario,\iInterval]{e_{#1}}
+\newcommand{\vStartupIndicator}[1][\iGenerator,\iYear,\iScenario,\iInterval]{v_{#1}}
+\newcommand{\vShutdownIndicator}[1][\iGenerator,\iYear,\iScenario,\iInterval]{w_{#1}}
+\newcommand{\vInstalledCapacity}[1][\iGenerator,\iYear]{x^{\mathrm{C}}_{#1}}
+\newcommand{\vInvestmentSizeIndicator}[1][\iGenerator,\iYear,\iInvestmentSizeOption]{d_{#1}}
+\newcommand{\vReserveUp}[1][\iGenerator,\iYear,\iScenario,\iInterval]{r^{+}_{#1}}
+\newcommand{\vReserveUpViolation}[1][\iRegion,\iYear,\iScenario,\iInterval]{r^{\mathrm{V}}_{#1}}
+\newcommand{\vOnIndicator}[1][\iGenerator,\iYear,\iScenario,\iInterval]{u_{#1}}
+\newcommand{\vPower}[1][\iGenerator,\iYear,\iScenario,\iInterval]{p_{#1}}
+\newcommand{\vPowerTotal}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\hat{p}_{#1}}
+\newcommand{\vPowerTotalIn}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\hat{p}^{\mathrm{in}}_{#1}}
+\newcommand{\vPowerTotalOut}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\hat{p}^{\mathrm{out}}_{#1}}
+%\newcommand{\vEnergy}[1][\iGenerator,\iYear,\iScenario,\iInterval]{e_{#1}}
+\newcommand{\vStorageUnitEnergy}[1][\iGenerator,\iYear,\iScenario,\iInterval]{q_{#1}}
+\newcommand{\vPowerFlow}[1][\iLink,\iYear,\iScenario,\iInterval]{p^{\sLinks}_{#1}}
+\newcommand{\vLostLoadEnergy}[1][\iZone,\iYear,\iScenario,\iInterval]{e^{\mathrm{V}}_{#1}}
+\newcommand{\vLostLoadPower}[1][\iZone,\iYear,\iScenario,\iInterval]{p^{\mathrm{V}}_{#1}}
+\newcommand{\vEmissionsTargetViolation}{f^{\mathrm{E}}}
+\newcommand{\vInstalledCapacityTotal}[1][\iGenerator,\iYear]{a_{#1}}
+\newcommand{\vInstalledCapacityTotalScenario}[1][\iGenerator,\iYear,\iScenario]{b_{#1}}
+\newcommand{\vInstalledCapacityOnStateAux}[1][\iGenerator,\iYear,\iScenario,\iInterval]{z_{#1}}
+\newcommand{\vInstalledCapacityStartupStateAux}[1][\iGenerator,\iYear,\iScenario,\iInterval+1]{y_{#1}}
+
+% Operators
+\DeclareMathOperator*{\minimise}{minimise}
+
+\begin{document}
+	\maketitle
+	
+\section{Notation}
+
+\section{Constraints}
+\subsection{Investment constraints}
+
+Discrete investment decisions for candidate thermal generators:
+
+\begin{equation}
+\vInstalledCapacity - \sum\limits_{\iInvestmentSizeOption \in \sInvestmentSizeOptionsGenerator} \vInvestmentSizeIndicator \cInvestmentSize = 0 \quad \forall \iGenerator \in \sGeneratorsCandidateThermal \quad \forall \iYear \in \sYears 
+\label{eqn: candidate thermal unit capacity}
+\end{equation}
+
+\begin{equation}
+\sum\limits_{\iInvestmentSizeOption \in \sInvestmentSizeOptionsGenerator} \vInvestmentSizeIndicator - 1 = 0 \quad \forall \iGenerator \in \sGeneratorsCandidateThermal \quad \forall \iYear \in \sYears
+\label{eqn: capacity thermal unit discrete size option - single choice}
+\end{equation}
+
+Continuous capacity sizing for solar, wind, and storage units:
+
+\begin{equation}
+- \vInstalledCapacity[\iGenerator,\iYear] \leq 0 \quad \forall \iGenerator \in \sGeneratorsCandidateSolar \cup \sGeneratorsCandidateWind \cup \sStorageCandidate \quad \forall \iYear \in \sYears
+\label{eqn: non negative investment capacity}
+\end{equation}
+
+Introduce auxiliary variable to denote the total capacity installed at each point in time:
+
+\begin{equation}
+	\vInstalledCapacityTotal - \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias] = 0 \quad \forall \iGenerator \in \sGeneratorsCandidate \quad \forall \iYear \in \sYears
+\end{equation}
+
+Define additional auxiliary variable that will be present within each sub-problem. Allows dual information related to capacity sizing decision to be obtained from each sub-problem:
+
+\begin{equation}
+\vInstalledCapacityTotalScenario - \vInstalledCapacityTotal = 0 \quad \forall \iGenerator \in \sGeneratorsCandidate \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios
+\end{equation}
+
+
+Build limits for different technologies in each zone:
+\begin{equation}
+\sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar_{\iZone}} \vInstalledCapacityTotal - \cBuildLimit[S] \leq 0 \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears
+\end{equation}
+
+\begin{equation}
+\sum\limits_{\iGenerator \in \sGeneratorsCandidateWind_{\iZone}} \vInstalledCapacityTotal - \cBuildLimit[W] \leq 0 \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears 
+\end{equation}
+
+\begin{equation}
+\sum\limits_{\iGenerator \in \sStorageCandidate_{\iZone}} \vInstalledCapacityTotal - \cBuildLimit[Q] \leq 0  \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears
+\label{eqn: storage build limits}
+\end{equation}
+
+\subsection{Unit commitment constraints}
+Ensures sufficient dispatchable power reserve in each region.
+\begin{equation}
+\sum\limits_{\iGenerator \in \sGeneratorsExistingThermal_{\iRegion} \cup \sGeneratorsCandidateThermal_{\iRegion} \cup \sStorageExisting_{\iRegion} \cup \sStorageCandidate_{\iRegion}} \vReserveUp + \vReserveUpViolation \geq \cReserveUpRequirement \quad \forall \iRegion \in \sRegions \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\label{eqn: reserve constraints}
+\end{equation}
+
+Coordinates generator state logic (on, off, start-up, shutdown):
+\begin{equation}
+\vOnIndicator - \vOnIndicator[\iGenerator,\iYear,\iScenario,\iInterval-1] = \vStartupIndicator - \vShutdownIndicator \quad \forall \iGenerator \in \sGeneratorsThermal \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+Minimum up time constraint:
+\begin{equation}
+\sum\limits_{\iIntervalAlias=\iInterval-\cUpTimeMin}^{\iInterval} \vStartupIndicator[\iGenerator,\iYear,\iScenario,\iIntervalAlias] \leq \vOnIndicator \quad \forall \iGenerator \in \sGeneratorsThermal \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \left[\cUpTimeMin, \iIntervalTerminal \right]
+\end{equation}
+
+Minimum down-time constraint:
+\begin{equation}
+\sum\limits_{\iIntervalAlias=\iInterval-\cDownTimeMin[\iGenerator+1]}^{\iInterval}\vShutdownIndicator[\iGenerator,\iYear,\iScenario,\iIntervalAlias] \leq 1 - \vOnIndicator \quad \forall \iGenerator \in \sGeneratorsThermal \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \left[\cDownTimeMin, \iIntervalTerminal \right]
+\end{equation}
+
+Ramp-rate up constraint:
+\begin{equation}
+\left(\vPower + \vReserveUp\right) - \vPower[\iGenerator,\iYear,\iScenario,\iInterval-1] \leq \cRampRateUp \quad \forall \iGenerator \in \sGeneratorsThermal \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+Ramp-rate down constraint:
+\begin{equation}
+- \vPower + \vPower[\iGenerator,\iYear,\iScenario,\iInterval-1] \leq \cRampRateDown \quad \forall \iGenerator \in \sGeneratorsThermal \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+Total power output - existing quick-start units:
+
+\begin{equation}
+\vPowerTotal = \cPowerOutputMin \left(\vOnIndicator + \vStartupIndicator[\iGenerator,\iYear,\iScenario,\iInterval+1]\right) + \vPower \quad \forall \iGenerator \in \sGeneratorsExistingThermalQuickStart \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+Total power output - candidate quick-start units:
+
+\begin{equation}
+\vPowerTotal = \cPowerOutputMinProportion \vInstalledCapacityTotalScenario \left(\vOnIndicator + \vStartupIndicator[\iGenerator,\iYear,\iScenario,\iInterval+1]\right) + \vPower \quad \forall \iGenerator \in \sGeneratorsCandidateThermalQuickStart \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\label{eqn: total power - quick start}
+\end{equation}
+
+Total power output - existing slow-start units:
+
+\begin{align}
+\begin{split}
+\vPowerTotal =  \cPowerOutputMin \left(\vOnIndicator + \vStartupIndicator[\iGenerator,\iYear,\iScenario,\iInterval+1]\right) + & \vPower + \sum\limits_{\iIntervalAlias=1}^{\cStartupDuration} \cStartupTrajectory \vStartupIndicator[\iGenerator,\iYear,\iInterval-\iIntervalAlias+\cStartupDuration+2] + \sum\limits_{\iIntervalAlias=2}^{\cShutdownDuration + 1} \cShutdownTrajectory \vShutdownIndicator[\iGenerator,\iYear,\iScenario,\iInterval-\iIntervalAlias+2]\\
+& \quad \forall \iGenerator \in \sGeneratorsExistingThermalSlowStart \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{split}
+\end{align}
+
+Total power output - wind units:
+
+\begin{equation}
+0 \leq \vPowerTotal \leq \cCapacityFactor^{\mathrm{W}} \cPowerOutputMax[\iGenerator] \quad \forall \iGenerator \in \sGeneratorsExistingWind \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals 
+\end{equation}
+
+\begin{equation}
+0 \leq \vPowerTotal \leq \cCapacityFactor^{\mathrm{W}} \vInstalledCapacityTotalScenario \quad \forall \iGenerator \in \sGeneratorsCandidateWind \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+Total power output - solar units:
+
+\begin{equation}
+0 \leq \vPowerTotal \leq \cCapacityFactor^{\mathrm{S}} \cPowerOutputMax[\iGenerator] \quad \forall \iGenerator \in \sGeneratorsExistingSolar \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals 
+\end{equation}
+
+\begin{equation}
+0 \leq \vPowerTotal \leq \cCapacityFactor^{\mathrm{S}} \vInstalledCapacityTotalScenario \quad \forall \iGenerator \in \sGeneratorsCandidateSolar \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+Total power output - hydro units:
+
+\begin{equation}
+0 \leq \vPowerTotal \leq \cPowerOutputMax[\iGenerator] \quad \forall \iGenerator \in \sGeneratorsHydro \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals 
+\end{equation}
+
+Total power output - thermal units:
+
+\begin{equation}
+\vPowerTotal \leq \cPowerOutputMax \quad \forall \iGenerator \in \sGeneratorsExistingThermal \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+\begin{equation}
+\vPowerTotal \leq \vInstalledCapacityTotalScenario \quad \forall \iGenerator \in \sGeneratorsCandidateThermal \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+Storage units:
+
+\begin{equation}
+0 \leq \vPowerTotalIn \leq \cPowerChargingMax \quad \forall \iGenerator \in \sStorageExisting \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+\begin{equation}
+0 \leq \vPowerTotalIn \leq \vInstalledCapacityTotalScenario \quad \forall \iGenerator \in \sStorageCandidate \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+\begin{equation}
+0 \leq \vPowerTotalOut \leq \cPowerDischargingMax \quad \forall \iGenerator \in \sStorageExisting \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+\begin{equation}
+0 \leq \vPowerTotalOut \leq \vInstalledCapacityTotalScenario \quad \forall \iGenerator \in \sStorageCandidate \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+\begin{equation}
+0 \leq \vStorageUnitEnergy \leq \cStorageUnitEnergyMax \quad \forall \iGenerator \in \sStorageExisting \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+\begin{equation}
+0 \leq \vStorageUnitEnergy \leq \vInstalledCapacityTotalScenario \quad \forall \iGenerator \in \sStorageCandidate \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+\begin{equation}
+\vStorageUnitEnergy = \vStorageUnitEnergy[\iGenerator,\iYear,\iScenario,\iInterval-1] + \cStorageUnitEfficiencyCharging \vPowerTotalIn - \frac{1}{\cStorageUnitEfficiencyDischarging} \vPowerTotalOut \quad \forall \iGenerator \in \sStorage \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+
+\begin{equation}
+\cStorageUnitEnergyIntervalEndMin \leq \vStorageUnitEnergy \leq \cStorageUnitEnergyIntervalEndMax \quad \forall \iGenerator \in \sStorage \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+Power balance for each zone:
+
+\begin{equation}
+\sum\limits_{\iGenerator \in \sGenerators} \vPowerTotal - \cDemand - \sum\limits_{\iLink \in \sLinks} \cIncidenceMatrix \vPowerFlow + \sum\limits_{\iGenerator \in \sStorage} \left(\vPowerTotalOut - \vPowerTotalIn\right) + \vLostLoadPower = 0 \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \iInterval \in \sIntervals
+\end{equation}
+
+Non-negative lost-load:
+\begin{equation}
+\vLostLoadPower \geq 0 \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \iInterval \in \sIntervals
+\end{equation}
+
+Non-negative reserve violation:
+\begin{equation}
+\vReserveUpViolation \geq 0 \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \iInterval \in \sIntervals
+\end{equation}
+
+Power flow between zones:
+\begin{equation}
+\cPowerFlowMin \leq \vPowerFlow \leq \cPowerFlowMax \quad \forall \iLink \in \sLinks \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\label{eqn: powerflow constraints}
+\end{equation}
+
+Energy from generator and storage units:
+\begin{equation}
+\vEnergy = \begin{dcases}
+\frac{\vPowerTotal[\iGenerator, \iYear,\iScenario,\iInterval-1] + \vPowerTotal}{2} & \forall \iGenerator \in \sGeneratorsExisting \cup \sGeneratorsCandidate \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals\\
+\frac{\vPowerTotalOut[\iGenerator, \iYear,\iScenario,\iInterval-1] + \vPowerTotalOut}{2} & \forall \iGenerator \in \sStorage \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals\\
+\end{dcases}
+\end{equation}
+
+Lost-load energy:
+\begin{equation}
+\vLostLoadEnergy = \frac{\vLostLoadPower[\iZone, \iYear,\iScenario,\iInterval-1] + \vLostLoadPower}{2} \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+\subsection{Policy constraints}
+
+Cumulative emissions constraint:
+
+\begin{equation}
+\sum\limits_{\iYear \in \sYears} \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsThermal} \vEnergy \cEmissionsIntensity - \cEmmissionsCumulativeTarget - \vEmissionsTargetViolation \leq 0
+\label{eqn: cumulative emissions target}
+\end{equation}
+
+Non-negative emissions target violation:
+\begin{equation}
+	-\vEmissionsTargetViolation \leq 0
+	\label{eqn: non negative emissions target violation}
+\end{equation}
+
+%Cumulative revenue constraint:
+%
+%\begin{equation}
+%\sum\limits_{\iYear \in \sYears} \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsExistingThermal \cup \sGeneratorsCandidate} \left(\cEmissionsIntensity - \vBaseline\right)\vPermitPrice\vEnergy \geq \cSchemeRevenueCumulativeTarget
+%\label{eqn: cumulative revenue constraint}
+%\end{equation}
+
+\section{Costs}
+\subsection{Operating costs}
+Thermal generators:
+\begin{equation}
+	\cOperatingCostThermal = \cScenarioDuration\sum\limits_{\iInterval}\sum\limits_{\iGenerator \in \sGeneratorsThermal} (\cMarginalCost + (\cEmissionsIntensity - \vBaseline)\vPermitPrice)\vEnergy + \cStartupCost \vStartupIndicator + \cShutdownCost \vShutdownIndicator
+\end{equation}
+
+Hydro generators:
+\begin{equation}
+	\cOperatingCostHydro = \cScenarioDuration\sum\limits_{\iInterval}\sum\limits_{\iGenerator \in \sGeneratorsHydro}\cMarginalCost[\iGenerator] \vEnergy
+\end{equation}
+
+Wind generators:
+\begin{equation}
+	\cOperatingCostWind = \cScenarioDuration\sum\limits_{\iInterval}\left[\sum\limits_{\iGenerator \in \sGeneratorsExistingWind} \cMarginalCost[\iGenerator] \vEnergy + \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \left[\cMarginalCost[\iGenerator] - \vBaseline \vPermitPrice\right] \vEnergy\right]
+\end{equation}
+
+Solar generators:
+\begin{equation}
+	\cOperatingCostSolar = \cScenarioDuration \sum\limits_{\iInterval}\left[\sum\limits_{\iGenerator \in \sGeneratorsExistingSolar} \cMarginalCost[\iGenerator] \vEnergy + \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \left[\cMarginalCost[\iGenerator] - \vBaseline\vPermitPrice\right] \vEnergy\right]
+\end{equation}
+
+Storage units:
+\begin{equation}
+	\cOperatingCostStorage = \cScenarioDuration\sum\limits_{\iInterval}\sum\limits_{\iGenerator \in \sStorage} \cMarginalCost[\iGenerator] \vEnergy
+\end{equation}
+
+Value of lost load:
+\begin{equation}
+	\cOperatingCostLostLoad = \cScenarioDuration\sum\limits_{\iInterval}\sum\limits_{\iZone \in \sZones} \cLostLoadCost \vLostLoadEnergy
+\end{equation}
+
+Penalty for violating reserve requirements:
+\begin{equation}
+	\cOperatingCostReserveUpViolation = \cScenarioDuration\sum\limits_{\iInterval}\sum\limits_{\iRegion \in \sRegions} \cReserveUpViolationPenalty \vReserveUpViolation
+\end{equation}
+
+Total operating cost for a given scenario, $\iScenario$:
+\begin{equation}
+	\cOperatingCostScenario = \cOperatingCostThermal + \cOperatingCostHydro + \cOperatingCostWind + \cOperatingCostSolar + \cOperatingCostStorage + \cOperatingCostLostLoad + \cOperatingCostReserveUpViolation
+\end{equation}
+
+Total operating cost for a given year, $\iYear$:
+
+\begin{equation}
+	\cOperatingCost[\iYear] = \sum\limits_{\iScenario \in \sScenariosYear} \cOperatingCostScenario
+\end{equation}
+
+\subsection{Fixed operation and maintenance (FOM) costs}
+
+\begin{equation}
+	\cFixedOperationsMaintenanceCost[\iYear] = \left[\sum\limits_{\iGenerator \in \sGeneratorsCandidate} \cFixedOperationsMaintenanceCost[\iGenerator] \vInstalledCapacityTotal + \sum\limits_{\iGenerator \in \sGeneratorsExisting} \cFixedOperationsMaintenanceCost \cPowerOutputMax[\iGenerator] \right]
+\end{equation}
+
+\subsection{Investment cost}
+
+\begin{equation}
+	\cInvestmentCost = \sum\limits_{g\in \sGeneratorsCandidate} \cAmortisationRate  \cCandidateInvestmentCost \vInstalledCapacity
+\end{equation}
+
+Where $\cAmortisationRate$ is the amortisation rate for the investment:
+
+\begin{equation}
+	\cAmortisationRate = \frac{\cInterestRate(1+\cInterestRate)^{\cAssetLifetime}}{(1+\cInterestRate)^{\cAssetLifetime} - 1}
+\end{equation}
+
+\subsection{Constraint violation penalties}
+Cumulative emissions constraint violation penalty:
+\begin{equation}
+	\cEmissionsViolationTotalCost = \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation
+\end{equation}
+
+\subsection{Total cost}
+
+Total present value over planning horizon:
+\begin{align}
+	\begin{split}
+		\cTotalPresentValue & = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \left[(1+\cInterestRate)^{-\iYear} (\cOperatingCost[\iYear] + \cFixedOperationsMaintenanceCost[\iYear]) \right] + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\cOperatingCost[\iYearTerminal] + \cFixedOperationsMaintenanceCost[\iYearTerminal] \right)
+	\end{split}
+\end{align}
+
+Note the investment cost is discounted to yield the present value via the factor: $(1+\cInterestRate)^{-\iYear}$. This is then divided by the interest rate $i$ to yield the present value of this amortised investment cost which is paid in perpetuity. This assumes that once the unit reaches the end of its physical life it will be replaced by an identical unit. The second term represents the present value of the total operating costs for the entire system, while the following term captures the costs incurred beyond the end of the model horizon. It assumes that the costs incurred in the last year of the model horizon will be incurred in all future years. This enables end-of-year effects to be taken into account - preventing the model from biasing investment towards the beginning or end of the model horizon.
+
+
+\subsection{Objective function}
+The objective function is equal to the total present value of the investment and operational plan over the model horizon, plus a term penalising violation of the cumulative emissions constraint, which is included to ensure sub-problem feasibility.
+
+
+\begin{equation}
+	\cObjectiveFunction = \cTotalPresentValue + \cEmissionsViolationTotalCost
+\end{equation}
+
+
+\section{Solution Strategy}
+The mathematical program described in the preceding sections is a mixed integer non-linear program (MINLP). The size of the problem becomes very large even when considering a small number of years and operating scenarios. To improve the computational tractability of the model a decomposition procedure is employed. A key source of non-linearity arises from the interaction of policy variables, $\vBaseline$ and $\vPermitPrice$, with energy output $\vEnergy$ in the objective function. To address this issue the decomposition approach first fixes these policy variables to zero, and simply seeks to solve for the investment path that achieves the cumulative emissions target given by (\ref{eqn: cumulative emissions target}). Having found the investment path that achieves this target for the lowest cost, the next goal is to identify the path of permit prices that achieves the same outcome. In some sense this approach is a similar to that adopted when solving macroeconomic models - first the social planner's problem is solved, with prices then introduced to see if an equivalent optimal outcome can be obtained. Having found the path of permit prices that replicates the cost minimising investment and output trajectory, an auxiliary objective function can then be solved to find the path of baselines that minimises disruptions to electricity prices while respecting the scheme revenue constraint.
+
+\subsection{Cost minimising investment and production trajectory}
+First, the policy parameters $\vBaseline$ and $\vPermitPrice$ are set equal to zero. Note that~(\ref{eqn: non negative investment capacity})--(\ref{eqn: storage build limits}) and (\ref{eqn: cumulative emissions target}) are complicating constraints. Without these constraints the problem could be solved in blocks - one for each operating scenario, $\iScenario$. \textbf{Optimality Condition Decomposition (OCD)} is used to decompose this problem into blocks. This strategy involves distributing the complicating constraints to different blocks of equations (operating scenarios), and solving each block. Updated values for Lagrangian multipliers and fixed variables values are be obtained upon finding solutions to these sub-problems. For simplicity, all complicating constraints will be assigned to the first operating scenario of the first year. The following sections outline the form of the optimisation programs when this program is solved via OCD.
+
+\subsubsection{Program for first year and first operating scenario}
+Note that all complicating constraints will be included in this scenario. The objective function of this sub-problem has the form:
+
+\begin{equation}
+	\minimise\limits_{\bm{x}_{\iYear,\iScenario}} \quad \cObjectiveFunction + \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios^{\prime}} \overline{\psi}_{\iGenerator,\iYear,\iScenario}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYear,\iScenario} - \vInstalledCapacityTotal\right]
+\end{equation}
+
+where:
+
+\begin{equation}
+	\sScenarios^{\prime} = \begin{dcases}
+	\sScenarios \setminus \{1\} & \mathrm{if} \quad \iYear = 1\\
+	\sScenarios & \mathrm{otherwise}\\
+	\end{dcases}
+\end{equation}
+
+subject to
+
+Unit commitment constraints for the given operating scenario, (\ref{eqn: reserve constraints})--(\ref{eqn: powerflow constraints}). Investment constraints (\ref{eqn: candidate thermal unit capacity})--(\ref{eqn: storage build limits}):
+
+\begin{equation}
+\vInstalledCapacity - \sum\limits_{\iInvestmentSizeOption \in \sInvestmentSizeOptionsGenerator} \vInvestmentSizeIndicator \cInvestmentSize = 0 \quad \forall \iGenerator \in \sGeneratorsCandidateThermal \quad \forall \iYear \in \sYears 
+\end{equation}
+
+\begin{equation}
+\sum\limits_{\iInvestmentSizeOption \in \sInvestmentSizeOptionsGenerator} \vInvestmentSizeIndicator - 1 = 0 \quad \forall \iGenerator \in \sGeneratorsCandidateThermal \quad \forall \iYear \in \sYears
+\end{equation}
+
+\begin{equation}
+- \vInstalledCapacity[\iGenerator,\iYear] \leq 0 \quad \forall \iGenerator \in \sGeneratorsCandidateSolar \cup \sGeneratorsCandidateWind \cup \sStorageCandidate \quad \forall \iYear \in \sYears
+\end{equation}
+
+\begin{equation}
+\vInstalledCapacityTotal - \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias] = 0 \quad \forall \iGenerator \in \sGeneratorsCandidate \quad \forall \iYear \in \sYears
+\end{equation}
+
+\begin{equation}
+\sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar_{\iZone}} \vInstalledCapacityTotal - \cBuildLimit[S] \leq 0 \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears
+\end{equation}
+
+\begin{equation}
+\sum\limits_{\iGenerator \in \sGeneratorsCandidateWind_{\iZone}} \vInstalledCapacityTotal - \cBuildLimit[W] \leq 0 \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears 
+\end{equation}
+
+\begin{equation}
+\sum\limits_{\iGenerator \in \sStorageCandidate_{\iZone}} \vInstalledCapacityTotal - \cBuildLimit[Q] \leq 0  \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears
+\end{equation}
+
+\begin{equation}
+\vInstalledCapacityTotalScenario[\iGenerator,1,1] - \vInstalledCapacityTotal[\iGenerator,1] = 0 \quad (\psi_{\iGenerator,1,1}) \quad \forall \iGenerator \in \sGeneratorsCandidate
+\label{eqn: first interval variable capacity}
+\end{equation}
+
+
+policy constraint (\ref{eqn: cumulative emissions target}).
+
+\begin{equation}
+\sum\limits_{\iYear \in \sYears} \sum\limits_{\iScenario \in \sScenarios^{\prime}} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsThermal} \overline{\vEnergy[]}_{\iGenerator,\iYear,\iScenario,\iInterval} \cEmissionsIntensity + \cScenarioDuration[1,1]\sum\limits_{\iInterval \in \sIntervals}\sum\limits_{\iGenerator \in \sGeneratorsThermal} \vEnergy[\iGenerator,1,1,\iInterval] \cEmissionsIntensity - \cEmmissionsCumulativeTarget - \vEmissionsTargetViolation \leq 0 \quad (\lambda)
+\label{eqn: subproblem emissions constraint}
+\end{equation}
+
+Note: this first operating scenario serves to identify feasible investment decisions over the entire planning horizon. These fixed variables relate to energy output in all intervals other than the first operating scenario of the first year in the model horizon. For each sub-problem (except for the first operating scenario of the first year), this installed capacity will be assumed constant decided in the first sub-problem will be assumed constant ($\vInstalledCapacityTotal$). However, when solving each sub-problem the optimal level of installed capacity that minimises operating costs will also be computed ($\vInstalledCapacityTotalScenario$), and the imbalance between $\vInstalledCapacityTotal - \vInstalledCapacityTotalScenario$ penalised within the objective function via multiplier variables.
+
+Expanding the objective function:
+
+\begin{equation}
+	\cObjectiveFunction = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \left[(1+\cInterestRate)^{-\iYear} (\cOperatingCost[\iYear] + \cFixedOperationsMaintenanceCost[\iYear]) \right] + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\cOperatingCost[\iYearTerminal] + \cFixedOperationsMaintenanceCost[\iYearTerminal] \right) + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation
+\end{equation}
+
+Note that $\cInvestmentCost$, $\cFixedOperationsMaintenanceCost$ depend on variables $\vInstalledCapacity$ and $\vInstalledCapacityTotal$ which are determined in the first operating scenario. Therefore these terms must remain within the objective. However, operating costs for all scenarios except for the first will be fixed (these variables will be determined within the other sub-problems). Therefore, the objective for the first operating scenario of the first year can be re-written as:
+
+\begin{align}
+	\begin{split}
+		\cObjectiveFunction = & \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost\\
+		& + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost[\iYear] + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios^{\prime}} \overline{\cOperatingCostScenario[]}_{\iYear, \iScenario}(1+\cInterestRate)^{-\iYear} + \cOperatingCostScenario[1,1] (1+\cInterestRate)^{-1}\\
+		& + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\overline{\cOperatingCost[]}_{\iYearTerminal} + \cFixedOperationsMaintenanceCost[\iYearTerminal] \right) + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation\\
+	\end{split}
+\end{align}
+
+Separating the fixed terms:
+
+\begin{align}
+\begin{split}
+\cObjectiveFunction = & \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost[\iYear] + \cOperatingCostScenario[1,1] (1+\cInterestRate)^{-1} + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation + k_{a}\\
+\end{split}
+\end{align}
+
+Where
+
+\begin{equation}
+	k_{a} = \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios^{\prime}} \overline{\cOperatingCostScenario[]}_{\iYear, \iScenario}(1+\cInterestRate)^{-\iYear} + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \overline{\cOperatingCost[]}_{\iYearTerminal}
+\end{equation}
+
+As the optimal point is not influenced by the constant term within the objective, $\cObjectiveFunction$ for the first operating scenario of the first year can be re-written as:
+
+\begin{equation}
+	\cObjectiveFunction_{1,1} = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost[\iYear] + \cOperatingCostScenario[1,1] (1+\cInterestRate)^{-1} + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation
+\end{equation}
+
+The minimisation problem then becomes:
+
+\begin{equation}
+	\minimise\limits_{\bm{x}} \quad \cObjectiveFunction_{1,1} + \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios^{\prime}} \overline{\psi}_{\iGenerator,\iYear,\iScenario}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYear,\iScenario} - \vInstalledCapacityTotal\right]
+\end{equation}
+
+Which can be re-written as:
+
+\begin{align}
+	\begin{split}
+		\minimise\limits_{\bm{x}} \quad  & \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost[\iYear] + \cOperatingCostScenario[1,1] (1+\cInterestRate)^{-1}\\
+		& + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation + \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios^{\prime}} \overline{\psi}_{\iGenerator,\iYear,\iScenario}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYear,\iScenario} - \vInstalledCapacityTotal\right]\\
+	\end{split}
+\end{align}
+
+\subsubsection{Program for all other operating scenarios}
+Note: no complicating constraints are explicitly included for these sub-problems, but that they are implicitly included within the objective function:
+
+\begin{align}
+	\begin{split}
+		\minimise\limits_{\bm{x}} \quad &\cObjectiveFunction + \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenarioAlias=1,m\neq \iScenario}^{\sScenarios} \overline{\psi}_{\iGenerator,\iYear,\iScenario}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYear,\iScenario} - \overline{\vInstalledCapacityTotal[]}_{\iGenerator,\iYear}\right]\\
+		& + \overline{\lambda} \left[\sum\limits_{\iYear \in \sYears} \sum\limits_{\iScenarioAlias=1, \iScenarioAlias\neq\iScenario}^{\sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsThermal} \overline{\vEnergy[]}_{\iGenerator,\iYear,\iScenario,\iInterval} \cEmissionsIntensity + \cScenarioDuration\sum\limits_{\iInterval \in \sIntervals}\sum\limits_{\iGenerator \in \sGeneratorsThermal} \vEnergy[\iGenerator,\iYear,\iScenario,\iInterval] \cEmissionsIntensity - \cEmmissionsCumulativeTarget - \overline{\vEmissionsTargetViolation}\right]\\
+	\end{split}
+\end{align}
+
+subject to
+
+Unit commitment constraints for the given operating scenario: (\ref{eqn: reserve constraints})--(\ref{eqn: powerflow constraints}). Investment capacity coupling constraints:
+
+\begin{equation}
+\vInstalledCapacityTotalScenario - \overline{\vInstalledCapacityTotal[]}_{\iGenerator,\iYear} = 0 \quad (\psi_{\iGenerator,\iYear,\iScenario}) \quad \forall \iGenerator \in \sGeneratorsCandidate
+\end{equation}
+
+Note that the second term is a constant, as is the term denoting emissions generated in all other operating scenarios. Allowing the objective to be re-written as:
+
+\begin{equation}
+	\minimise\limits_{\bm{x}_{\iYear,\iScenario}} \quad\cObjectiveFunction + k_{a} + \overline{\lambda} \left[k_{b} + \cScenarioDuration\sum\limits_{\iInterval \in \sIntervals}\sum\limits_{\iGenerator \in \sGeneratorsThermal} \vEnergy[\iGenerator,\iYear,\iScenario,\iInterval] \cEmissionsIntensity - \overline{\vEmissionsTargetViolation}\right]
+\end{equation}
+
+Where:
+
+\begin{equation}
+	k_{a} = \sum\limits_{\iGenerator \in \sGeneratorsCandidate \cup \sStorageCandidate}\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenarioAlias=1,m\neq \iScenario}^{\sScenarios} \overline{\psi}_{\iGenerator,\iYear,\iScenario}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYear,\iScenario} - \overline{\vInstalledCapacityTotal[]}_{\iGenerator,\iYear}\right]
+\end{equation}
+
+\begin{equation}
+	k_{b} = \sum\limits_{\iYear \in \sYears} \sum\limits_{\iScenarioAlias=1, \iScenarioAlias\neq\iScenario}^{\sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsThermal} \overline{\vEnergy[]}_{\iGenerator,\iYear,\iScenario,\iInterval} \cEmissionsIntensity - \cEmmissionsCumulativeTarget - \overline{\vEmissionsTargetViolation}
+\end{equation}
+
+As $k_{a}$ and $k_{b}$ are constants they will not influence the optimal value of $\bm{x}_{\iYear,\iScenario}$ and can be omitted from the objective function, yielding:
+
+\begin{equation}
+	\minimise\limits_{\bm{x}_{\iYear,\iScenario}} \quad \cObjectiveFunction + \overline{\lambda} \left[\cScenarioDuration\sum\limits_{\iInterval \in \sIntervals}\sum\limits_{\iGenerator \in \sGeneratorsThermal} \vEnergy[\iGenerator,\iYear,\iScenario,\iInterval] \cEmissionsIntensity \right]
+\end{equation}
+
+Expanding $\cObjectiveFunction$:
+
+\begin{equation}
+	\cObjectiveFunction = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \left[(1+\cInterestRate)^{-\iYear} (\cOperatingCost[\iYear] + \cFixedOperationsMaintenanceCost[\iYear]) \right] + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\cOperatingCost[\iYearTerminal] + \cFixedOperationsMaintenanceCost[\iYearTerminal] \right) + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation
+\end{equation}
+
+Note that $\cInvestmentCost$ only depends on $\vInstalledCapacity$ which is fixed when running each operating scenario. Similarly, $\cFixedOperationsMaintenanceCost$ only depends on $\vInstalledCapacityTotal$ which is also fixed when running each scenario. The amount by which the cumulative emissions target is exceeded, $\overline{\vEmissionsTargetViolation}$, is determined in the first year of the first scenario, and is therefore fixed for all other operating scenarios. Furthermore, the operating cost for all other scenarios, except the one under consideration, will also be fixed. These fixed expressions are denoted with bars below:
+
+\begin{align}
+	\begin{split}
+		\cObjectiveFunction = & \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\overline{\cInvestmentCost[]}_{\iYear} + \sum\limits_{\iYearAlias=1, \iYearAlias \neq \iYear}^{\sYears} \left[(1+\cInterestRate)^{-\iYearAlias} (\overline{\cOperatingCost[]}_{\iYearAlias} + \overline{\cFixedOperationsMaintenanceCost[]}_{\iYearAlias}) \right]\\
+		& + (1 + \cInterestRate)^{-\iYear}\left(\cOperatingCostScenario + \sum\limits_{\iScenarioAlias=1,\iScenarioAlias \neq \iScenario}^{\sScenarios} \overline{\cOperatingCostScenario[]}_{\iYear,\iScenarioAlias} + \overline{\cFixedOperationsMaintenanceCost[]}_{\iYear}\right)\\
+		& + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\cOperatingCost[\iYearTerminal] + \overline{\cFixedOperationsMaintenanceCost[]}_{\iYearTerminal} \right) + \cEmissionsTargetViolationPenalty \overline{\vEmissionsTargetViolation}\\
+	\end{split}
+\end{align}
+
+
+For all years, excluding the first and last years, the objective function for a given operating scenario can be expressed as:
+
+\begin{equation}
+	\cObjectiveFunction = k_{c} + \cOperatingCostScenario(1+\cInterestRate)^{-\iYear}
+\end{equation}
+
+Where:
+
+\begin{align}
+\begin{split}
+k_{c} = & \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\overline{\cInvestmentCost[]}_{\iYear} + \sum\limits_{\iYearAlias=1, \iYearAlias \neq \iYear}^{\sYears} \left[(1+\cInterestRate)^{-\iYearAlias} (\overline{\cOperatingCost[]}_{\iYearAlias} + \overline{\cFixedOperationsMaintenanceCost[]}_{\iYearAlias}) \right]\\
+& + (1 + \cInterestRate)^{-\iYear}\left(\sum\limits_{\iScenarioAlias=1,\iScenarioAlias \neq \iScenario}^{\sScenarios} \overline{\cOperatingCostScenario[]}_{\iYear,\iScenarioAlias} + \overline{\cFixedOperationsMaintenanceCost[]}_{\iYear}\right)\\
+& + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\overline{\cOperatingCost[]}_{\iYearTerminal} + \overline{\cFixedOperationsMaintenanceCost[]}_{\iYearTerminal} \right) + \cEmissionsTargetViolationPenalty \overline{\vEmissionsTargetViolation}\\
+\end{split}
+\end{align}
+
+As the constant term will not influence the optimal point it can be dropped from the objective. Therefore the objective function used to solve a given operating scenario (excluding the first and last years) is:
+
+\begin{equation}
+	\cObjectiveFunction_{\iYear,\iScenario} = \cOperatingCostScenario(1+\cInterestRate)^{-\iYear}
+\end{equation}
+
+If the last year of the model horizon, the final term within the $\cOperatingCost$ must be taken into account. This term assumes that the operating costs incurred in the final year will continue for all remaining years. As described previously, $\cFixedOperationsMaintenanceCost$ costs are treated as parameters, and can be removed form the objective:
+
+\begin{equation}
+	\cObjectiveFunction_{\iYearTerminal,\iScenario} = (1+\cInterestRate)^{-\iYearTerminal} \cOperatingCost[\iYearTerminal] + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cOperatingCost[\iYearTerminal]
+\end{equation}
+
+Simplifying:
+
+\begin{equation}
+	\cObjectiveFunction_{\iYearTerminal,\iScenario} = \cOperatingCost[\iYearTerminal]\left[(1+\cInterestRate)^{-\iYearTerminal}  + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate}\right]
+\end{equation}
+
+Simplifying:
+
+\begin{equation}
+	\cObjectiveFunction_{\iYearTerminal,\iScenario} = \cOperatingCost[\iYearTerminal] \left[(1+\cInterestRate)^{-\iYearTerminal} \left[1 + \frac{1}{\cInterestRate}\right]\right]
+\end{equation}
+
+Simplifying:
+
+\begin{equation}
+	\cObjectiveFunction_{\iYearTerminal,\iScenario} = \cOperatingCost[\iYearTerminal] \left[(1+\cInterestRate)^{-\iYearTerminal} \left[ \frac{\cInterestRate + 1}{\cInterestRate}\right]\right]
+\end{equation}
+
+\subsubsection{Linearisation}
+Note that constraint (\ref{eqn: total power - quick start}) contains interactions between $\vInstalledCapacityTotalScenario$, $\vOnIndicator$, and $\vStartupIndicator$. This is because the minimum power output is typically a function of the plant's installed capacity, which is variable within this framework. As both $\vOnIndicator$ and $\vStartupIndicator$ are binary variables their interactions with $\vInstalledCapacityTotalScenario$ can be linearised as follows:
+
+Assuming $0 \leq \vInstalledCapacityTotalScenario \leq \vInstalledCapacityTotalScenario^{\mathrm{up}}$, this term can be re-written as:
+
+\begin{equation}
+	\vInstalledCapacityOnStateAux = \vInstalledCapacityTotalScenario \vOnIndicator
+\end{equation}
+
+Where the auxiliary variable $\vInstalledCapacityOnStateAux$ is subject to the following restrictions:
+
+\begin{equation}
+	\vInstalledCapacityOnStateAux \leq \vInstalledCapacityTotalScenario^{\mathrm{up}} \vOnIndicator \quad \forall \iGenerator \in \sGeneratorsCandidateThermal \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+	\label{eqn: on state aux variable block start}
+\end{equation}
+
+\begin{equation}
+	\vInstalledCapacityOnStateAux \leq \vInstalledCapacityTotalScenario \quad \forall \iGenerator \in \sGeneratorsCandidateThermal \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+\begin{equation}
+	\vInstalledCapacityOnStateAux \geq \vInstalledCapacityTotalScenario - \vInstalledCapacityTotalScenario^{\mathrm{up}} \left(1 - \vOnIndicator \right) \quad \forall \iGenerator \in \sGeneratorsCandidateThermal \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+\begin{equation}
+	\vInstalledCapacityOnStateAux \geq 0 \quad \forall \iGenerator \in \sGeneratorsCandidateThermal \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+	\label{eqn: on state aux variable block end}
+\end{equation}
+
+Similarly, assuming $0 \leq \vInstalledCapacityTotalScenario \leq \vInstalledCapacityTotalScenario^{\mathrm{up}}$, this term can be re-written as:
+
+\begin{equation}
+\vInstalledCapacityStartupStateAux = \vInstalledCapacityTotalScenario \vStartupIndicator[\iGenerator,\iYear,\iScenario,\iInterval+1] \quad \forall \iGenerator \in \sGeneratorsCandidateThermal \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+Where the auxiliary variable $\vInstalledCapacityStartupStateAux$ is subject to the following restrictions:
+
+\begin{equation}
+	\vInstalledCapacityStartupStateAux \leq \vInstalledCapacityTotalScenario^{\mathrm{up}} \vStartupIndicator[\iGenerator,\iYear,\iScenario,\iInterval+1] \quad \forall \iGenerator \in \sGeneratorsCandidateThermal \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+	\label{eqn: startup state aux variable block start}
+\end{equation}
+
+\begin{equation}
+	\vInstalledCapacityStartupStateAux \leq \vInstalledCapacityTotalScenario \quad \forall \iGenerator \in \sGeneratorsCandidateThermal \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+\begin{equation}
+	\vInstalledCapacityStartupStateAux \geq \vInstalledCapacityTotalScenario - \vInstalledCapacityTotalScenario^{\mathrm{up}} \left(1 - \vStartupIndicator[\iGenerator,\iYear,\iScenario,\iInterval+1] \right) \quad \forall \iGenerator \in \sGeneratorsCandidateThermal \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+\begin{equation}
+	\vInstalledCapacityStartupStateAux \geq 0 \quad \forall \iGenerator \in \sGeneratorsCandidateThermal \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+	\label{eqn: startup state aux variable block end}
+\end{equation}
+
+Therefore (\ref{eqn: total power - quick start}) can be re-written as:
+
+\begin{equation}
+	\vPowerTotal = \cPowerOutputMinProportion \left(\vInstalledCapacityOnStateAux + \vInstalledCapacityStartupStateAux\right) + \vPower \quad \forall \iGenerator \in \sGeneratorsCandidateThermalQuickStart \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+\end{equation}
+
+Constraints (\ref{eqn: on state aux variable block start})--(\ref{eqn: on state aux variable block end}) and (\ref{eqn: startup state aux variable block start})--(\ref{eqn: startup state aux variable block end}) are also included in each sub-problem to constrain the values auxiliary variables can take on.
+
+\end{document}
