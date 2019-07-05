@@ -145,7 +145,7 @@
 \newcommand{\vInstalledCapacityTotal}[1][\iGenerator,\iYear]{a_{#1}}
 \newcommand{\vInstalledCapacityTotalScenario}[1][\iGenerator,\iYear,\iScenario]{b_{#1}}
 \newcommand{\vInstalledCapacityOnStateAux}[1][\iGenerator,\iYear,\iScenario,\iInterval]{z_{#1}}
-\newcommand{\vInstalledCapacityStartupStateAux}[1][\iGenerator,\iYear,\iScenario,\iInterval+1]{y_{#1}}
+\newcommand{\vInstalledCapacityStartupStateAux}[1][\iGenerator,\iYear,\iScenario,\iInterval+1]{c_{#1}}
 
 % Operators
 \DeclareMathOperator*{\minimise}{minimise}
@@ -458,7 +458,7 @@ Cumulative emissions constraint violation penalty:
 	\cEmissionsViolationTotalCost = \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation
 \end{equation}
 
-\subsection{Total cost}
+\subsection{Total present value}
 
 Total present value over planning horizon:
 \begin{align}
@@ -485,25 +485,14 @@ The mathematical program described in the preceding sections is a mixed integer 
 \subsection{Cost minimising investment and production trajectory}
 First, the policy parameters $\vBaseline$ and $\vPermitPrice$ are set equal to zero. Note that~(\ref{eqn: non negative investment capacity})--(\ref{eqn: storage build limits}) and (\ref{eqn: cumulative emissions target}) are complicating constraints. Without these constraints the problem could be solved in blocks - one for each operating scenario, $\iScenario$. \textbf{Optimality Condition Decomposition (OCD)} is used to decompose this problem into blocks. This strategy involves distributing the complicating constraints to different blocks of equations (operating scenarios), and solving each block. Updated values for Lagrangian multipliers and fixed variables values are be obtained upon finding solutions to these sub-problems. For simplicity, all complicating constraints will be assigned to the first operating scenario of the first year. The following sections outline the form of the optimisation programs when this program is solved via OCD.
 
-\subsubsection{Program for first year and first operating scenario}
-Note that all complicating constraints will be included in this scenario. The objective function of this sub-problem has the form:
+\subsubsection{Feasible investment plan}
+The objective function is separated such that one program is dedicated to finding a feasible investment plan. Multiplier variables obtained from operating program sub-problems will be used to guide the feasible investment plan to the least-cost plan. This program will consist of the objective function and the emissions constraint:
 
 \begin{equation}
-	\minimise\limits_{\bm{x}_{\iYear,\iScenario}} \quad \cObjectiveFunction + \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios^{\prime}} \overline{\psi}_{\iGenerator,\iYear,\iScenario}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYear,\iScenario} - \vInstalledCapacityTotal\right]
-\end{equation}
-
-where:
-
-\begin{equation}
-	\sScenarios^{\prime} = \begin{dcases}
-	\sScenarios \setminus \{1\} & \mathrm{if} \quad \iYear = 1\\
-	\sScenarios & \mathrm{otherwise}\\
-	\end{dcases}
+\minimise\limits_{\bm{x}_{\iYear,\iScenario}} \quad \cObjectiveFunction + \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \overline{\psi}_{\iGenerator,\iYear,\iScenario}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYear,\iScenario} - \vInstalledCapacityTotal\right]
 \end{equation}
 
 subject to
-
-Unit commitment constraints for the given operating scenario, (\ref{eqn: reserve constraints})--(\ref{eqn: powerflow constraints}). Investment constraints (\ref{eqn: candidate thermal unit capacity})--(\ref{eqn: storage build limits}):
 
 \begin{equation}
 \vInstalledCapacity - \sum\limits_{\iInvestmentSizeOption \in \sInvestmentSizeOptionsGenerator} \vInvestmentSizeIndicator \cInvestmentSize = 0 \quad \forall \iGenerator \in \sGeneratorsCandidateThermal \quad \forall \iYear \in \sYears 
@@ -534,80 +523,73 @@ Unit commitment constraints for the given operating scenario, (\ref{eqn: reserve
 \end{equation}
 
 \begin{equation}
-\vInstalledCapacityTotalScenario[\iGenerator,1,1] - \vInstalledCapacityTotal[\iGenerator,1] = 0 \quad (\psi_{\iGenerator,1,1}) \quad \forall \iGenerator \in \sGeneratorsCandidate
-\label{eqn: first interval variable capacity}
-\end{equation}
-
-
-policy constraint (\ref{eqn: cumulative emissions target}).
-
-\begin{equation}
-\sum\limits_{\iYear \in \sYears} \sum\limits_{\iScenario \in \sScenarios^{\prime}} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsThermal} \overline{\vEnergy[]}_{\iGenerator,\iYear,\iScenario,\iInterval} \cEmissionsIntensity + \cScenarioDuration[1,1]\sum\limits_{\iInterval \in \sIntervals}\sum\limits_{\iGenerator \in \sGeneratorsThermal} \vEnergy[\iGenerator,1,1,\iInterval] \cEmissionsIntensity - \cEmmissionsCumulativeTarget - \vEmissionsTargetViolation \leq 0 \quad (\lambda)
+\sum\limits_{\iYear \in \sYears} \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsThermal} \overline{\vEnergy[]}_{\iGenerator,\iYear,\iScenario,\iInterval} \cEmissionsIntensity - \cEmmissionsCumulativeTarget - \vEmissionsTargetViolation \leq 0 \quad (\lambda)
 \label{eqn: subproblem emissions constraint}
 \end{equation}
 
-Note: this first operating scenario serves to identify feasible investment decisions over the entire planning horizon. These fixed variables relate to energy output in all intervals other than the first operating scenario of the first year in the model horizon. For each sub-problem (except for the first operating scenario of the first year), this installed capacity will be assumed constant decided in the first sub-problem will be assumed constant ($\vInstalledCapacityTotal$). However, when solving each sub-problem the optimal level of installed capacity that minimises operating costs will also be computed ($\vInstalledCapacityTotalScenario$), and the imbalance between $\vInstalledCapacityTotal - \vInstalledCapacityTotalScenario$ penalised within the objective function via multiplier variables.
-
-Expanding the objective function:
+The objective function can be simplified by noting that power and energy output is fixed in all periods. Therefore only investment and fixed operation and maintenance costs will constitute variable components within the objective:
 
 \begin{equation}
-	\cObjectiveFunction = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \left[(1+\cInterestRate)^{-\iYear} (\cOperatingCost[\iYear] + \cFixedOperationsMaintenanceCost[\iYear]) \right] + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\cOperatingCost[\iYearTerminal] + \cFixedOperationsMaintenanceCost[\iYearTerminal] \right) + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation
+\cObjectiveFunction = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \left[(1+\cInterestRate)^{-\iYear} (\cOperatingCost[\iYear] + \cFixedOperationsMaintenanceCost[\iYear]) \right] + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\cOperatingCost[\iYearTerminal] + \cFixedOperationsMaintenanceCost[\iYearTerminal] \right) + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation
 \end{equation}
 
-Note that $\cInvestmentCost$, $\cFixedOperationsMaintenanceCost$ depend on variables $\vInstalledCapacity$ and $\vInstalledCapacityTotal$ which are determined in the first operating scenario. Therefore these terms must remain within the objective. However, operating costs for all scenarios except for the first will be fixed (these variables will be determined within the other sub-problems). Therefore, the objective for the first operating scenario of the first year can be re-written as:
+Note that operating costs will be fixed in each year. Expressions where all variables are fixed are overlined:
+
+\begin{equation}
+\cObjectiveFunction = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \left[(1+\cInterestRate)^{-\iYear} (\overline{\cOperatingCost[]}_{\iYear} + \cFixedOperationsMaintenanceCost[\iYear]) \right] + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\overline{\cOperatingCost[]}_{\iYearTerminal} + \cFixedOperationsMaintenanceCost[\iYearTerminal] \right) + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation
+\end{equation}
+
+Separating these fixed expressions:
 
 \begin{align}
 	\begin{split}
-		\cObjectiveFunction = & \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost\\
-		& + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost[\iYear] + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios^{\prime}} \overline{\cOperatingCostScenario[]}_{\iYear, \iScenario}(1+\cInterestRate)^{-\iYear} + \cOperatingCostScenario[1,1] (1+\cInterestRate)^{-1}\\
-		& + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\overline{\cOperatingCost[]}_{\iYearTerminal} + \cFixedOperationsMaintenanceCost[\iYearTerminal] \right) + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation\\
+		\cObjectiveFunction = &\sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost[\iYear]  + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation\\
+		& + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \overline{\cOperatingCost[]}_{\iYear} + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \overline{\cOperatingCost[]}_{\iYearTerminal}
 	\end{split}
 \end{align}
-
-Separating the fixed terms:
-
-\begin{align}
-\begin{split}
-\cObjectiveFunction = & \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost[\iYear] + \cOperatingCostScenario[1,1] (1+\cInterestRate)^{-1} + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation + k_{a}\\
-\end{split}
-\end{align}
-
-Where
-
-\begin{equation}
-	k_{a} = \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios^{\prime}} \overline{\cOperatingCostScenario[]}_{\iYear, \iScenario}(1+\cInterestRate)^{-\iYear} + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \overline{\cOperatingCost[]}_{\iYearTerminal}
-\end{equation}
-
-As the optimal point is not influenced by the constant term within the objective, $\cObjectiveFunction$ for the first operating scenario of the first year can be re-written as:
-
-\begin{equation}
-	\cObjectiveFunction_{1,1} = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost[\iYear] + \cOperatingCostScenario[1,1] (1+\cInterestRate)^{-1} + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation
-\end{equation}
-
-The minimisation problem then becomes:
-
-\begin{equation}
-	\minimise\limits_{\bm{x}} \quad \cObjectiveFunction_{1,1} + \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios^{\prime}} \overline{\psi}_{\iGenerator,\iYear,\iScenario}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYear,\iScenario} - \vInstalledCapacityTotal\right]
-\end{equation}
 
 Which can be re-written as:
 
+\begin{equation}
+	\cObjectiveFunction = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost[\iYear]  + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation + k_{a}
+\end{equation}
+
+Where:
+
+\begin{equation}
+	k_{a} = \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \overline{\cOperatingCost[]}_{\iYear} + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \overline{\cOperatingCost[]}_{\iYearTerminal}
+\end{equation}
+
+As this constant has no bearing on the optimal investment plan it can be removed from the objective. Therefore the function to be minimised is as follows:
+
 \begin{align}
 	\begin{split}
-		\minimise\limits_{\bm{x}} \quad  & \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost[\iYear] + \cOperatingCostScenario[1,1] (1+\cInterestRate)^{-1}\\
-		& + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation + \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios^{\prime}} \overline{\psi}_{\iGenerator,\iYear,\iScenario}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYear,\iScenario} - \vInstalledCapacityTotal\right]\\
+		\minimise\limits_{\bm{x}_{a}} \quad & \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost[\iYear]  + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation\\
+		& + \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \overline{\psi}_{\iGenerator,\iYear,\iScenario}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYear,\iScenario} - \vInstalledCapacityTotal\right]
 	\end{split}
 \end{align}
 
-\subsubsection{Program for all other operating scenarios}
-Note: no complicating constraints are explicitly included for these sub-problems, but that they are implicitly included within the objective function:
+Where $\bm{x}_{a} = \{\bm{x}^{\mathrm{C}}, \bm{a}, \bm{d}, \vEmissionsTargetViolation\}$
+
+\subsubsection{Operating scenario sub-problems}
+For a given year, $\iYear$, and operating scenario, $\iScenario$, the objective function of the sub-problem can be expressed as:
 
 \begin{align}
 	\begin{split}
-		\minimise\limits_{\bm{x}} \quad &\cObjectiveFunction + \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenarioAlias=1,m\neq \iScenario}^{\sScenarios} \overline{\psi}_{\iGenerator,\iYear,\iScenario}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYear,\iScenario} - \overline{\vInstalledCapacityTotal[]}_{\iGenerator,\iYear}\right]\\
-		& + \overline{\lambda} \left[\sum\limits_{\iYear \in \sYears} \sum\limits_{\iScenarioAlias=1, \iScenarioAlias\neq\iScenario}^{\sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsThermal} \overline{\vEnergy[]}_{\iGenerator,\iYear,\iScenario,\iInterval} \cEmissionsIntensity + \cScenarioDuration\sum\limits_{\iInterval \in \sIntervals}\sum\limits_{\iGenerator \in \sGeneratorsThermal} \vEnergy[\iGenerator,\iYear,\iScenario,\iInterval] \cEmissionsIntensity - \cEmmissionsCumulativeTarget - \overline{\vEmissionsTargetViolation}\right]\\
+		\minimise\limits_{\bm{x}_{\iYear,\iScenario}} \quad &\cObjectiveFunction + \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYearAlias=1}^{\sYears}\sum\limits_{\iScenarioAlias \in \sScenarios^{\prime}} \overline{\psi}_{\iGenerator,\iYearAlias,\iScenarioAlias}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYearAlias,\iScenarioAlias} - \overline{\vInstalledCapacityTotal[]}_{\iGenerator,\iYearAlias}\right]\\
+		& + \overline{\lambda} \left[\sum\limits_{\iYearAlias=1}^{\sYears} \sum\limits_{\iScenarioAlias \in \sScenarios^{\prime}} \cScenarioDuration[\iYearAlias,\iScenarioAlias] \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsThermal} \overline{\vEnergy[]}_{\iGenerator,\iYearAlias,\iScenarioAlias,\iInterval} \cEmissionsIntensity + \cScenarioDuration\sum\limits_{\iInterval \in \sIntervals}\sum\limits_{\iGenerator \in \sGeneratorsThermal} \vEnergy[\iGenerator,\iYear,\iScenario,\iInterval] \cEmissionsIntensity - \cEmmissionsCumulativeTarget - \overline{\vEmissionsTargetViolation}\right]\\
 	\end{split}
 \end{align}
+
+Where:
+
+\begin{equation}
+	\sScenarios^{\prime} = 
+	\begin{dcases}
+	\sScenarios \setminus \{\iScenario\} & \mathrm{if} \quad \iYearAlias = \iYear\\
+	\sScenarios & \mathrm{otherwise}\\
+	\end{dcases}
+\end{equation}
 
 subject to
 
@@ -626,11 +608,11 @@ Note that the second term is a constant, as is the term denoting emissions gener
 Where:
 
 \begin{equation}
-	k_{a} = \sum\limits_{\iGenerator \in \sGeneratorsCandidate \cup \sStorageCandidate}\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenarioAlias=1,m\neq \iScenario}^{\sScenarios} \overline{\psi}_{\iGenerator,\iYear,\iScenario}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYear,\iScenario} - \overline{\vInstalledCapacityTotal[]}_{\iGenerator,\iYear}\right]
+	k_{a} = \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYearAlias=1}^{\sYears}\sum\limits_{\iScenarioAlias \in\sScenarios^{\prime}}\overline{\psi}_{\iGenerator,\iYearAlias,\iScenarioAlias}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYearAlias,\iScenarioAlias} - \overline{\vInstalledCapacityTotal[]}_{\iGenerator,\iYearAlias}\right]
 \end{equation}
 
 \begin{equation}
-	k_{b} = \sum\limits_{\iYear \in \sYears} \sum\limits_{\iScenarioAlias=1, \iScenarioAlias\neq\iScenario}^{\sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsThermal} \overline{\vEnergy[]}_{\iGenerator,\iYear,\iScenario,\iInterval} \cEmissionsIntensity - \cEmmissionsCumulativeTarget - \overline{\vEmissionsTargetViolation}
+	k_{b} = \sum\limits_{\iYearAlias=1}^{\sYears} \sum\limits_{\iScenarioAlias \in \sScenarios^{\prime}}^{\sScenarios} \cScenarioDuration[\iYearAlias,\iScenarioAlias] \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsThermal} \overline{\vEnergy[]}_{\iGenerator,\iYearAlias,\iScenarioAlias,\iInterval} \cEmissionsIntensity - \cEmmissionsCumulativeTarget - \overline{\vEmissionsTargetViolation}
 \end{equation}
 
 As $k_{a}$ and $k_{b}$ are constants they will not influence the optimal value of $\bm{x}_{\iYear,\iScenario}$ and can be omitted from the objective function, yielding:
@@ -645,12 +627,12 @@ Expanding $\cObjectiveFunction$:
 	\cObjectiveFunction = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \left[(1+\cInterestRate)^{-\iYear} (\cOperatingCost[\iYear] + \cFixedOperationsMaintenanceCost[\iYear]) \right] + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\cOperatingCost[\iYearTerminal] + \cFixedOperationsMaintenanceCost[\iYearTerminal] \right) + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation
 \end{equation}
 
-Note that $\cInvestmentCost$ only depends on $\vInstalledCapacity$ which is fixed when running each operating scenario. Similarly, $\cFixedOperationsMaintenanceCost$ only depends on $\vInstalledCapacityTotal$ which is also fixed when running each scenario. The amount by which the cumulative emissions target is exceeded, $\overline{\vEmissionsTargetViolation}$, is determined in the first year of the first scenario, and is therefore fixed for all other operating scenarios. Furthermore, the operating cost for all other scenarios, except the one under consideration, will also be fixed. These fixed expressions are denoted with bars below:
+Note that $\cInvestmentCost$ only depends on $\vInstalledCapacity$ which is fixed when running each operating scenario. Similarly, $\cFixedOperationsMaintenanceCost$ only depends on $\vInstalledCapacityTotal$ which is also fixed when running each scenario. The amount by which the cumulative emissions target is exceeded, $\overline{\vEmissionsTargetViolation}$, is also fixed for all operating scenarios. Furthermore, the operating cost for all other scenarios, except the one under consideration, will also be fixed. These fixed expressions are denoted with overlines as shown below:
 
 \begin{align}
 	\begin{split}
-		\cObjectiveFunction = & \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\overline{\cInvestmentCost[]}_{\iYear} + \sum\limits_{\iYearAlias=1, \iYearAlias \neq \iYear}^{\sYears} \left[(1+\cInterestRate)^{-\iYearAlias} (\overline{\cOperatingCost[]}_{\iYearAlias} + \overline{\cFixedOperationsMaintenanceCost[]}_{\iYearAlias}) \right]\\
-		& + (1 + \cInterestRate)^{-\iYear}\left(\cOperatingCostScenario + \sum\limits_{\iScenarioAlias=1,\iScenarioAlias \neq \iScenario}^{\sScenarios} \overline{\cOperatingCostScenario[]}_{\iYear,\iScenarioAlias} + \overline{\cFixedOperationsMaintenanceCost[]}_{\iYear}\right)\\
+		\cObjectiveFunction = & \sum\limits_{\iYearAlias=1}^{\sYears} \frac{(1+\cInterestRate)^{-\iYearAlias}}{\cInterestRate}\overline{\cInvestmentCost[]}_{\iYearAlias} + \sum\limits_{\iYearAlias=1, \iYearAlias \neq \iYear}^{\sYears} \left[(1+\cInterestRate)^{-\iYearAlias} (\overline{\cOperatingCost[]}_{\iYearAlias} + \overline{\cFixedOperationsMaintenanceCost[]}_{\iYearAlias}) \right]\\
+		& + (1 + \cInterestRate)^{-\iYear}\left(\cOperatingCostScenario + \sum\limits_{\iScenarioAlias = 1,\iScenarioAlias\neq \iScenario}^{\sScenarios}\overline{\cOperatingCostScenario[]}_{\iYear,\iScenarioAlias} + \overline{\cFixedOperationsMaintenanceCost[]}_{\iYear}\right)\\
 		& + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\cOperatingCost[\iYearTerminal] + \overline{\cFixedOperationsMaintenanceCost[]}_{\iYearTerminal} \right) + \cEmissionsTargetViolationPenalty \overline{\vEmissionsTargetViolation}\\
 	\end{split}
 \end{align}
@@ -666,13 +648,13 @@ Where:
 
 \begin{align}
 \begin{split}
-k_{c} = & \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\overline{\cInvestmentCost[]}_{\iYear} + \sum\limits_{\iYearAlias=1, \iYearAlias \neq \iYear}^{\sYears} \left[(1+\cInterestRate)^{-\iYearAlias} (\overline{\cOperatingCost[]}_{\iYearAlias} + \overline{\cFixedOperationsMaintenanceCost[]}_{\iYearAlias}) \right]\\
-& + (1 + \cInterestRate)^{-\iYear}\left(\sum\limits_{\iScenarioAlias=1,\iScenarioAlias \neq \iScenario}^{\sScenarios} \overline{\cOperatingCostScenario[]}_{\iYear,\iScenarioAlias} + \overline{\cFixedOperationsMaintenanceCost[]}_{\iYear}\right)\\
-& + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\overline{\cOperatingCost[]}_{\iYearTerminal} + \overline{\cFixedOperationsMaintenanceCost[]}_{\iYearTerminal} \right) + \cEmissionsTargetViolationPenalty \overline{\vEmissionsTargetViolation}\\
+	k_{c} = & \sum\limits_{\iYearAlias=1}^{\sYears} \frac{(1+\cInterestRate)^{-\iYearAlias}}{\cInterestRate}\overline{\cInvestmentCost[]}_{\iYearAlias} + \sum\limits_{\iYearAlias=1, \iYearAlias \neq \iYear}^{\sYears} \left[(1+\cInterestRate)^{-\iYearAlias} (\overline{\cOperatingCost[]}_{\iYearAlias} + \overline{\cFixedOperationsMaintenanceCost[]}_{\iYearAlias}) \right]\\
+	& + (1 + \cInterestRate)^{-\iYear}\left(\sum\limits_{\iScenarioAlias = 1,\iScenarioAlias\neq \iScenario}^{\sScenarios}\overline{\cOperatingCostScenario[]}_{\iYear,\iScenarioAlias} + \overline{\cFixedOperationsMaintenanceCost[]}_{\iYear}\right)\\
+	& + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\overline{\cOperatingCost[]}_{\iYearTerminal} + \overline{\cFixedOperationsMaintenanceCost[]}_{\iYearTerminal} \right) + \cEmissionsTargetViolationPenalty \overline{\vEmissionsTargetViolation}\\
 \end{split}
 \end{align}
 
-As the constant term will not influence the optimal point it can be dropped from the objective. Therefore the objective function used to solve a given operating scenario (excluding the first and last years) is:
+As the constant term will not influence the optimal point it can be dropped from the objective. Therefore the objective function used to solve a given operating scenario (excluding last years) is:
 
 \begin{equation}
 	\cObjectiveFunction_{\iYear,\iScenario} = \cOperatingCostScenario(1+\cInterestRate)^{-\iYear}
@@ -702,8 +684,20 @@ Simplifying:
 	\cObjectiveFunction_{\iYearTerminal,\iScenario} = \cOperatingCost[\iYearTerminal] \left[(1+\cInterestRate)^{-\iYearTerminal} \left[ \frac{\cInterestRate + 1}{\cInterestRate}\right]\right]
 \end{equation}
 
+Considering all scenarios that constitute the final year:
+
+\begin{equation}
+	\cObjectiveFunction_{\iYearTerminal,\iScenario} = \sum\limits_{\iScenarioAlias \in \sScenarios^{\prime}} \overline{\cOperatingCostScenario[]}_{\iYearTerminal,\iScenarioAlias} \left[(1+\cInterestRate)^{-\iYearTerminal} \left[\frac{\cInterestRate + 1}{\cInterestRate}\right]\right] + \cOperatingCostScenario[\iYearTerminal,\iScenario] \left[(1+\cInterestRate)^{-\iYearTerminal} \left[\frac{\cInterestRate + 1}{\cInterestRate}\right]\right] 
+\end{equation}
+
+Which can be simplified to (as the constant terms will not impact the objective when solving for scenario $\iScenario$):
+
+\begin{equation}
+\cObjectiveFunction_{\iYearTerminal,\iScenario} = \cOperatingCostScenario[\iYearTerminal,\iScenario] \left[(1+\cInterestRate)^{-\iYearTerminal} \left[\frac{\cInterestRate + 1}{\cInterestRate}\right]\right] 
+\end{equation}
+
 \subsubsection{Linearisation}
-Note that constraint (\ref{eqn: total power - quick start}) contains interactions between $\vInstalledCapacityTotalScenario$, $\vOnIndicator$, and $\vStartupIndicator$. This is because the minimum power output is typically a function of the plant's installed capacity, which is variable within this framework. As both $\vOnIndicator$ and $\vStartupIndicator$ are binary variables their interactions with $\vInstalledCapacityTotalScenario$ can be linearised as follows:
+Note that constraint (\ref{eqn: total power - quick start}) contains interactions between $\vInstalledCapacityTotalScenario$, $\vOnIndicator$, and $\vStartupIndicator$. This is because the minimum power output is a function of the plant's installed capacity, which is variable within this framework. As both $\vOnIndicator$ and $\vStartupIndicator$ are binary variables their interactions with $\vInstalledCapacityTotalScenario$ can be linearised as follows:
 
 Assuming $0 \leq \vInstalledCapacityTotalScenario \leq \vInstalledCapacityTotalScenario^{\mathrm{up}}$, this term can be re-written as:
 
@@ -763,6 +757,60 @@ Therefore (\ref{eqn: total power - quick start}) can be re-written as:
 	\vPowerTotal = \cPowerOutputMinProportion \left(\vInstalledCapacityOnStateAux + \vInstalledCapacityStartupStateAux\right) + \vPower \quad \forall \iGenerator \in \sGeneratorsCandidateThermalQuickStart \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
 \end{equation}
 
-Constraints (\ref{eqn: on state aux variable block start})--(\ref{eqn: on state aux variable block end}) and (\ref{eqn: startup state aux variable block start})--(\ref{eqn: startup state aux variable block end}) are also included in each sub-problem to constrain the values auxiliary variables can take on.
+Constraints (\ref{eqn: on state aux variable block start})--(\ref{eqn: on state aux variable block end}) and (\ref{eqn: startup state aux variable block start})--(\ref{eqn: startup state aux variable block end}) are also included in each sub-problem to constrain the values of auxiliary variables.
+
+%Note: this first operating scenario serves to identify feasible investment decisions over the entire planning horizon. These fixed variables relate to energy output in all intervals other than the first operating scenario of the first year in the model horizon. For each sub-problem (except for the first operating scenario of the first year), this installed capacity will be assumed constant decided in the first sub-problem will be assumed constant ($\vInstalledCapacityTotal$). However, when solving each sub-problem the optimal level of installed capacity that minimises operating costs will also be computed ($\vInstalledCapacityTotalScenario$), and the imbalance between $\vInstalledCapacityTotal - \vInstalledCapacityTotalScenario$ penalised within the objective function via multiplier variables.
+%
+%
+%Expanding the objective function:
+%
+%\begin{equation}
+%\cObjectiveFunction = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \left[(1+\cInterestRate)^{-\iYear} (\cOperatingCost[\iYear] + \cFixedOperationsMaintenanceCost[\iYear]) \right] + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\cOperatingCost[\iYearTerminal] + \cFixedOperationsMaintenanceCost[\iYearTerminal] \right) + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation
+%\end{equation}
+%
+%Note that $\cInvestmentCost$, $\cFixedOperationsMaintenanceCost$ depend on variables $\vInstalledCapacity$ and $\vInstalledCapacityTotal$ which are determined in the first operating scenario. Therefore these terms must remain within the objective. However, operating costs for all scenarios except for the first will be fixed (these variables will be determined within the other sub-problems). Therefore, the objective for the first operating scenario of the first year can be re-written as:
+%
+%\begin{align}
+%\begin{split}
+%\cObjectiveFunction = & \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost\\
+%& + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost[\iYear] + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios^{\prime}} \overline{\cOperatingCostScenario[]}_{\iYear, \iScenario}(1+\cInterestRate)^{-\iYear} + \cOperatingCostScenario[1,1] (1+\cInterestRate)^{-1}\\
+%& + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\overline{\cOperatingCost[]}_{\iYearTerminal} + \cFixedOperationsMaintenanceCost[\iYearTerminal] \right) + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation\\
+%\end{split}
+%\end{align}
+%
+%Separating the fixed terms:
+%
+%\begin{align}
+%\begin{split}
+%\cObjectiveFunction = & \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost[\iYear] + \cOperatingCostScenario[1,1] (1+\cInterestRate)^{-1} + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation + k_{a}\\
+%\end{split}
+%\end{align}
+%
+%Where
+%
+%\begin{equation}
+%k_{a} = \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios^{\prime}} \overline{\cOperatingCostScenario[]}_{\iYear, \iScenario}(1+\cInterestRate)^{-\iYear} + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \overline{\cOperatingCost[]}_{\iYearTerminal}
+%\end{equation}
+%
+%As the optimal point is not influenced by the constant term within the objective, $\cObjectiveFunction$ for the first operating scenario of the first year can be re-written as:
+%
+%\begin{equation}
+%\cObjectiveFunction_{1,1} = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost[\iYear] + \cOperatingCostScenario[1,1] (1+\cInterestRate)^{-1} + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation
+%\end{equation}
+%
+%The minimisation problem then becomes:
+%
+%\begin{equation}
+%\minimise\limits_{\bm{x}} \quad \cObjectiveFunction_{1,1} + \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios^{\prime}} \overline{\psi}_{\iGenerator,\iYear,\iScenario}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYear,\iScenario} - \vInstalledCapacityTotal\right]
+%\end{equation}
+%
+%Which can be re-written as:
+%
+%\begin{align}
+%\begin{split}
+%\minimise\limits_{\bm{x}} \quad  & \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost[\iYear] + \cOperatingCostScenario[1,1] (1+\cInterestRate)^{-1}\\
+%& + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation + \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios^{\prime}} \overline{\psi}_{\iGenerator,\iYear,\iScenario}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYear,\iScenario} - \vInstalledCapacityTotal\right]\\
+%\end{split}
+%\end{align}
 
 \end{document}
