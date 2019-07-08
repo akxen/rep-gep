@@ -106,9 +106,6 @@ class ModelData:
         # Powerflow limits over interconnectors
         self.powerflow_limits = self._get_link_powerflow_limits()
 
-        # Weighted average cost of capital % (from 2018 AEMO Integrated System Plan)
-        self.WACC = 0.06
-
     @staticmethod
     def _col_mapper(text):
         """Try and convert text in columns to int if possible"""
@@ -256,7 +253,7 @@ class ModelData:
         # Filter candidate solar units
         mask_candidate_solar = self.candidate_units[('PARAMETERS', 'TECHNOLOGY_PRIMARY')].isin(['SOLAR'])
 
-        # IDs for candidate solar units
+        # IDs for existing thermal units
         candidate_solar_ids = self.candidate_units[mask_candidate_solar].index
 
         return candidate_solar_ids
@@ -267,7 +264,7 @@ class ModelData:
         # Filter candidate wind units
         mask_candidate_wind = self.candidate_units[('PARAMETERS', 'TECHNOLOGY_PRIMARY')].isin(['WIND'])
 
-        # IDs for candidate wind units
+        # IDs for existing thermal units
         candidate_wind_ids = self.candidate_units[mask_candidate_wind].index
 
         return candidate_wind_ids

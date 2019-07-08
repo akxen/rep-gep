@@ -75,7 +75,7 @@ class CommonComponents:
         m.G_E = m.G_E_THERM.union(m.G_E_WIND).union(m.G_E_SOLAR).union(m.G_E_HYDRO)
 
         # All candidate generators
-        m.G_C = m.G_C_THERM.union(m.G_C_WIND).union(m.G_C_SOLAR).union(m.G_C_STORAGE)
+        m.G_C = m.G_C_THERM.union(m.G_C_WIND).union(m.G_C_SOLAR)
 
         # All generators
         m.G = m.G_E.union(m.G_C)
@@ -84,12 +84,53 @@ class CommonComponents:
         m.Y = RangeSet(2016, 2017)
 
         # Operating scenarios for each year
-        m.S = RangeSet(0, 3)
+        m.O = RangeSet(0, 9)
 
         # Operating scenario hour
         m.T = RangeSet(0, 23, ordered=True)
 
         # Build limit technology types
         m.BUILD_LIMIT_TECHNOLOGIES = Set(initialize=self.data.candidate_unit_build_limits.index)
+
+        return m
+
+    @staticmethod
+    def define_parameters(m):
+        """Define model parameters - these are common to all blocks"""
+
+        def thermal_unit_discrete_size_rule(m, g, n):
+            """Possible discrete sizes for candidate thermal units"""
+
+            # Discrete sizes available for candidate thermal unit investment
+            options = {0: 0, 1: 100, 2: 200, 3: 400}
+
+            return float(options[n])
+
+        # Candidate thermal unit size options
+        m.X_CT = Param(m.G_C_THERM, m.G_C_THERM_SIZE_OPTIONS, rule=thermal_unit_discrete_size_rule)
+
+        return m
+
+    @staticmethod
+    def define_variables(m):
+        """Define model variables common to all sub-problems"""
+
+        # Capacity of candidate units (defined for all years in model horizon)
+        m.x_c = Var(m.G_C.union(m.G_C_STORAGE), m.Y, within=NonNegativeReals, initialize=0)
+
+        # Binary variable used to determine size of candidate thermal units
+        m.d = Var(m.G_C_THERM, m.Y, m.G_C_THERM_SIZE_OPTIONS, within=NonNegativeReals, initialize=0)
+
+        # Startup indicator
+        m.v = Var(m.G_THERM, m.T, within=Binary)
+
+        # Shutdown indicator
+        m.w = Var(m.G_THERM, m.T, within=Binary)
+
+        return m
+
+    @staticmethod
+    def define_expressions(m):
+        """Define expressions common to all sub-problems"""
 
         return m
