@@ -93,3 +93,23 @@ class CommonComponents:
         m.BUILD_LIMIT_TECHNOLOGIES = Set(initialize=self.data.candidate_unit_build_limits.index)
 
         return m
+
+    def define_parameters(self, m):
+        """Define common parameters"""
+
+        def existing_units_max_output_rule(_m, g):
+            """Max power output for existing units"""
+            return float(self.data.existing_units_dict[('PARAMETERS', 'REG_CAP')][g])
+
+        # Max output for existing units
+        m.P_MAX = Param(m.G_E, rule=existing_units_max_output_rule)
+
+        def retirement_indicator_rule(_m, g, y):
+            """Indicates if unit is retired in a given year. 1 - retired, 0 - still in service"""
+            # TODO: Use announced retirement data from NTNDP. Assume no closures for now.
+            return float(0)
+
+        # Retirement indicator: 1 - unit is retired, 0 - unit is still in service
+        m.F = Param(m.G_E, m.Y, rule=retirement_indicator_rule)
+
+        return m

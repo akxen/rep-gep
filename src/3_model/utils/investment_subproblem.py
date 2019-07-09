@@ -131,29 +131,17 @@ class InvestmentPlan:
         # Weighted cost of capital - interest rate assumed in discounting + amortisation calculations
         m.WACC = Param(initialize=float(self.data.WACC))
 
+        # Candidate capacity dual variable obtained from sub-problem solution. Updated each iteration.
+        m.PSI_FIXED = Param(m.G_C, m.Y, m.S, initialize=1000000, mutable=True)
+
+        # Candidate capacity variable obtained from sub-problem
+        m.CANDIDATE_CAPACITY_FIXED = Param(m.G_C, m.Y, m.S, initialize=0, mutable=True)
+
         # -------------------------------------------------------------------------------------------------------------
         # To be placed in common components class later
         # -------------------------------------------------------------------------------------------------------------
-        def existing_units_max_output_rule(_m, g):
-            """Max power output for existing units"""
-            return float(self.data.existing_units_dict[('PARAMETERS', 'REG_CAP')][g])
 
-        # Max output for existing units
-        m.P_MAX = Param(m.G_E, rule=existing_units_max_output_rule)
 
-        def retirement_indicator_rule(_m, g, y):
-            """Indicates if unit is retired in a given year. 1 - retired, 0 - still in service"""
-            # TODO: Use announced retirement data from NTNDP. Assume no closures for now.
-            return float(0)
-
-        # Retirement indicator: 1 - unit is retired, 0 - unit is still in service
-        m.F = Param(m.G_E, m.Y, rule=retirement_indicator_rule)
-
-        # Candidate capacity dual variable obtained from sub-problem solution. Updated each iteration.
-        m.PSI = Param(m.G_C, m.Y, m.S, initialize=1000000, mutable=True)
-
-        # Candidate capacity variable obtained from sub-problem
-        m.FIXED_CANDIDATE_CAPACITY = Param(m.G_C, m.Y, m.S, initialize=0, mutable=True)
 
         return m
 
@@ -306,7 +294,7 @@ class InvestmentPlan:
             end_of_year_cost = (m.DISCOUNT_FACTOR[m.Y.last()] / m.WACC) * m.FOM[m.Y.last()]
 
             # Sub-problem dual information
-            dual_cost = sum(m.PSI[g, y, s] * (m.FIXED_CANDIDATE_CAPACITY[g, y, s] - m.a[g, y])
+            dual_cost = sum(m.PSI_FIXED[g, y, s] * (m.CANDIDATE_CAPACITY_FIXED[g, y, s] - m.a[g, y])
                             for g in m.G_C for y in m.Y for s in m.S)
 
             # Objective function - note: also considers penalty (m.PEN) associated with emissions constraint violation
@@ -330,6 +318,9 @@ class InvestmentPlan:
 
         # Define sets
         m = self.components.define_sets(m)
+
+        # Define parameters common to all sub-problems
+        m = self.components.define_parameters(m)
 
         # Define parameters
         m = self.define_parameters(m)
