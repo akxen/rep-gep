@@ -181,8 +181,22 @@ def check_plots(centroids, samples):
     centroids[('SOLAR', 'ADE|SAT')].T.plot(ax=ax, color='b', alpha=0.8, legend=False)
 
 
-if __name__ == '__main__':
-    # Load dataset
+def main(output_dir):
+    """
+    Process scenario data
+
+    Parameters
+    ----------
+    output_dir : str
+        Directory where output files are to be stored (also contains outputs from previous steps)
+
+    Returns
+    -------
+    df_all_centroids : pandas DataFrame
+        Pandas DataFrame containing centroids for all scenarios generated
+    """
+
+    # Load dataset of pre-processed input traces
     dataset = pd.read_hdf(os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'dataset.h5'))
 
     # All samples
@@ -210,4 +224,14 @@ if __name__ == '__main__':
     df_all_centroids = pd.concat(all_centroids)
 
     # Save to file
-    df_all_centroids.to_pickle(os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'centroids.pickle'))
+    df_all_centroids.to_pickle(os.path.join(output_dir, 'output', 'centroids.pickle'))
+
+    return df_all_centroids
+
+
+if __name__ == '__main__':
+    # Output data directory
+    output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output')
+
+    # Construct scenarios
+    df_centroids = main(output_directory)

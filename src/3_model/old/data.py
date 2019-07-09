@@ -447,13 +447,14 @@ class ModelData:
     #     return interconnector_limits
 
 
-# Directory containing files from which dataset is derived
-raw_data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, 'data')
+if __name__ == '__main__':
+    # Directory containing files from which dataset is derived
+    raw_data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, 'data')
 
-# Directory containing core data files
-data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '1_collect_data', 'output')
+    # Directory containing core data files
+    data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '1_collect_data', 'output')
 
-# Directory containing input traces
-input_traces_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '2_input_traces', 'output')
+    # Directory containing input traces
+    input_traces_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '2_input_traces', 'output')
 
-model = ModelData(raw_data_directory, data_directory, input_traces_directory)
+    model = ModelData(raw_data_directory, data_directory, input_traces_directory)

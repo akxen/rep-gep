@@ -1,6 +1,7 @@
 """Combine demand, hydro, wind, and solar traces into a single DataFrame"""
 
 import os
+import time
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -96,12 +97,16 @@ def format_wind_traces(data_dir):
     return df
 
 
-def format_demand_traces(data_dir, network_dir):
+def format_demand_traces(data_dir, root_data_dir):
     """
     Format demand traces
 
     Note: Only considering the 'neutral' demand scenario
     """
+
+    # Construct directory containing network data
+    network_dir = os.path.join(root_data_dir, 'files', 'egrimod-nem-dataset-v1.3', 'akxen-egrimod-nem-dataset-4806603',
+                               'network')
 
     # Load demand traces
     df_region_demand = pd.read_hdf(os.path.join(data_dir, 'demand_traces.h5'))
@@ -218,34 +223,46 @@ def format_hydro_traces(data_dir):
     return df_o
 
 
-if __name__ == '__main__':
-    # Paths
-    # -----
-    # Directory containing output files (contains inputs from previous steps)
-    output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output')
+def main(root_data_dir, output_dir):
+    """
+    Combine all input traces
 
-    # Directory containing network node information
-    network_data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
-                                          'data', 'files', 'egrimod-nem-dataset-v1.3',
-                                          'akxen-egrimod-nem-dataset-4806603', 'network')
+    Parameters
+    ----------
+    root_data_dir : str
+        Directory containing core data files on which scenarios are based
+
+    output_dir : str
+        Directory for output files
+
+    Returns
+    -------
+    df_dataset : pandas DataFrame
+        Dataset containing all input traces
+    """
 
     # Formatted traces
     # ----------------
     # Wind traces
-    df_wind = format_wind_traces(output_directory)
-    print('Processed wind data')
+    print('Processing wind data')
+    start = time.time()
+    df_wind = format_wind_traces(output_dir)
+    print(f'Processed wind data in: {time.time() - start}s')
 
     # Demand traces
-    df_demand = format_demand_traces(output_directory, network_data_directory)
-    print('Processed demand data')
+    start = time.time()
+    df_demand = format_demand_traces(output_dir, root_data_dir)
+    print(f'Processed demand data in: {time.time() - start}s')
 
     # Hydro traces
-    df_hydro = format_hydro_traces(output_directory)
-    print('Processed hydro data')
+    start = time.time()
+    df_hydro = format_hydro_traces(output_dir)
+    print(f'Processed hydro data in: {time.time() - start}s')
 
     # Solar traces
-    df_solar = format_solar_traces(output_directory)
-    print('Processed solar data')
+    start = time.time()
+    df_solar = format_solar_traces(output_dir)
+    print(f'Processed solar data in: {time.time() - start}s')
 
     # Merge into single DataFrame
     # ---------------------------
@@ -280,3 +297,17 @@ if __name__ == '__main__':
     # Save to file
     # ------------
     df_dataset.to_hdf(os.path.join(output_directory, 'dataset.h5'), key='dataset')
+
+    return df_dataset
+
+
+if __name__ == '__main__':
+    # Root data directory
+    root_data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
+                                       'data')
+
+    # Directory containing output files (contains inputs from previous steps)
+    output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output')
+
+    # Combine input traces
+    df_dataset = main(root_data_directory, output_directory)

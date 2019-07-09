@@ -1,3 +1,5 @@
+"""Process input traces"""
+
 import os
 import re
 
@@ -438,18 +440,26 @@ class ProcessTraces(ParseMMSDMTables):
         return df_o
 
 
-if __name__ == '__main__':
-    # Paths
-    # -----
-    # Directory in which output files are stored
-    output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output')
+def main(root_data_dir, output_dir):
+    """
+    Process and save all input traces
 
-    # Root data directory
-    root_data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
-                                       'data')
+    Parameters
+    ----------
+    root_data_dir : str
+        Root directory containing core data files used to construct scenarios
+
+    output_dir : str
+        Directory in which output files will be placed
+
+    Returns
+    -------
+    output : dict
+        Dictionary with processed traces. Key = type of trace, Value = processed traces in Pandas DataFrame format
+    """
 
     # Root directory for NTNDP information
-    ntndp_directory = os.path.join(root_data_directory, 'files', '2016 NTNDP Database Input Data Traces')
+    ntndp_directory = os.path.join(root_data_dir, 'files', '2016 NTNDP Database Input Data Traces')
 
     # Directory containing solar traces
     solar_data_directory = os.path.join(ntndp_directory, 'Solar traces', 'Solar traces', '2016 Future Solar Traces')
@@ -464,27 +474,41 @@ if __name__ == '__main__':
     mmsdm_archive_directory = r'C:\Users\eee\Desktop\nemweb\Reports\Data_Archive\MMSDM\zipped'
 
     # Directory containing parameters for existing generators
-    generator_data_directory = os.path.join(root_data_directory, 'files', 'egrimod-nem-dataset-v1.3',
+    generator_data_directory = os.path.join(root_data_dir, 'files', 'egrimod-nem-dataset-v1.3',
                                             'akxen-egrimod-nem-dataset-4806603', 'generators')
-
-    # Map directory
-    map_directory = os.path.join(root_data_directory, 'maps')
 
     # Data processing objects
     # -----------------------
     # Object used to process NTNDP traces
-    traces = ProcessTraces(root_data_directory, mmsdm_archive_directory)
+    traces = ProcessTraces(root_data_dir, mmsdm_archive_directory)
 
     # Process signals
     # ---------------
     # Process solar traces
-    # df_solar = traces.process_solar_traces(solar_data_directory, output_directory, save=True)
-    #
-    # # Process wind traces
-    # df_wind = traces.process_wind_traces(wind_data_directory, output_directory, save=True)
-    #
-    # # Process demand traces
-    # df_demand = traces.process_demand_traces(demand_data_directory, output_directory, save=True)
+    df_solar = traces.process_solar_traces(solar_data_directory, output_dir, save=True)
+
+    # Process wind traces
+    df_wind = traces.process_wind_traces(wind_data_directory, output_dir, save=True)
+
+    # Process demand traces
+    df_demand = traces.process_demand_traces(demand_data_directory, output_dir, save=True)
 
     # Process hydro generator traces
-    df_hydro = traces.process_hydro_traces(generator_data_directory, output_directory, save=True)
+    df_hydro = traces.process_hydro_traces(generator_data_directory, output_dir, save=True)
+
+    # Collate all traces in a single dictionary if inspection required
+    output = {'df_solar': df_solar, 'df_wind': df_wind, 'df_demand': df_demand, 'df_hydro': df_hydro}
+
+    return output
+
+
+if __name__ == '__main__':
+    # Root data directory
+    root_data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
+                                       'data')
+
+    # Directory containing output files (contains inputs from previous steps)
+    output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output')
+
+    # Process all input traces
+    all_traces = main(root_data_directory, output_directory)
