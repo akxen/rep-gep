@@ -124,6 +124,7 @@
 \newcommand{\cEmissionsTotal}{E^{\mathrm{TOT}}}
 \newcommand{\cRampRateStartup}[1][\iGenerator]{SU_{#1}}
 \newcommand{\cRampRateShutdown}[1][\iGenerator]{SD_{#1}}
+\newcommand{\cPowerOutputHydro}[1][\iGenerator,\iYear,\iScenario,\iInterval]{P^{\mathrm{H}}_{#1}}
 
 % Variables
 \newcommand{\vBaseline}[1][\iYear]{\phi_{#1}}
@@ -243,15 +244,21 @@ Ramp-rate down constraint:
 \end{equation}
 
 Ensure power production and reserves within minimum and maximum output limits for each generator - existing units:
-\begin{equation}
-	\vPower + \vReserveUp \leq \left(\cPowerOutputMax[\iGenerator] - \cPowerOutputMin\right) \vOnIndicator - \left(\cPowerOutputMax[\iGenerator] -\cRampRateShutdown \right) \vShutdownIndicator[\iGenerator,\iYear,\iScenario,\iInterval+1] + \left(\cRampRateStartup - \cPowerOutputMin\right)\vStartupIndicator[\iGenerator,\iYear,\iScenario,\iInterval+1] \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
-\end{equation}
+\begin{align}
+	\begin{split}
+	\vPower + \vReserveUp \leq \left(\cPowerOutputMax[\iGenerator] - \cPowerOutputMin\right) \vOnIndicator - \left(\cPowerOutputMax[\iGenerator] -\cRampRateShutdown \right) \vShutdownIndicator[\iGenerator,\iYear,\iScenario,\iInterval+1] & + \left(\cRampRateStartup - \cPowerOutputMin\right)\vStartupIndicator[\iGenerator,\iYear,\iScenario,\iInterval+1]\\
+	& \quad \forall \iGenerator \in \sGeneratorsExistingThermal \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals\\
+	\end{split}
+\end{align}
 
 Ensure power production and reserves within minimum and maximum output limits for each generator - candidate units:
-\begin{equation}
-	\vPower + \vReserveUp \leq \left(1 - \cPowerOutputMinProportion\right) \vInstalledCapacityTotalScenario \vOnIndicator - \left(\vInstalledCapacityTotalScenario -\cRampRateShutdown \right) \vShutdownIndicator[\iGenerator,\iYear,\iScenario,\iInterval+1] + \left(\cRampRateStartup - \cPowerOutputMinProportion\vInstalledCapacityTotalScenario \right)\vStartupIndicator[\iGenerator,\iYear,\iScenario,\iInterval+1] \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
-	\label{eqn: power output within limits - candidate}
-\end{equation}
+\begin{align}
+	\begin{split}
+		\vPower + \vReserveUp \leq \left(1 - \cPowerOutputMinProportion\right) \vInstalledCapacityTotalScenario \vOnIndicator - \left(\vInstalledCapacityTotalScenario -\cRampRateShutdown \right) \vShutdownIndicator[\iGenerator,\iYear,\iScenario,\iInterval+1] & + \left(\cRampRateStartup - \cPowerOutputMinProportion\vInstalledCapacityTotalScenario \right)\vStartupIndicator[\iGenerator,\iYear,\iScenario,\iInterval+1]\\
+		& \quad \forall \iGenerator \in \sGeneratorsCandidateThermal \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals\\
+		\label{eqn: power output within limits - candidate}
+	\end{split}
+\end{align}
 
 Total power output - existing quick-start units:
 \begin{equation}
@@ -306,7 +313,7 @@ Total power output - solar units:
 Total power output - hydro units (may need to fix notation for max hydro output):
 
 \begin{equation}
-0 \leq \vPowerTotal \leq \cPowerOutputMax[\iGenerator,\iYear,\iScenario,\iInterval] \quad \forall \iGenerator \in \sGeneratorsHydro \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals 
+0 \leq \vPowerTotal \leq \cPowerOutputHydro \quad \forall \iGenerator \in \sGeneratorsHydro \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals 
 \end{equation}
 
 Total power output - thermal units:
@@ -826,9 +833,12 @@ Where the auxiliary variable $\vInstalledCapacityShutdownStateAux$ is subject to
 
 Therefore (\ref{eqn: power output within limits - candidate}) can be re-written as:
 
-\begin{equation}
-\vPower + \vReserveUp \leq \left(1 - \cPowerOutputMinProportion\right) \vInstalledCapacityOnStateAux - \left(\vInstalledCapacityShutdownStateAux[\iGenerator,\iYear,\iScenario,\iInterval+1] -\cRampRateShutdown \vShutdownIndicator[\iGenerator,\iYear,\iScenario,\iInterval+1] \right) + \left(\cRampRateStartup \vStartupIndicator[\iGenerator,\iYear,\iScenario,\iInterval+1] - \cPowerOutputMinProportion \vInstalledCapacityStartupStateAux[\iGenerator,\iYear,\iScenario,\iInterval+1] \right) \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
-\end{equation}
+\begin{align}
+	\begin{split}
+		\vPower + \vReserveUp \leq \left(1 - \cPowerOutputMinProportion\right) \vInstalledCapacityOnStateAux - \left(\vInstalledCapacityShutdownStateAux[\iGenerator,\iYear,\iScenario,\iInterval+1] -\cRampRateShutdown \vShutdownIndicator[\iGenerator,\iYear,\iScenario,\iInterval+1] \right) & + \left(\cRampRateStartup \vStartupIndicator[\iGenerator,\iYear,\iScenario,\iInterval+1] - \cPowerOutputMinProportion \vInstalledCapacityStartupStateAux[\iGenerator,\iYear,\iScenario,\iInterval+1] \right)\\
+		& \quad \forall \iGenerator \in \sGeneratorsCandidateThermal \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals\\
+	\end{split}
+\end{align}
 
 And (\ref{eqn: total power - quick start}) can be re-written as:
 

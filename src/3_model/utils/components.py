@@ -62,8 +62,14 @@ class CommonComponents:
         # Existing hydro units
         m.G_E_HYDRO = Set(initialize=self.data.existing_hydro_unit_ids)
 
+        # Existing storage units TODO: Not considering incumbent units for now. Could perhaps include later.
+        m.G_E_STORAGE = Set(initialize=[])
+
         # Candidate storage units
         m.G_C_STORAGE = Set(initialize=self.data.candidate_storage_units)
+
+        # Existing + candidate storage units
+        m.G_STORAGE = m.G_E_STORAGE.union(m.G_C_STORAGE)
 
         # Slow start thermal generators (existing and candidate)
         m.G_THERM_SLOW = Set(initialize=self.data.slow_start_thermal_generator_ids)
@@ -84,10 +90,10 @@ class CommonComponents:
         m.Y = RangeSet(2016, 2017)
 
         # Operating scenarios for each year
-        m.S = RangeSet(0, 3)
+        m.S = RangeSet(1, 3)
 
         # Operating scenario hour
-        m.T = RangeSet(0, 23, ordered=True)
+        m.T = RangeSet(1, 24, ordered=True)
 
         # Build limit technology types
         m.BUILD_LIMIT_TECHNOLOGIES = Set(initialize=self.data.candidate_unit_build_limits.index)
@@ -99,6 +105,7 @@ class CommonComponents:
 
         def existing_units_max_output_rule(_m, g):
             """Max power output for existing units"""
+
             return float(self.data.existing_units_dict[('PARAMETERS', 'REG_CAP')][g])
 
         # Max output for existing units
