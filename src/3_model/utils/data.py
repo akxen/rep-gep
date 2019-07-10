@@ -124,6 +124,18 @@ class ModelData:
         # Input traces for model horizon
         df = pd.read_pickle(os.path.join(self.input_traces_dir, 'centroids.pickle'))
 
+        # Scenario index is 0-based. Want to increment each scenario index by 1.
+        df.index.set_levels([i + 1 for i in df.index.levels[1]], level=1, inplace=True)
+
+        # Reset column index. Hours are 0-based. Want the first hour to be 1 instead. Increment each hour by 1.
+        _, _, level_3 = df.columns.levels
+
+        # New hour index
+        new_level_3 = [i + 1 if type(i) == int else i for i in level_3]
+
+        # Create new columns
+        df.columns.set_levels(new_level_3, level=2, inplace=True)
+
         return df
 
     def _load_existing_units(self):
