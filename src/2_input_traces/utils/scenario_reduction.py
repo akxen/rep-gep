@@ -224,7 +224,7 @@ def main(output_dir):
     df_all_centroids = pd.concat(all_centroids)
 
     # Save to file
-    df_all_centroids.to_pickle(os.path.join(output_dir, 'output', 'centroids.pickle'))
+    df_all_centroids.to_pickle(os.path.join(output_dir, 'centroids.pickle'))
 
     return df_all_centroids
 

@@ -296,7 +296,7 @@ def main(root_data_dir, output_dir):
 
     # Save to file
     # ------------
-    df_dataset.to_hdf(os.path.join(output_directory, 'dataset.h5'), key='dataset')
+    df_dataset.to_hdf(os.path.join(output_dir, 'dataset.h5'), key='dataset')
 
     return df_dataset
 
