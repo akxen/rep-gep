@@ -157,6 +157,30 @@ class UnitCommitment:
         # TODO: This is a placeholder. May not include existing units within model if horizon starts from 2016.
         m.STORAGE_ENERGY_CAPACITY = Param(m.G_E_STORAGE, initialize=100)
 
+        def network_incidence_matrix_rule(_m, l, z):
+            """Incidence matrix describing connections between adjacent NEM zones"""
+
+            return float(self.data.network_incidence_matrix.loc[l, z])
+
+        # Network incidence matrix
+        m.INCIDENCE_MATRIX = Param(m.L, m.Z, rule=network_incidence_matrix_rule)
+
+        def powerflow_min_rule(_m, l):
+            """Minimum powerflow over network link"""
+
+            return float(-self.data.powerflow_limits[l]['reverse'] * 100)
+
+        # Lower bound for powerflow over link
+        m.POWERFLOW_MIN = Param(m.L_I, rule=powerflow_min_rule)
+
+        def powerflow_max_rule(_m, l):
+            """Maximum powerflow over network link"""
+
+            return float(self.data.powerflow_limits[l]['forward'] * 100)
+
+        # Lower bound for powerflow over link
+        m.POWERFLOW_MAX = Param(m.L_I, rule=powerflow_max_rule)
+
         # -------------------------------------------------------------------------------------------------------------
         # Parameters to update each time model is run
         # -------------------------------------------------------------------------------------------------------------
@@ -179,7 +203,7 @@ class UnitCommitment:
         m.P_H = Param(m.G_E_HYDRO, m.T, mutable=True, within=NonNegativeReals, initialize=0)
 
         # Demand
-        m.D = Param(m.Z, m.T, mutable=True, within=NonNegativeReals, initialize=0)
+        m.DEMAND = Param(m.Z, m.T, mutable=True, within=NonNegativeReals, initialize=0)
 
         return m
 
@@ -233,13 +257,52 @@ class UnitCommitment:
         m.p_flow = Var(m.L, m.T, initialize=0)
 
         # Lost-load
-        m.p_V = Var(m.Z, m.T, initialize=0)
+        m.p_V = Var(m.Z, m.T, within=NonNegativeReals, initialize=0)
 
         return m
 
-    def define_expressions(self, m):
+    @staticmethod
+    def define_expressions(m):
         """Define unit commitment problem expressions"""
-        pass
+
+        def energy_output_rule(_m, g, t):
+            """Energy output"""
+
+            # If a storage unit
+            if g in m.G_STORAGE:
+                if t != m.T.first():
+                    return (m.p_out[g, t - 1] + m.p_out[g, t]) / 2
+                else:
+                    return (m.P0[g] + m.p_out[g, t]) / 2
+
+            # For all other units
+            elif g in m.G.difference(m.G_STORAGE):
+                if t != m.T.first():
+                    return (m.p_total[g, t - 1] + m.p_total[g, t]) / 2
+                else:
+                    return (m.P0[g] + m.p_total[g, t]) / 2
+
+        # Energy output
+        m.e = Expression(m.G, m.T, rule=energy_output_rule)
+
+        def lost_load_energy_rule(_m, z, t):
+            """
+            Amount of lost-load energy.
+
+            Note: Assumes lost-load energy in interval prior to model start (t=0) is zero.
+            """
+
+            if t != m.T.first():
+                return (m.p_V[z, t] + m.p_V[z, t - 1]) / 2
+
+            else:
+                # Assume no lost energy in interval preceding model start
+                return m.p_V[z, t] / 2
+
+        # Lost-load energy
+        m.e_V = Expression(m.Z, m.T, rule=lost_load_energy_rule)
+
+        return m
 
     def define_constraints(self, m):
         """Define unit commitment problem constraints"""
@@ -619,16 +682,34 @@ class UnitCommitment:
             # All generators within a given zone
             generators = existing_units + candidate_units
 
-            # Storage units within a given zone TODO: will need to update if exisiting storage units are included
+            # Storage units within a given zone TODO: will need to update if existing storage units are included
             storage_units = [gen for gen, zone in self.data.battery_properties_dict['NEM_ZONE'].items() if zone == z]
 
             return (sum(m.p_total[g, t] for g in generators) - m.DEMAND[z, t]
                     - sum(m.INCIDENCE_MATRIX[l, z] * m.p_flow[l, t] for l in m.L)
                     + sum(m.p_out[g, t] - m.p_in[g, t] for g in storage_units)
-                    + m.p_lost_up[z, t] - m.p_lost_down[z, t] == 0)
+                    + m.p_V[z, t] == 0)
 
         # Power balance constraint for each zone and time period
         m.POWER_BALANCE = Constraint(m.Z, m.T, rule=power_balance_rule)
+
+        def powerflow_lower_bound_rule(_m, l, t):
+            """Minimum powerflow over a link connecting adjacent NEM zones"""
+
+            return m.p_flow[l, t] >= m.POWERFLOW_MIN[l]
+
+        # Constrain max power flow over given network link
+        m.POWERFLOW_MIN_CONS = Constraint(m.L_I, m.T, rule=powerflow_lower_bound_rule)
+
+        def powerflow_max_constraint_rule(_m, l, t):
+            """Maximum powerflow over a link connecting adjacent NEM zones"""
+
+            return m.p_flow[l, t] <= m.POWERFLOW_MAX[l]
+
+        # Constrain max power flow over given network link
+        m.POWERFLOW_MAX_CONS = Constraint(m.L_I, m.T, rule=powerflow_max_constraint_rule)
+
+        return m
 
     def define_objective(self, m):
         """Define unit commitment problem objective function"""
@@ -652,14 +733,102 @@ class UnitCommitment:
         # Define variables
         m = self.define_variables(m)
 
+        # Define expressions
+        m = self.define_expressions(m)
+
         # Define constraints
         m = self.define_constraints(m)
 
         return m
 
-    def update_parameters(self, year, scenario):
+    @staticmethod
+    def update_parameters(m, parameters):
         """Populate model object with parameters for a given operating scenario"""
-        pass
+
+        # Keys = name of parameter to update, value = inner dict mapping parameter index to new values
+        for parameter, values in parameters.items():
+
+            # Inner dictionary - keys = parameter index, value = new parameter value
+            for index, new_value in values.items():
+                m.__getattribute__(parameter)[index] = new_value
+
+        return m
+
+    def get_scenario_parameters(self, m, year, scenario):
+        """Get parameters relating to a given operating scenario"""
+
+        # Map between existing solar DUIDs and labels in input_traces database
+        solar_map = {'BROKEN': 'BROKENH1'}
+
+        # Initialise parameter containers
+        demand = {}
+        hydro = {}
+        solar = {}
+
+        # For all timestamps
+        for t in m.T:
+            # For all NEM zones
+            for z in m.Z:
+                # Demand in each NEM zone for a given operating scenario
+                demand[(z, t)] = float(self.data.input_traces_dict[('DEMAND', z, t)][(year, scenario)])
+
+            # For all hydro generators
+            for g in m.G_E_HYDRO:
+                # Historic hydro output - for operating scenario
+                value = self.data.input_traces_dict[('HYDRO', g, t)][(year, scenario)]
+
+                # Set output to zero if negative or very small (SCADA data collection may cause -ve values)
+                if value < 0.1:
+                    value = 0
+
+                # Hydro output values
+                hydro[(g, t)] = float(value)
+
+            # For all solar technologies
+            for g in m.G_C_SOLAR:
+                # Get zone and technology
+                zone, tech = g.split('-')[0], g.split('-')[-1]
+
+                if tech == 'FFP':
+                    tech = 'FFP2'
+
+                # Solar capacity factors - candidate units
+                solar[(g, t)] = float(self.data.input_traces_dict[('SOLAR', f'{zone}|{tech}', t)][(year, scenario)])
+
+            for g in m.G_E_SOLAR:
+                # Solar capacity factor - existing units
+                solar[(g, t)] = float(self.data.input_traces_dict[('SOLAR', solar_map[g], t)][(year, scenario)])
+
+            for g in m.G_E_WIND:
+                # Wind bubble to which existing wind generator belongs
+                bubble = self.existing_units_dict
+
+        # All scenario parameters
+        scenario_parameters = {'DEMAND': demand, 'P_H': hydro, 'Q_SOLAR': solar}
+
+        return scenario_parameters
+
+        # # Indicates if unit is available for given operating scenario
+        # m.F_SCENARIO = Param(m.G, mutable=True, within=Binary, initialize=1)
+
+        # # Initial on-state rule - must be updated each time model is run - depends on unit availability
+        # m.U0 = Param(m.G_THERM, within=Binary, mutable=True, initialize=1)
+        #
+        # # Power output in interval prior to model start (assume = 0 for now)
+        # m.P0 = Param(m.G, mutable=True, within=NonNegativeReals, initialize=0)
+        #
+        #
+        # # Wind capacity factor
+        # m.Q_WIND = Param(m.G_E_WIND.union(m.G_C_WIND), m.T, mutable=True, within=NonNegativeReals, initialize=0)
+        #
+        # # Solar capacity factor
+        # m.Q_SOLAR = Param(m.G_E_SOLAR.union(m.G_C_SOLAR), m.T, mutable=True, within=NonNegativeReals, initialize=0)
+        #
+        # # X - Hydro output
+        # m.P_H = Param(m.G_E_HYDRO, m.T, mutable=True, within=NonNegativeReals, initialize=0)
+        #
+        # # X - Demand
+        # m.DEMAND = Param(m.Z, m.T, mutable=True, within=NonNegativeReals, initialize=0)
 
 
 if __name__ == '__main__':
@@ -668,3 +837,12 @@ if __name__ == '__main__':
 
     # Construct model object
     model = uc.construct_model()
+
+    # Parameters
+    new_parameters = uc.get_scenario_parameters(model, 2016, 6)
+
+    # Update model parameters
+    model = uc.update_parameters(model, new_parameters)
+
+    # g = 'CAN-SOLAR-PV-SAT'
+

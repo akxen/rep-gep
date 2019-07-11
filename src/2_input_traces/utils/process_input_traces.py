@@ -24,7 +24,7 @@ class ProcessTraces(ParseMMSDMTables):
         return pd.read_csv(os.path.join(self.root_data_dir, 'maps', 'wind_bubble_file_map.csv'), index_col='BUBBLE_ID')
 
     @staticmethod
-    def _process_solar_trace(data_dir, filename):
+    def _process_solar_trace(data_dir, filename, future=True):
         """
         Process solar traces for a single file
 
@@ -35,6 +35,9 @@ class ProcessTraces(ParseMMSDMTables):
 
         filename : str
             Name of solar trace file to process
+
+        future : bool
+            Indicator if a future solar trace or data from an existing installation is considered
 
         Returns
         -------
@@ -48,33 +51,37 @@ class ProcessTraces(ParseMMSDMTables):
         # Set index and unstack (want year, month, day, and interval ID as index)
         df = df.set_index(['Year', 'Month', 'Day']).stack().to_frame(name='capacity_factor')
 
-        # Construct timestamps from index
-        def _construct_timestamp(row):
-            """Construct timestamp object given year, month, day, and interval ID"""
+        # Reset index
+        df = df.reset_index()
 
-            # Convert index to integer and assign to year, month, day, interval ID
-            year, month, day, interval_id = [int(i) for i in row.name]
+        # Construct timestamp string for YYYY-MM-DD
+        df['timestamp_string'] = (df['Year'].astype(str) + '-' + df['Month'].astype(str).str.zfill(2)
+                                  + '-' + df['Day'].astype(str).str.zfill(2))
 
-            # Construct timestamp
-            timestamp = pd.Timestamp(year, month, day, 0) + pd.Timedelta(minutes=30 * interval_id)
+        # Convert to timestamp and offset by hours based on interval ID
+        df['timestamp'] = (pd.to_datetime(df['timestamp_string']) + df['level_3']
+                           .apply(lambda x: pd.Timedelta(hours=float(x) * 0.5)))
 
-            return timestamp
-
-        # Construct timestamps
-        df['timestamp'] = df.apply(_construct_timestamp, axis=1)
-
-        # Set timestamp as index
-        df = df.set_index('timestamp')
+        # Set index and only keep capacity factor column
+        df = df.set_index('timestamp')[['capacity_factor']]
 
         # Re-sample to hourly resolution (if label 04:00:00, this denotes the end
         # of the trading interval i.e. represents the period from 03:00:00 - 04:00:00)
         df = df.resample('1h', label='right', closed='right').mean()
 
-        # Technology extracted from filename
-        technology = re.findall(r'_(.+)\.csv', filename)[0]
+        if future:
+            # Technology extracted from filename
+            technology = re.findall(r'_(.+)\.csv', filename)[0]
 
-        # Zone extracted from filename
-        zone = filename.split(' ')[0]
+            # Zone extracted from filename
+            zone = filename.split(' ')[0]
+
+        else:
+            # Name of existing installation
+            technology = re.findall(r'(.+)\.Solar', filename)[0].upper()
+
+            # Blank zone
+            zone = ''
 
         # Add technology type and zone to DataFrame
         df['technology'] = technology
@@ -82,14 +89,15 @@ class ProcessTraces(ParseMMSDMTables):
 
         return df
 
-    def process_solar_traces(self, data_dir, output_dir, save=False):
+    def process_solar_traces(self, data_dirs, output_dir, save=False):
         """
         Process solar traces for each technology type, planning zone, and year in model horizon
 
         Parameters
         ----------
-        data_dir : str
-            Directory containing solar trace data
+        data_dirs : dict
+            Directories containing existing and future solar trace data
+            {'future': (directory containing future traces), 'existing': (directory containing existing traces)}
 
         output_dir : str
             Directory where output files will be stored
@@ -107,17 +115,26 @@ class ProcessTraces(ParseMMSDMTables):
         # and technology type
         dfs = []
 
-        # All files in directory
-        files = os.listdir(data_dir)
+        for trace_type, data_dir in data_dirs.items():
 
-        for i, file in enumerate(files):
-            print(f'Processing solar traces, file: {i + 1}/{len(files)}')
+            # All files in directory
+            files = os.listdir(data_dir)
 
-            # Process file
-            df = self._process_solar_trace(data_dir, file)
+            for i, file in enumerate(files):
+                print(f'Processing {trace_type} solar traces: {i + 1}/{len(files)}')
 
-            # Append to container
-            dfs.append(df)
+                # Process existing traces - slightly different file naming convention for existing traces
+                if trace_type == 'existing':
+                    df = self._process_solar_trace(data_dir, file, future=False)
+
+                elif trace_type == 'future':
+                    df = self._process_solar_trace(data_dir, file, future=True)
+
+                else:
+                    raise Exception(f'Unexpected trace type: {trace_type}')
+
+                # Append to container
+                dfs.append(df)
 
         # All solar traces
         df_o = pd.concat(dfs)
@@ -148,7 +165,7 @@ class ProcessTraces(ParseMMSDMTables):
             Wind trace information for given file
         """
 
-        # Load solar traces as CSV
+        # Load wind traces as DataFrame
         df = pd.read_csv(os.path.join(data_dir, filename))
 
         # Set index and unstack (want year, month, day, and interval ID as index)
@@ -163,23 +180,19 @@ class ProcessTraces(ParseMMSDMTables):
         # Stack columns
         df = df.stack().to_frame(name='capacity_factor')
 
-        # Construct timestamps from index
-        def _construct_timestamp(row):
-            """Construct timestamp object given year, month, day, and interval ID"""
+        # Reset index
+        df = df.reset_index()
 
-            # Convert index to integer and assign to year, month, day, interval ID
-            year, month, day, interval_id = [int(i) for i in row.name]
+        # Construct timestamp string for YYYY-MM-DD
+        df['timestamp_string'] = (df['Year'].astype(str) + '-' + df['Month'].astype(str).str.zfill(2)
+                                  + '-' + df['Day'].astype(str).str.zfill(2))
 
-            # Construct timestamp
-            timestamp = pd.Timestamp(year, month, day, 0) + pd.Timedelta(hours=interval_id * interval_duration)
+        # Convert to timestamp and offset by hours based on interval ID
+        df['timestamp'] = (pd.to_datetime(df['timestamp_string']) + df['level_3']
+                           .apply(lambda x: pd.Timedelta(hours=float(x) * interval_duration)))
 
-            return timestamp
-
-        # Construct timestamps
-        df['timestamp'] = df.apply(_construct_timestamp, axis=1)
-
-        # Set timestamp as index
-        df = df.set_index('timestamp')
+        # Set index and only keep capacity factor column
+        df = df.set_index('timestamp')[['capacity_factor']]
 
         # Re-sample to hourly resolution (if label 04:00:00, this denotes the end
         # of the trading interval i.e. represents the period from 03:00:00 - 04:00:00)
@@ -268,23 +281,19 @@ class ProcessTraces(ParseMMSDMTables):
         # Set index and unstack (want year, month, day, and interval ID as index)
         df = df.set_index(['Year', 'Month', 'Day']).stack().to_frame(name='demand')
 
-        # Construct timestamps from index
-        def _construct_timestamp(row):
-            """Construct timestamp object given year, month, day, and interval ID"""
+        # Reset index
+        df = df.reset_index()
 
-            # Convert index to integer and assign to year, month, day, interval ID
-            year, month, day, interval_id = [int(i) for i in row.name]
+        # Construct timestamp string for YYYY-MM-DD
+        df['timestamp_string'] = (df['Year'].astype(str) + '-' + df['Month'].astype(str).str.zfill(2)
+                                  + '-' + df['Day'].astype(str).str.zfill(2))
 
-            # Construct timestamp
-            timestamp = pd.Timestamp(year, month, day, 0) + pd.Timedelta(minutes=30 * interval_id)
+        # Convert to timestamp and offset by hours based on interval ID
+        df['timestamp'] = (pd.to_datetime(df['timestamp_string']) + df['level_3']
+                           .apply(lambda x: pd.Timedelta(hours=float(x) * 0.5)))
 
-            return timestamp
-
-        # Construct timestamps
-        df['timestamp'] = df.apply(_construct_timestamp, axis=1)
-
-        # Set timestamp as index
-        df = df.set_index('timestamp')
+        # Set index and only keep capacity factor column
+        df = df.set_index('timestamp')[['demand']]
 
         # Re-sample to hourly resolution (if label 04:00:00, this denotes the end
         # of the trading interval i.e. represents the period from 03:00:00 - 04:00:00)
@@ -461,8 +470,11 @@ def main(root_data_dir, output_dir):
     # Root directory for NTNDP information
     ntndp_directory = os.path.join(root_data_dir, 'files', '2016 NTNDP Database Input Data Traces')
 
-    # Directory containing solar traces
-    solar_data_directory = os.path.join(ntndp_directory, 'Solar traces', 'Solar traces', '2016 Future Solar Traces')
+    # Directories containing existing and future solar traces
+    solar_data_directories = {
+        'existing': os.path.join(ntndp_directory, 'Solar traces', 'Solar traces', '2016 Large Scale Solar'),
+        'future': os.path.join(ntndp_directory, 'Solar traces', 'Solar traces', '2016 Future Solar Traces')
+    }
 
     # Directory containing wind traces
     wind_data_directory = os.path.join(ntndp_directory, 'Wind traces', 'Wind traces', '2016 Future Wind Traces')
@@ -485,12 +497,12 @@ def main(root_data_dir, output_dir):
     # Process signals
     # ---------------
     # Process solar traces
-    df_solar = traces.process_solar_traces(solar_data_directory, output_dir, save=True)
+    df_solar = traces.process_solar_traces(solar_data_directories, output_dir, save=True)
 
     # Process wind traces
     df_wind = traces.process_wind_traces(wind_data_directory, output_dir, save=True)
 
-    # Process demand traces
+    # # Process demand traces
     df_demand = traces.process_demand_traces(demand_data_directory, output_dir, save=True)
 
     # Process hydro generator traces

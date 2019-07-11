@@ -241,6 +241,9 @@ def main(root_data_dir, output_dir):
         Dataset containing all input traces
     """
 
+    print('Combining all input traces')
+    print('--------------------------')
+
     # Formatted traces
     # ----------------
     # Wind traces

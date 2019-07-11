@@ -568,7 +568,7 @@ class ConstructDataset:
                 acil_id = 'Solar PV FFP'
 
             else:
-                raise (Exception('Missing candidate solar unit ACIL technology ID assignment'))
+                raise Exception('Missing candidate solar unit ACIL technology ID assignment')
 
             return acil_id
 

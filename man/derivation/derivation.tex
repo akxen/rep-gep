@@ -391,7 +391,7 @@ Power flow between zones:
 Energy from generator and storage units:
 \begin{equation}
 \vEnergy = \begin{dcases}
-\frac{\vPowerTotal[\iGenerator, \iYear,\iScenario,\iInterval-1] + \vPowerTotal}{2} & \forall \iGenerator \in \sGeneratorsExisting \cup \sGeneratorsCandidate \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals\\
+\frac{\vPowerTotal[\iGenerator, \iYear,\iScenario,\iInterval-1] + \vPowerTotal}{2} & \forall \iGenerator \in \sGenerators \setminus \sStorage \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals\\
 \frac{\vPowerTotalOut[\iGenerator, \iYear,\iScenario,\iInterval-1] + \vPowerTotalOut}{2} & \forall \iGenerator \in \sStorage \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals\\
 \end{dcases}
 \end{equation}
