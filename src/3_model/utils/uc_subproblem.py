@@ -132,31 +132,6 @@ class UnitCommitment:
         # Minimum power output (as a proportion of max capacity) for existing and candidate thermal generators
         m.P_MIN_PROP = Param(m.G_C_THERM, rule=min_power_output_proportion_rule)
 
-        def battery_efficiency_rule(_m, g):
-            """Battery efficiency"""
-
-            if g in m.G_E_STORAGE:
-                # Assumed efficiency based on candidate unit battery efficiency
-                return float(0.92)
-
-            elif g in m.G_C_STORAGE:
-                return float(self.data.battery_properties.loc[g, 'CHARGE_EFFICIENCY'])
-
-            else:
-                raise Exception(f'Unknown storage ID encountered: {g}')
-
-        # Lower bound for energy in storage unit at end of interval (assume = 0)
-        m.Q_INTERVAL_END_LB = Param(m.G_C_STORAGE, initialize=0)
-
-        # Battery efficiency
-        m.BATTERY_EFFICIENCY = Param(m.G_STORAGE, rule=battery_efficiency_rule)
-
-        # Energy in battering in interval prior to model start (assume battery initially completely discharged)
-        m.Q0 = Param(m.G_C_STORAGE, initialize=0)
-
-        # TODO: This is a placeholder. May not include existing units within model if horizon starts from 2016.
-        m.STORAGE_ENERGY_CAPACITY = Param(m.G_E_STORAGE, initialize=100)
-
         def network_incidence_matrix_rule(_m, l, z):
             """Incidence matrix describing connections between adjacent NEM zones"""
 
@@ -201,6 +176,55 @@ class UnitCommitment:
         # Emissions intensities for all generators
         m.EMISSIONS_RATE = Param(m.G, rule=emissions_intensity_rule)
 
+        def candidate_unit_big_m_rule(_m, g):
+            """Big-M parameter for candidate unit capacity variable - used in linearisation"""
+
+            # NEM zone
+            zone = g.split('-')[0]
+
+            if g in m.G_C_WIND:
+                return float(self.data.candidate_unit_build_limits_dict[zone]['WIND'])
+
+            elif g in m.G_C_SOLAR:
+                return float(self.data.candidate_unit_build_limits_dict[zone]['SOLAR'])
+
+            elif g in m.G_C_STORAGE:
+                return float(self.data.candidate_unit_build_limits_dict[zone]['STORAGE'])
+
+            elif g in m.G_C_THERM:
+                # Arbitrarily large upper-bound for thermal units
+                return float(99999)
+            else:
+                raise Exception(f'Unexpected generator encountered: {g}')
+
+        # Big-M parameter for candidate unit capacity (want tight upper-bound for a capacity variable)
+        m.B_UP = Param(m.G_C, rule=candidate_unit_big_m_rule)
+
+        def battery_efficiency_rule(_m, g):
+            """Battery efficiency"""
+
+            if g in m.G_E_STORAGE:
+                # Assumed efficiency based on candidate unit battery efficiency
+                return float(0.92)
+
+            elif g in m.G_C_STORAGE:
+                return float(self.data.battery_properties.loc[g, 'CHARGE_EFFICIENCY'])
+
+            else:
+                raise Exception(f'Unknown storage ID encountered: {g}')
+
+        # Battery efficiency
+        m.BATTERY_EFFICIENCY = Param(m.G_STORAGE, rule=battery_efficiency_rule)
+
+        # Lower bound for energy in storage unit at end of interval (assume = 0)
+        m.Q_INTERVAL_END_LB = Param(m.G_C_STORAGE, initialize=0)
+
+        # Energy in battering in interval prior to model start (assume battery initially completely discharged)
+        m.Q0 = Param(m.G_C_STORAGE, initialize=0)
+
+        # TODO: This is a placeholder. May not include existing units within model if horizon starts from 2016.
+        m.EXISTING_STORAGE_ENERGY_CAPACITY = Param(m.G_E_STORAGE, initialize=100)
+
         def marginal_cost_rule(_m, g):
             """Marginal costs for existing and candidate generators
 
@@ -233,47 +257,6 @@ class UnitCommitment:
 
         # Marginal costs for all generators and time periods
         m.C_MC = Param(m.G, rule=marginal_cost_rule, mutable=True)
-
-        # # TODO: Need to fix startup costs - incorporate variable capacity in startup cost formulation
-        # def thermal_startup_cost_rule(_m, g):
-        #     """Startup cost for existing and candidate thermal generators"""
-        #
-        #     return m.C_SU_MW[g] * m.P_MAX[g]
-        #
-        # # Startup cost - absolute cost [$]
-        # m.C_SU = Expression(m.G_THERM, initialize=0, rule=thermal_startup_cost_rule)
-        #
-        # def thermal_shutdown_cost_rule(_m, g, i):
-        #     """Startup cost for existing and candidate thermal generators"""
-        #     # TODO: For now set shutdown cost = 0
-        #     return m.C_SD_MW[g] * 0
-        #
-        # # Shutdown cost - absolute cost [$]
-        # m.C_SD = Expression(m.G_E_THERM.union(m.G_C_THERM), m.I, rule=thermal_shutdown_cost_rule)
-
-        def candidate_unit_big_m_rule(_m, g):
-            """Big-M parameter for candidate unit capacity variable - used in linearisation"""
-
-            # NEM zone
-            zone = g.split('-')[0]
-
-            if g in m.G_C_WIND:
-                return float(self.data.candidate_unit_build_limits_dict[zone]['WIND'])
-
-            elif g in m.G_C_SOLAR:
-                return float(self.data.candidate_unit_build_limits_dict[zone]['SOLAR'])
-
-            elif g in m.G_C_STORAGE:
-                return float(self.data.candidate_unit_build_limits_dict[zone]['STORAGE'])
-
-            elif g in m.G_C_THERM:
-                # Arbitrarily large upper-bound for thermal units
-                return float(99999)
-            else:
-                raise Exception(f'Unexpected generator encountered: {g}')
-
-        # Big-M parameter for candidate unit capacity (want tight upper-bound for a capacity variable)
-        m.B_UP = Param(m.G_C, rule=candidate_unit_big_m_rule)
 
         def startup_cost_rule(_m, g):
             """
@@ -368,8 +351,8 @@ class UnitCommitment:
         # Power output above minimum dispatchable level
         m.p = Var(m.G_THERM, m.T, within=NonNegativeReals, initialize=0)
 
-        # Total power output TODO: May need to add existing storage as well
-        m.p_total = Var(m.G.difference(m.G_C_STORAGE), m.T, within=NonNegativeReals, initialize=0)
+        # Total power output
+        m.p_total = Var(m.G.difference(m.G_C_STORAGE.union(m.G_E_STORAGE)), m.T, within=NonNegativeReals, initialize=0)
 
         # Auxiliary variable - used to linearise interaction between candidate installed capacity and on indicator
         m.x = Var(m.G_C_THERM, m.T, within=NonNegativeReals, initialize=0)
@@ -686,28 +669,33 @@ class UnitCommitment:
             if g in m.G_E_THERM:
                 rhs_1 = (m.P_MAX[g] - m.P_MIN[g]) * m.u[g, t]
 
-                if t < m.T.last():
+                # If not the last period
+                if t != m.T.last():
                     rhs_2 = (m.P_MAX[g] - m.RR_SD[g]) * m.w[g, t + 1]
                     rhs_3 = (m.RR_SU[g] - m.P_MIN[g]) * m.v[g, t + 1]
+
+                    return lhs <= rhs_1 - rhs_2 + rhs_3
+
+                # If the last period - startup and shutdown state variables assumed = 0
+                else:
+                    return lhs <= rhs_1
 
             # Candidate thermal units - must take into account variable capacity
             elif g in m.G_C_THERM:
                 rhs_1 = (1 - m.P_MIN_PROP[g]) * m.x[g, t]
 
-                if t < m.T.last():
+                if t != m.T.last():
                     rhs_2 = m.z[g, t] - (m.RR_SD[g] * m.w[g, t + 1])
                     rhs_3 = (m.RR_SU[g] * m.v[g, t + 1]) - (m.P_MIN_PROP[g] * m.y[g, t + 1])
 
+                    return lhs <= rhs_1 - rhs_2 + rhs_3
+
+                # If the last period - startup and shutdown state variables assumed = 0
+                else:
+                    return lhs <= rhs_1
+
             else:
                 raise Exception(f'Unknown generator: {g}')
-
-            # If not any period except for the last
-            if t < m.T.last():
-                return lhs <= rhs_1 - rhs_2 + rhs_3
-
-            # If the last period, assumed that startup and shutdown indicators = 0
-            else:
-                return lhs <= rhs_1
 
         # Power output and reserves within limits
         m.POWER_OUTPUT_WITHIN_LIMITS = Constraint(m.G_THERM, m.T, rule=power_output_within_limits_rule)
@@ -833,9 +821,11 @@ class UnitCommitment:
             storage unit can completely discharge in 1 hour
             """
 
+            # Existing storage units
             if g in m.G_E_STORAGE:
-                return m.p_in[g, t] <= m.STORAGE_ENERGY_CAPACITY[g]
+                return m.p_in[g, t] <= m.EXISTING_STORAGE_ENERGY_CAPACITY[g]
 
+            # Candidate storage units
             elif g in m.G_C_STORAGE:
                 return m.p_in[g, t] <= m.b[g]
 
@@ -853,7 +843,7 @@ class UnitCommitment:
 
             # Existing storage units
             if g in m.G_E_STORAGE:
-                return m.p_out[g, t] + m.r_up[g, t] <= m.STORAGE_ENERGY_CAPACITY[g]
+                return m.p_out[g, t] + m.r_up[g, t] <= m.EXISTING_STORAGE_ENERGY_CAPACITY[g]
 
             # Candidate storage units
             elif g in m.G_C_STORAGE:
@@ -870,7 +860,7 @@ class UnitCommitment:
 
             # Existing storage units
             if g in m.G_E_STORAGE:
-                return m.q[g, t] <= m.STORAGE_ENERGY_CAPACITY[g]
+                return m.q[g, t] <= m.EXISTING_STORAGE_ENERGY_CAPACITY[g]
 
             # Candidate storage units
             elif g in m.G_C_STORAGE:
@@ -885,12 +875,13 @@ class UnitCommitment:
         def storage_energy_transition_rule(_m, g, t):
             """Constraint that couples energy + power between periods for storage units"""
 
+            # If not the first period
             if t != m.T.first():
                 return (m.q[g, t]
                         == m.q[g, t - 1] + (m.BATTERY_EFFICIENCY[g] * m.p_in[g, t])
                         - (m.p_out[g, t] / m.BATTERY_EFFICIENCY[g]))
             else:
-                # Assume battery completely discharged in first period
+                # Assume battery completely discharged in first period (given by m.Q0)
                 return (m.q[g, t]
                         == m.Q0[g] + (m.BATTERY_EFFICIENCY[g] * m.p_in[g, t])
                         - (m.p_out[g, t] / m.BATTERY_EFFICIENCY[g]))
@@ -915,7 +906,7 @@ class UnitCommitment:
 
             # Existing units
             if g in m.G_E_STORAGE:
-                return m.q[g, m.T.last()] <= m.STORAGE_ENERGY_CAPACITY[g]
+                return m.q[g, m.T.last()] <= m.EXISTING_STORAGE_ENERGY_CAPACITY[g]
 
             # Candidate units
             elif g in m.G_C_STORAGE:
@@ -1093,126 +1084,6 @@ class UnitCommitment:
         return m
 
     @staticmethod
-    def update_parameters(m, parameters):
-        """Populate model object with parameters for a given operating scenario"""
-
-        # Keys = name of parameter to update, value = inner dict mapping parameter index to new values
-        for parameter, values in parameters.items():
-
-            if isinstance(values, dict):
-                # Inner dictionary - keys = parameter index, value = new parameter value
-                for index, new_value in values.items():
-                    m.__getattribute__(parameter)[index] = new_value
-
-            elif isinstance(values, float):
-                # Only one value associated with parameter (not indexed)
-                m.__getattribute__(parameter).value = values
-
-            else:
-                raise Exception(f'Unexpected data type encountered when updating parameters: {values}')
-
-        return m
-
-    def get_scenario_parameters(self, m, year, scenario):
-        """Get parameters relating to a given operating scenario"""
-
-        # Map between existing solar DUIDs and labels in input_traces database
-        solar_map = {'BROKENH1': 'BROKENHILL', 'MOREESF1': 'MOREE', 'NYNGAN1': 'NYNGAN'}
-
-        # Initialise parameter containers
-        demand = {}
-        hydro = {}
-        solar = {}
-        wind = {}
-
-        # For all timestamps
-        for t in m.T:
-            # For all NEM zones
-            for z in m.Z:
-                # Demand in each NEM zone for a given operating scenario
-                value = self.data.input_traces_dict[('DEMAND', z, t)][(year, scenario)]
-
-                # Check that value is sufficiently large (prevent numerical ill conditioning)
-                if value < 0.1:
-                    value = 0
-
-                demand[(z, t)] = float(value)
-
-            # For all hydro generators
-            for g in m.G_E_HYDRO:
-                # Historic hydro output - for operating scenario
-                value = self.data.input_traces_dict[('HYDRO', g, t)][(year, scenario)]
-
-                # Set output to zero if negative or very small (SCADA data collection may cause -ve values)
-                if value < 0.1:
-                    value = 0
-
-                # Hydro output values
-                hydro[(g, t)] = float(value)
-
-            # For all solar technologies
-            for g in m.G_C_SOLAR:
-                # Get zone and technology
-                zone, tech = g.split('-')[0], g.split('-')[-1]
-
-                # FFP used in model, but but FFP2 in traces database - convert so both are the same
-                if tech == 'FFP':
-                    tech = 'FFP2'
-
-                # Solar capacity factors - candidate units
-                value = self.data.input_traces_dict[('SOLAR', f'{zone}|{tech}', t)][(year, scenario)]
-
-                # Check that value is sufficiently large (prevent numerical ill conditioning)
-                if value < 0.1:
-                    value = 0
-
-                solar[(g, t)] = float(value)
-
-            for g in m.G_E_SOLAR:
-                # Solar capacity factor - existing units
-                value = self.data.input_traces_dict[('SOLAR', solar_map[g], t)][(year, scenario)]
-
-                # Check that value is sufficiently large (prevent numerical ill conditioning)
-                if value < 0.1:
-                    value = 0
-
-                solar[(g, t)] = float(value)
-
-            for g in m.G_E_WIND:
-                # Wind bubble to which existing wind generator belongs
-                bubble = self.data.existing_wind_bubble_map_dict['BUBBLE'][g]
-
-                # Check that value is sufficiently large (prevent numerical ill conditioning)
-                value = self.data.input_traces_dict[('WIND', bubble, t)][year, scenario]
-
-                if value < 0.1:
-                    value = 0
-
-                # Wind capacity factor - existing units
-                wind[(g, t)] = float(value)
-
-            for g in m.G_C_WIND:
-                # Wind bubble to which candidate wind generator belongs
-                bubble = self.data.candidate_units_dict[('PARAMETERS', 'WIND_BUBBLE')][g]
-
-                # Check that value is sufficiently large (prevent numerical ill conditioning)
-                value = self.data.input_traces_dict[('WIND', bubble, t)][year, scenario]
-
-                if value < 0.1:
-                    value = 0
-
-                # Wind capacity factor - existing units
-                wind[(g, t)] = float(value)
-
-        # Update scenario duration
-        rho = self.data.input_traces_dict[('K_MEANS', 'METRIC', 'NORMALISED_DURATION')][(year, scenario)] * 365
-
-        # All scenario parameters
-        scenario_parameters = {'DEMAND': demand, 'P_H': hydro, 'Q_SOLAR': solar, 'Q_WIND': wind, 'RHO': rho}
-
-        return scenario_parameters
-
-    @staticmethod
     def get_iteration_parameters(m):
         """Get parameters that only need to be update once per iteration"""
 
@@ -1228,35 +1099,66 @@ class UnitCommitment:
 
         return parameters
 
-    def get_year_parameters(self, m, year):
-        """Get year specific for a given year"""
+    @staticmethod
+    def _get_year_retirement_indicator(m, year):
+        """Get retirement indicator for each generator and year in model horizon"""
 
+        # Retirement indicator
         retirement_indicator = {}
-        initial_on_state = {}
-        initial_power_output = {}
-        marginal_costs = {}
 
+        # For each existing generator (assume candidate generators are replaced with identical unit at end of life)
         for g in m.G_E:
-            # Availability indicator - parameter defined in investment plan for each year
+            # 1 - unit retired, 0 - unit still active
             retirement_indicator[g] = m.F[g, year]
 
-        for g in m.G_E_THERM:
-            # If existing thermal unit is not retired
-            if retirement_indicator[g] == 1:
+        return retirement_indicator
 
-                # Initial on-state set to 0 if unit no longer active
-                initial_on_state[g] = float(0)
+    @staticmethod
+    def _get_year_initial_on_state(m, year):
+        """Get initial on-state for each existing generator"""
 
-            else:
-                # Assume slow-start units are initially on (baseload generators)
-                if g in m.G_THERM_SLOW:
-                    initial_on_state[g] = float(1)
+        # Container for initial on-state values
+        initial_on_state = {}
 
-                # Assume other units are initially off (these will be quick-start thermal units)
-                else:
+        # All thermal units (existing + candidate)
+        for g in m.G_THERM:
+
+            # Existing thermal units
+            if g in m.G_E_THERM:
+
+                # If existing thermal unit is not retired
+                if m.F[g, year] == 1:
+
+                    # Initial on-state set to 0 if unit no longer active
                     initial_on_state[g] = float(0)
 
+                else:
+                    # Assume slow-start units are initially on (baseload generators)
+                    if g in m.G_THERM_SLOW:
+                        initial_on_state[g] = float(1)
+
+                    # Assume other existing units are initially off (quick-start generators)
+                    else:
+                        initial_on_state[g] = float(0)
+
+            # Assume other units are initially off (these will be quick-start thermal units)
+            else:
+                initial_on_state[g] = float(0)
+
+        return initial_on_state
+
+    def _get_year_initial_power_output(self, m, year):
+        """Power output in interval preceding first interval"""
+
+        # Get initial on-state values
+        initial_on_state = self._get_year_initial_on_state(m, year)
+
+        # Container for initial power output values
+        initial_power_output = {}
+
+        # All generators
         for g in m.G:
+
             # If unit thermal unit is on in the first interval, set preceding interval output = min output
             if g in m.G_E_THERM:
 
@@ -1272,10 +1174,22 @@ class UnitCommitment:
                 # Assume power output in preceding interval = 0 for all other units TODO: May need to revise this
                 initial_power_output[g] = float(0)
 
+        return initial_power_output
+
+    def _get_year_marginal_costs(self, m, year):
+        """Update marginal costs for thermal units"""
+
+        # Initialise container for marginal costs
+        marginal_costs = {}
+
+        # All existing and candidate thermal generators
+        for g in m.G_THERM:
+
+            # Existing generators
             if g in m.G_E_THERM:
 
                 # Last year in the dataset for which fuel cost information exists
-                max_year = self.data.existing_units.loc[g, 'FUEL_COST'].index.max()
+                max_year = max([i[1] for i in self.data.existing_units_dict.keys() if 'FUEL_COST' in i])
 
                 # If year in model horizon exceeds max year for which data are available use values for last
                 # available year
@@ -1283,12 +1197,20 @@ class UnitCommitment:
                     # Use final year in dataset to max year
                     year = max_year
 
-                marginal_costs[g] = float(self.data.existing_units.loc[g, ('FUEL_COST', year)]
-                                          * self.data.existing_units.loc[g, ('PARAMETERS', 'HEAT_RATE')])
+                # Fuel cost
+                fuel_cost = self.data.existing_units_dict[('FUEL_COST', year)][g]
 
+                # Variable operations and maintenance cost
+                vom = self.data.existing_units_dict[('PARAMETERS', 'VOM')][g]
+
+                # Heat rate
+                heat_rate = self.data.existing_units_dict[('PARAMETERS', 'HEAT_RATE')][g]
+
+            # Candidate generators
             elif g in m.G_C_THERM:
+
                 # Last year in the dataset for which fuel cost information exists
-                max_year = self.data.candidate_units.loc[g, 'FUEL_COST'].index.max()
+                max_year = max([i[1] for i in self.data.existing_units_dict.keys() if 'FUEL_COST' in i])
 
                 # If year in model horizon exceeds max year for which data are available use values for last
                 # available year
@@ -1296,7 +1218,25 @@ class UnitCommitment:
                     # Use final year in dataset to max year
                     year = max_year
 
-                marginal_costs[g] = float(self.data.candidate_units.loc[g, ('FUEL_COST', year)])
+                # Fuel cost
+                fuel_cost = self.data.candidate_units_dict[('FUEL_COST', year)][g]
+
+                # Variable operations and maintenance cost
+                vom = self.data.candidate_units_dict[('PARAMETERS', 'VOM')][g]
+
+                # Heat rate
+                heat_rate = self.data.candidate_units_dict[('PARAMETERS', 'HEAT_RATE')][g]
+
+            else:
+                raise Exception(f'Unexpected generator encountered: {g}')
+
+            # Compute marginal cost for thermal units
+            marginal_costs[g] = float((fuel_cost * heat_rate) + vom)
+
+        return marginal_costs
+
+    def _get_year_discount_factor(self, year):
+        """Compute discount factor applying to a given year"""
 
         # Discount factor applying to given year - assume computation in terms of 2016 present values
         if 2016 <= year < 2050:
@@ -1305,14 +1245,212 @@ class UnitCommitment:
         # If the last year in the model horizon (2050), discount such that operating costs are paid in perpetuity
         elif year == 2050:
             discount = (1 / ((1 + self.data.WACC) ** (year - 2016))) * ((self.data.WACC + 1) / self.data.WACC)
+
         else:
             raise Exception(f'Check year. Value should be between 2016-2050, with 2016 as the base year: {year}')
 
-        # All year-specific parameters
-        year_parameters = {'F_SCENARIO': retirement_indicator, 'U0': initial_on_state, 'P0': initial_power_output,
-                           'C_MC': marginal_costs, 'DISCOUNT_FACTOR': discount}
+        return discount
 
-        return year_parameters
+    def get_year_parameters(self, m, year):
+        """Get year specific for a given year"""
+
+        # Retirement indicators for a given year
+        retirement_indicator = self._get_year_retirement_indicator(m, year)
+
+        # Initial on-state for thermal generators
+        initial_on_state = self._get_year_initial_on_state(m, year)
+
+        # Initial power output in interval preceding first model time interval
+        initial_power_output = self._get_year_initial_power_output(m, year)
+
+        # Marginal costs applying to given year
+        marginal_costs = self._get_year_marginal_costs(m, year)
+
+        # Discount factor to apply to given year
+        discount = self._get_year_discount_factor(year)
+
+        # All year-specific parameters
+        parameters = {'F_SCENARIO': retirement_indicator, 'U0': initial_on_state, 'P0': initial_power_output,
+                      'C_MC': marginal_costs, 'DISCOUNT_FACTOR': discount}
+
+        return parameters
+
+    def _get_scenario_demand(self, m, year, scenario):
+        """Get demand for a given scenario"""
+
+        # Initialise container for updated parameters
+        demand = {}
+
+        # For each time interval
+        for t in m.T:
+
+            # For each NEM zone
+            for z in m.Z:
+
+                # Demand in each NEM zone for a given operating scenario
+                val = self.data.input_traces_dict[('DEMAND', z, t)][(year, scenario)]
+
+                # Check that value is sufficiently large (prevent numerical ill conditioning)
+                if val < 0.1:
+                    val = 0
+
+                demand[(z, t)] = float(val)
+
+        return demand
+
+    def _get_scenario_hydro_output(self, m, year, scenario):
+        """Get hydro output for a given scenario"""
+
+        # Initialise container for hydro output
+        hydro = {}
+
+        # For each time interval
+        for t in m.T:
+
+            # For each hydro generator
+            for g in m.G_E_HYDRO:
+                # Historic hydro output - for operating scenario
+                val = self.data.input_traces_dict[('HYDRO', g, t)][(year, scenario)]
+
+                # Set output to zero if negative or very small (SCADA data collection may cause -ve values)
+                if val < 0.1:
+                    val = 0
+
+                # Hydro output values
+                hydro[(g, t)] = float(val)
+
+        return hydro
+
+    def _get_scenario_solar_capacity_factors(self, m, year, scenario):
+        """Get solar capacity factors for a given scenario"""
+
+        # Map between existing solar DUIDs and labels in input_traces database
+        solar_map = {'BROKENH1': 'BROKENHILL', 'MOREESF1': 'MOREE', 'NYNGAN1': 'NYNGAN'}
+
+        # Initialise container for solar capacity factors
+        solar = {}
+
+        # For each time interval
+        for t in m.T:
+
+            # For all solar technologies
+            for g in m.G_C_SOLAR.union(m.G_E_SOLAR):
+
+                if g in m.G_C_SOLAR:
+                    # Get zone and technology
+                    zone, tech = g.split('-')[0], g.split('-')[-1]
+
+                    # FFP used in model, but but FFP2 in traces database - convert so both are the same
+                    if tech == 'FFP':
+                        tech = 'FFP2'
+
+                    # Solar capacity factors - candidate units
+                    val = self.data.input_traces_dict[('SOLAR', f'{zone}|{tech}', t)][(year, scenario)]
+
+                elif g in m.G_E_SOLAR:
+                    # Solar capacity factor - existing units
+                    val = self.data.input_traces_dict[('SOLAR', solar_map[g], t)][(year, scenario)]
+
+                else:
+                    raise Exception(f'Unexpected solar unit: {g}')
+
+                # Check that value is sufficiently large (prevent numerical ill conditioning)
+                if val < 0.1:
+                    val = 0
+
+                # Convert to float and add to container
+                solar[(g, t)] = float(val)
+
+        return solar
+
+    def _get_wind_capacity_factors(self, m, year, scenario):
+        """Get wind capacity factors"""
+
+        # Initialise container for wind capacity factors
+        wind = {}
+
+        # For each time interval
+        for t in m.T:
+
+            # For each wind generator (existing and candidate)
+            for g in m.G_E_WIND.union(m.G_C_WIND):
+
+                # If an existing wind generator
+                if g in m.G_E_WIND:
+                    # Wind bubble to which existing wind generator belongs
+                    bubble = self.data.existing_wind_bubble_map_dict['BUBBLE'][g]
+
+                    # Check that value is sufficiently large (prevent numerical ill conditioning)
+                    val = self.data.input_traces_dict[('WIND', bubble, t)][year, scenario]
+
+                # If a candidate generator
+                elif g in m.G_C_WIND:
+                    # Wind bubble to which candidate wind generator belongs
+                    bubble = self.data.candidate_units_dict[('PARAMETERS', 'WIND_BUBBLE')][g]
+
+                    # Check that value is sufficiently large (prevent numerical ill conditioning)
+                    val = self.data.input_traces_dict[('WIND', bubble, t)][year, scenario]
+
+                else:
+                    raise Exception(f'Unexpected wind generator encountered: {g}')
+
+                # Set to zero if value is too small (prevent numerical ill conditioning)
+                if val < 0.1:
+                    val = 0
+
+                # Wind capacity factor - existing units
+                wind[(g, t)] = float(val)
+
+        return wind
+
+    def _get_scenario_duration_days(self, year, scenario):
+        """Get duration of operating scenarios (days)"""
+
+        return float(self.data.input_traces_dict[('K_MEANS', 'METRIC', 'NORMALISED_DURATION')][(year, scenario)] * 365)
+
+    def get_scenario_parameters(self, m, year, scenario):
+        """Get parameters relating to a given operating scenario"""
+
+        # Scenario demand
+        demand = self._get_scenario_demand(m, year, scenario)
+
+        # Max hydro output for scenario
+        hydro = self._get_scenario_hydro_output(m, year, scenario)
+
+        # Solar capacity factors for scenario
+        solar = self._get_scenario_solar_capacity_factors(m, year, scenario)
+
+        # Wind capacity factors for scenario
+        wind = self._get_wind_capacity_factors(m, year, scenario)
+
+        # Scenario duration
+        rho = self._get_scenario_duration_days(year, scenario)
+
+        # All scenario parameters
+        parameters = {'DEMAND': demand, 'P_H': hydro, 'Q_SOLAR': solar, 'Q_WIND': wind, 'RHO': rho}
+
+        return parameters
+
+    @staticmethod
+    def update_parameters(m, parameters):
+        """Populate model object with parameters for a given operating scenario"""
+
+        # Keys = name of parameter to update, value = inner dict mapping parameter index to new values
+        for parameter_name, updated_values in parameters.items():
+
+            if isinstance(updated_values, dict):
+                # Inner dictionary - keys = parameter index, value = new parameter value
+                for index, new_value in updated_values.items():
+                    m.__getattribute__(parameter_name)[index] = new_value
+
+            elif isinstance(updated_values, float):
+                # Only one value associated with parameter (not indexed)
+                m.__getattribute__(parameter_name).value = updated_values
+
+            else:
+                raise Exception(f'Unexpected data type when updating parameters: {parameter_name, updated_values}')
+
+        return m
 
     def solve_model(self, m):
         """Solve model"""

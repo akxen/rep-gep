@@ -351,12 +351,24 @@ class InvestmentPlan:
     @staticmethod
     def fix_binary_variables(m):
         """Fix all binary variables"""
-        Var(m.G_C_THERM, m.Y, m.G_C_THERM_SIZE_OPTIONS, within=Binary, initialize=0)
+
         for g in m.G_C_THERM:
             for y in m.Y:
                 for n in m.G_C_THERM_SIZE_OPTIONS:
                     # Fix binary variables related to discrete sizing decision for candidate thermal units
                     m.d[g, y, n].fix()
+
+        return m
+
+    @staticmethod
+    def unfix_binary_variables(m):
+        """Unfix all binary variables"""
+
+        for g in m.G_C_THERM:
+            for y in m.Y:
+                for n in m.G_C_THERM_SIZE_OPTIONS:
+                    # Unfix binary variables related to discrete sizing decision for candidate thermal units
+                    m.d[g, y, n].unfix()
 
         return m
 
@@ -379,6 +391,6 @@ if __name__ == '__main__':
     # Fix binary variables
     model = investment_plan.fix_binary_variables(model)
 
-    # Re-solve to obtain dual variables for emissions constraint
+    # Re-solve to obtain dual variable for emissions constraint
     model = investment_plan.solve_model(model)
     print(f'Solved model in: {time.time() - start}s')
