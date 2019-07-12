@@ -137,12 +137,6 @@ class InvestmentPlan:
         # Candidate capacity variable obtained from sub-problem
         m.CANDIDATE_CAPACITY_FIXED = Param(m.G_C, m.Y, m.S, initialize=0, mutable=True)
 
-        # -------------------------------------------------------------------------------------------------------------
-        # To be placed in common components class later
-        # -------------------------------------------------------------------------------------------------------------
-
-
-
         return m
 
     @staticmethod
