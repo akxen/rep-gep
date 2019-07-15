@@ -87,9 +87,11 @@ class CommonComponents:
         m.G = m.G_E.union(m.G_C)
 
         # All years in model horizon
-        m.Y = RangeSet(2016, 2050)
+        # m.Y = RangeSet(2016, 2050)
+        m.Y = RangeSet(2016, 2017)
 
         # Operating scenarios for each year
+        # m.S = RangeSet(1, 10)
         m.S = RangeSet(1, 10)
 
         # Operating scenario hour

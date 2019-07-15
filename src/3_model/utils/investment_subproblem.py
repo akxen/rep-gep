@@ -1,6 +1,8 @@
 """Investment plan subproblem"""
 
+import os
 import time
+import pickle
 
 from pyomo.environ import *
 from pyomo.util.infeasible import log_infeasible_constraints
@@ -96,14 +98,16 @@ class InvestmentPlan:
             """
 
             if g in m.G_E:
-                # TODO: Update this value
-                return float(100)
+                return float(self.data.existing_units_dict[('PARAMETERS', 'FOM')][g])
 
-            if g in m.G_C_STORAGE:
-                # TODO: Need to find reasonable FOM cost for storage units - setting = to MEL-WIND for now
+            elif g in m.G_C_THERM.union(m.G_C_WIND, m.G_C_SOLAR):
+                return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')][g])
+
+            elif g in m.G_STORAGE:
+                # TODO: Need to find reasonable FOM cost for storage units - setting = MEL-WIND for now
                 return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')]['MEL-WIND'])
             else:
-                return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')][g])
+                raise Exception(f'Unexpected generator encountered: {g}')
 
         # Fixed operations and maintenance cost
         m.C_FOM = Param(m.G, rule=fixed_operations_and_maintenance_cost_rule)
@@ -123,7 +127,7 @@ class InvestmentPlan:
         m.TOTAL_EMISSIONS = Param(initialize=0, mutable=True)
 
         # Cumulative emissions target
-        m.CUMULATIVE_EMISSIONS_TARGET = Param(initialize=0, mutable=True)
+        m.CUMULATIVE_EMISSIONS_TARGET = Param(initialize=120219777.25042877 * 20, mutable=True)
 
         # Cost of violating cumulative emissions constraint (assumed) [$/tCO2]
         m.C_E = Param(initialize=10000)
@@ -132,7 +136,7 @@ class InvestmentPlan:
         m.WACC = Param(initialize=float(self.data.WACC))
 
         # Candidate capacity dual variable obtained from sub-problem solution. Updated each iteration.
-        m.PSI_FIXED = Param(m.G_C, m.Y, m.S, initialize=1000000, mutable=True)
+        m.PSI_FIXED = Param(m.G_C, m.Y, m.S, initialize=0, mutable=True)
 
         # Candidate capacity variable obtained from sub-problem
         m.CANDIDATE_CAPACITY_FIXED = Param(m.G_C, m.Y, m.S, initialize=0, mutable=True)
@@ -226,7 +230,6 @@ class InvestmentPlan:
 
             # Solar generators belonging to zone 'z'
             gens = [g for g in m.G_C_SOLAR if g.split('-')[0] == z]
-            print('SOLAR LIMITS', z, y, m.SOLAR_BUILD_LIMITS[z], gens)
 
             if gens:
                 return sum(m.a[g, y] for g in gens) - m.SOLAR_BUILD_LIMITS[z] <= 0
@@ -241,7 +244,6 @@ class InvestmentPlan:
 
             # Wind generators belonging to zone 'z'
             gens = [g for g in m.G_C_WIND if g.split('-')[0] == z]
-            print('WIND LIMITS', z, y, m.WIND_BUILD_LIMITS[z], gens)
 
             if gens:
                 return sum(m.a[g, y] for g in gens) - m.WIND_BUILD_LIMITS[z] <= 0
@@ -256,7 +258,6 @@ class InvestmentPlan:
 
             # Storage generators belonging to zone 'z'
             gens = [g for g in m.G_C_STORAGE if g.split('-')[0] == z]
-            print('STORAGE LIMITS', z, y, m.STORAGE_BUILD_LIMITS[z], gens)
 
             if gens:
                 return sum(m.a[g, y] for g in gens) - m.STORAGE_BUILD_LIMITS[z] <= 0
@@ -267,7 +268,7 @@ class InvestmentPlan:
         m.STORAGE_BUILD_LIMIT_CONS = Constraint(m.Z, m.Y, rule=wind_build_limits_cons_rule)
 
         # Cumulative emissions target
-        m.EMISSIONS_CONSTRAINT = Constraint(expr=m.TOTAL_EMISSIONS - m.CUMULATIVE_EMISSIONS_TARGET - m.f_e <= 0)
+        m.EMISSIONS_CONSTRAINT = Constraint(expr=-m.TOTAL_EMISSIONS + m.CUMULATIVE_EMISSIONS_TARGET + m.f_e >= 0)
 
         return m
 
@@ -344,9 +345,41 @@ class InvestmentPlan:
 
         return m
 
-    def update_parameters(self):
+    @staticmethod
+    def update_parameters(m, uc_solution_dir):
         """Update model parameters"""
-        pass
+
+        # All results
+        result_files = os.listdir(uc_solution_dir)
+
+        # Initialise total emissions
+        total_emissions = 0
+
+        # For each unit commitment results file
+        for f in result_files:
+
+            # Get year and scenario from filename
+            year, scenario = int(f.split('_')[-2]), int(f.split('_')[-1].replace('.pickle', ''))
+
+            # Open scenario solution file
+            with open(os.path.join(uc_solution_dir, f), 'rb') as g:
+
+                # Load scenario solution
+                scenario_solution = pickle.load(g)
+
+                # Get total emissions
+                total_emissions += scenario_solution['SCENARIO_EMISSIONS']
+
+                # Extract dual variables associated with capacity sizing decision for each candidate generator
+                for generator, val in scenario_solution['PSI_FIXED'].items():
+
+                    # Update dual variables
+                    m.PSI_FIXED[generator, year, scenario] = val
+
+        # Update total emissions from all operating scenarios
+        m.TOTAL_EMISSIONS = total_emissions
+
+        return m
 
     @staticmethod
     def fix_binary_variables(m):
@@ -372,9 +405,17 @@ class InvestmentPlan:
 
         return m
 
-    def save_solution(self):
+    @staticmethod
+    def save_solution(m, solution_dir):
         """Save model solution"""
-        pass
+
+        # Save investment plan
+        investment_plan_output = {'CAPACITY_FIXED': m.a.get_values(),
+                                  'LAMBDA_FIXED': m.dual[m.EMISSIONS_CONSTRAINT]}
+
+        # Save investment plan results
+        with open(os.path.join(solution_dir, 'investment-results.pickle'), 'wb') as f:
+            pickle.dump(investment_plan_output, f)
 
 
 if __name__ == '__main__':
@@ -383,6 +424,17 @@ if __name__ == '__main__':
 
     # Construct model to solve
     model = investment_plan.construct_model()
+
+    # Directory where unit commitment subproblem results can be found
+    uc_results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'operational_plan')
+
+    # Try and update parameters
+    try:
+        model = investment_plan.update_parameters(model, uc_results_directory)
+        print('Updated parameters obtained from UC sub-problem')
+
+    except Exception as e:
+        print(e)
 
     # Solve model
     start = time.time()
@@ -394,3 +446,9 @@ if __name__ == '__main__':
     # Re-solve to obtain dual variable for emissions constraint
     model = investment_plan.solve_model(model)
     print(f'Solved model in: {time.time() - start}s')
+
+    # Directory where solution should be save
+    solution_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'investment_plan')
+
+    # Save solution
+    investment_plan.save_solution(model, solution_directory)
