@@ -1061,7 +1061,7 @@ class UnitCommitment:
             Note: Dual variable will be used to update parameter values in investment plan subproblem
             """
 
-            return - m.b[g] + m.CAPACITY_FIXED[g] == 0
+            return m.b[g] - m.CAPACITY_FIXED[g] == 0
 
         # Fix capacity in subproblem to that value determined in investment plan subproblem
         m.FIXED_SUBPROBLEM_CAPACITY = Constraint(m.G_C, rule=investment_capacity_coupling_rule)
@@ -1118,8 +1118,8 @@ class UnitCommitment:
             investment_results = pickle.load(f)
 
         # All parameters that should be updated once per iteration
-        # parameters = {'LAMBDA_FIXED': investment_results['LAMBDA_FIXED']}
-        parameters = {'LAMBDA_FIXED': float(0)}
+        parameters = {'LAMBDA_FIXED': investment_results['LAMBDA_FIXED']}
+        # parameters = {'LAMBDA_FIXED': float(0)}
 
         return parameters
 
@@ -1188,7 +1188,7 @@ class UnitCommitment:
 
                 # If unit is on in the preceding interval, assume power output = min power output
                 if initial_on_state[g] == 1:
-                    initial_power_output[g] = model.P_MIN[g]
+                    initial_power_output[g] = m.P_MIN[g]
 
                 # Else, assume power output is zero in preceding interval
                 else:
@@ -1259,15 +1259,15 @@ class UnitCommitment:
 
         return marginal_costs
 
-    def _get_year_discount_factor(self, year):
+    def _get_year_discount_factor(self, m, year):
         """Compute discount factor applying to a given year"""
 
         # Discount factor applying to given year - assume computation in terms of 2016 present values
-        if 2016 <= year < 2050:
+        if 2016 <= year < m.Y.last():
             discount = 1 / ((1 + self.data.WACC) ** (year - 2016))
 
         # If the last year in the model horizon (2050), discount such that operating costs are paid in perpetuity
-        elif year == 2050:
+        elif year == m.Y.last():
             discount = (1 / ((1 + self.data.WACC) ** (year - 2016))) * ((self.data.WACC + 1) / self.data.WACC)
 
         else:
@@ -1304,7 +1304,7 @@ class UnitCommitment:
         marginal_costs = self._get_year_marginal_costs(m, year)
 
         # Discount factor to apply to given year
-        discount = self._get_year_discount_factor(year)
+        discount = self._get_year_discount_factor(m, year)
 
         # Fixed capacities
         capacity_fixed = self._get_year_fixed_candidate_capacities(year, investment_plan_solution_dir)
@@ -1506,7 +1506,7 @@ class UnitCommitment:
         """Solve model"""
 
         # Solve model
-        self.opt.solve(m, tee=True, options=self.solver_options, keepfiles=self.keepfiles)
+        self.opt.solve(m, tee=False, options=self.solver_options, keepfiles=self.keepfiles)
 
         # Log infeasible constraints if they exist
         log_infeasible_constraints(m)
@@ -1548,7 +1548,7 @@ class UnitCommitment:
         return m
 
     @staticmethod
-    def save_subproblem_results(m, year, scenario, results_dir):
+    def save_solution(m, year, scenario, results_dir):
         """Save selected results from subproblem - parameters to be passed to investment plan subproblem"""
 
         # Dual variable associated with fixed capacity constraint
@@ -1556,7 +1556,7 @@ class UnitCommitment:
 
         # Results to be used in investment planning problem
         results = {'SCENARIO_EMISSIONS': m.SCENARIO_EMISSIONS.expr(), 'SCENARIO_DEMAND': m.SCENARIO_DEMAND.expr(),
-                   'PSI_FIXED': fixed_capacity_dual_var}
+                   'PSI_FIXED': fixed_capacity_dual_var, 'CANDIDATE_CAPACITY_FIXED': m.b.get_values()}
 
         # Filename
         filename = f'uc-results_{year}_{scenario}.pickle'

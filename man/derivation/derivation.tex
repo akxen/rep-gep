@@ -528,7 +528,7 @@ First, the policy parameters $\vBaseline$ and $\vPermitPrice$ are set equal to z
 The objective function is separated such that one program is dedicated to finding a feasible investment plan. Multiplier variables obtained from operating program sub-problems will be used to guide the feasible investment plan to the least-cost plan.
 
 \begin{equation}
-\minimise\limits_{\bm{x}_{\iYear,\iScenario}} \quad \cObjectiveFunction + \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \overline{\psi}_{\iGenerator,\iYear,\iScenario}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYear,\iScenario} - \vInstalledCapacityTotal\right]
+\minimise\limits_{\bm{x}_{\iYear,\iScenario}} \quad \cObjectiveFunction - \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \overline{\psi}_{\iGenerator,\iYear,\iScenario}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYear,\iScenario} - \vInstalledCapacityTotal\right]
 \end{equation}
 
 subject to
@@ -623,7 +623,7 @@ As this constant has no bearing on the optimal investment plan it can be removed
 \begin{align}
 	\begin{split}
 		\minimise\limits_{\bm{x}_{a}} \quad & \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost[\iYear]  + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation\\
-		& + \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \overline{\psi}_{\iGenerator,\iYear,\iScenario}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYear,\iScenario} - \vInstalledCapacityTotal\right]
+		& - \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \overline{\psi}_{\iGenerator,\iYear,\iScenario}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYear,\iScenario} - \vInstalledCapacityTotal\right]
 	\end{split}
 \end{align}
 
@@ -634,7 +634,7 @@ For a given year, $\iYear$, and operating scenario, $\iScenario$, the objective 
 
 \begin{align}
 	\begin{split}
-		\minimise\limits_{\bm{x}_{\iYear,\iScenario}} \quad &\cObjectiveFunction + \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYearAlias=1}^{\sYears}\sum\limits_{\iScenarioAlias \in \sScenarios^{\prime}} \overline{\psi}_{\iGenerator,\iYearAlias,\iScenarioAlias}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYearAlias,\iScenarioAlias} - \overline{\vInstalledCapacityTotal[]}_{\iGenerator,\iYearAlias}\right]\\
+		\minimise\limits_{\bm{x}_{\iYear,\iScenario}} \quad &\cObjectiveFunction - \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYearAlias=1}^{\sYears}\sum\limits_{\iScenarioAlias \in \sScenarios^{\prime}} \overline{\psi}_{\iGenerator,\iYearAlias,\iScenarioAlias}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYearAlias,\iScenarioAlias} - \overline{\vInstalledCapacityTotal[]}_{\iGenerator,\iYearAlias}\right]\\
 		& + \overline{\lambda} \left[\sum\limits_{\iYearAlias=1}^{\sYears} \sum\limits_{\iScenarioAlias \in \sScenarios^{\prime}} \cScenarioDuration[\iYearAlias,\iScenarioAlias] \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsThermal} \overline{\vEnergy[]}_{\iGenerator,\iYearAlias,\iScenarioAlias,\iInterval} \cEmissionsIntensity + \cScenarioDuration\sum\limits_{\iInterval \in \sIntervals}\sum\limits_{\iGenerator \in \sGeneratorsThermal} \vEnergy[\iGenerator,\iYear,\iScenario,\iInterval] \cEmissionsIntensity - \cEmmissionsCumulativeTarget - \overline{\vEmissionsTargetViolation}\right]\\
 	\end{split}
 \end{align}
@@ -660,7 +660,7 @@ Unit commitment constraints for the given operating scenario: (\ref{eqn: reserve
 Note that the second term in the objective is a constant, as is the term denoting emissions generated in all other operating scenarios. Allowing the objective to be re-written as:
 
 \begin{equation}
-	\minimise\limits_{\bm{x}_{\iYear,\iScenario}} \quad\cObjectiveFunction + k_{a} + \overline{\lambda} \left[k_{b} + \cScenarioDuration\sum\limits_{\iInterval \in \sIntervals}\sum\limits_{\iGenerator \in \sGeneratorsThermal} \vEnergy[\iGenerator,\iYear,\iScenario,\iInterval] \cEmissionsIntensity - \overline{\vEmissionsTargetViolation}\right]
+	\minimise\limits_{\bm{x}_{\iYear,\iScenario}} \quad\cObjectiveFunction - k_{a} + \overline{\lambda} \left[k_{b} + \cScenarioDuration\sum\limits_{\iInterval \in \sIntervals}\sum\limits_{\iGenerator \in \sGeneratorsThermal} \vEnergy[\iGenerator,\iYear,\iScenario,\iInterval] \cEmissionsIntensity - \overline{\vEmissionsTargetViolation}\right]
 \end{equation}
 
 Where:

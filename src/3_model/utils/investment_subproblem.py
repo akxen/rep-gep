@@ -293,7 +293,7 @@ class InvestmentPlan:
                             for g in m.G_C for y in m.Y for s in m.S)
 
             # Objective function - note: also considers penalty (m.PEN) associated with emissions constraint violation
-            objective_function = investment_cost + fom_cost + end_of_year_cost + m.PEN + dual_cost
+            objective_function = investment_cost + fom_cost + end_of_year_cost + m.PEN - dual_cost
 
             return objective_function
 
@@ -338,7 +338,7 @@ class InvestmentPlan:
         """Solve model instance"""
 
         # Solve model
-        self.opt.solve(m, tee=True, options=self.solver_options, keepfiles=self.keepfiles)
+        self.opt.solve(m, tee=False, options=self.solver_options, keepfiles=self.keepfiles)
 
         # Log infeasible constraints if they exist
         log_infeasible_constraints(m)
@@ -349,8 +349,8 @@ class InvestmentPlan:
     def update_parameters(m, uc_solution_dir):
         """Update model parameters"""
 
-        # All results
-        result_files = os.listdir(uc_solution_dir)
+        # All results from unit commitment subproblem solution
+        result_files = [f for f in os.listdir(uc_solution_dir) if '.pickle' in f]
 
         # Initialise total emissions
         total_emissions = 0
@@ -375,6 +375,12 @@ class InvestmentPlan:
 
                     # Update dual variables
                     m.PSI_FIXED[generator, year, scenario] = val
+
+                # Extract fixed capacity used in subproblems
+                for generator, val in scenario_solution['CANDIDATE_CAPACITY_FIXED'].items():
+
+                    # Update fixed candidate capacity
+                    m.CANDIDATE_CAPACITY_FIXED[generator, year, scenario] = val
 
         # Update total emissions from all operating scenarios
         m.TOTAL_EMISSIONS = total_emissions
