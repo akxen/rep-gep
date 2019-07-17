@@ -5,6 +5,7 @@ import time
 import pickle
 from collections import OrderedDict
 
+import matplotlib.pyplot as plt
 from pyomo.environ import *
 from pyomo.util.infeasible import log_infeasible_constraints
 
@@ -145,7 +146,7 @@ class UnitCommitment:
         def powerflow_min_rule(_m, l):
             """Minimum powerflow over network link"""
 
-            return float(-self.data.powerflow_limits[l]['reverse'] * 100)
+            return float(-self.data.powerflow_limits[l]['reverse'])
 
         # Lower bound for powerflow over link
         m.POWERFLOW_MIN = Param(m.L_I, rule=powerflow_min_rule)
@@ -153,7 +154,7 @@ class UnitCommitment:
         def powerflow_max_rule(_m, l):
             """Maximum powerflow over network link"""
 
-            return float(self.data.powerflow_limits[l]['forward'] * 100)
+            return float(self.data.powerflow_limits[l]['forward'])
 
         # Lower bound for powerflow over link
         m.POWERFLOW_MAX = Param(m.L_I, rule=powerflow_max_rule)
@@ -342,13 +343,13 @@ class UnitCommitment:
         m.r_up_violation = Var(m.R, m.T, within=NonNegativeReals, initialize=0)
 
         # Startup state variable
-        m.v = Var(m.G_THERM, m.T, within=NonNegativeReals, initialize=0)
+        m.v = Var(m.G_THERM, m.T, within=Binary, initialize=0)
 
         # On-state variable
-        m.u = Var(m.G_THERM, m.T, within=NonNegativeReals, initialize=1)
+        m.u = Var(m.G_THERM, m.T, within=Binary, initialize=1)
 
         # Shutdown state variable
-        m.w = Var(m.G_THERM, m.T, within=NonNegativeReals, initialize=0)
+        m.w = Var(m.G_THERM, m.T, within=Binary, initialize=0)
 
         # Power output above minimum dispatchable level
         m.p = Var(m.G_THERM, m.T, within=NonNegativeReals, initialize=0)
@@ -413,6 +414,9 @@ class UnitCommitment:
                     return (m.p_total[g, t - 1] + m.p_total[g, t]) / 2
                 else:
                     return (m.P0[g] + m.p_total[g, t]) / 2
+
+            else:
+                raise Exception(f'Unexpected unit encountered: {g}')
 
         # Energy output
         m.e = Expression(m.G, m.T, rule=energy_output_rule)
@@ -961,7 +965,8 @@ class UnitCommitment:
             return (sum(m.p_total[g, t] for g in generators) - m.DEMAND[z, t]
                     - sum(m.INCIDENCE_MATRIX[l, z] * m.p_flow[l, t] for l in m.L)
                     + sum(m.p_out[g, t] - m.p_in[g, t] for g in storage_units)
-                    + m.p_V[z, t] == 0)
+                    # + m.p_V[z, t]
+                    == 0)
 
         # Power balance constraint for each zone and time period
         m.POWER_BALANCE = Constraint(m.Z, m.T, rule=power_balance_rule)
@@ -1110,16 +1115,21 @@ class UnitCommitment:
         return m
 
     @staticmethod
-    def get_iteration_parameters(investment_plan_solution_dir):
+    def get_iteration_parameters(investment_plan_solution_dir, use_default=False):
         """Get parameters that only need to be update once per iteration"""
 
-        with open(os.path.join(investment_plan_solution_dir, 'investment-results.pickle'), 'rb') as f:
-            # Load results obtained from solving the investment plan sub-problem
-            investment_results = pickle.load(f)
+        # Use default parameters
+        if use_default:
+            parameters = {'LAMBDA_FIXED': float(0)}
 
-        # All parameters that should be updated once per iteration
-        parameters = {'LAMBDA_FIXED': investment_results['LAMBDA_FIXED']}
-        # parameters = {'LAMBDA_FIXED': float(0)}
+        # Else read parameters from previous investment plan solution
+        else:
+            with open(os.path.join(investment_plan_solution_dir, 'investment-results.pickle'), 'rb') as f:
+                # Load results obtained from solving the investment plan sub-problem
+                investment_results = pickle.load(f)
+
+            # All parameters that should be updated once per iteration
+            parameters = {'LAMBDA_FIXED': investment_results['LAMBDA_FIXED']}
 
         return parameters
 
@@ -1276,19 +1286,24 @@ class UnitCommitment:
         return discount
 
     @staticmethod
-    def _get_year_fixed_candidate_capacities(year, investment_plan_solution_dir):
+    def _get_year_fixed_candidate_capacities(m, year, investment_plan_solution_dir, use_default):
         """Get fixed candidate capacities as determined by the investment plan subproblem"""
 
-        with open(os.path.join(investment_plan_solution_dir, 'investment-results.pickle'), 'rb') as f:
-            # Load results obtained from solving the investment plan sub-problem
-            investment_results = pickle.load(f)
+        if use_default:
+            # Use default value of 0 (assume no candidate capacity installed)
+            fixed_capacities = {g: 0 for g in m.G_C}
 
-        # Fixed capacities for candidate units for a given year - determined by investment plan sub-problem
-        fixed_capacities = {gen: val for (gen, y), val in investment_results['CAPACITY_FIXED'].items() if y == year}
+        else:
+            with open(os.path.join(investment_plan_solution_dir, 'investment-results.pickle'), 'rb') as f:
+                # Load results obtained from solving the investment plan sub-problem
+                investment_results = pickle.load(f)
+
+            # Fixed capacities for candidate units for a given year - determined by investment plan sub-problem
+            fixed_capacities = {gen: val for (gen, y), val in investment_results['CAPACITY_FIXED'].items() if y == year}
 
         return fixed_capacities
 
-    def get_year_parameters(self, m, year, investment_plan_solution_dir):
+    def get_year_parameters(self, m, year, investment_plan_solution_dir, use_default=False):
         """Get year specific for a given year"""
 
         # Retirement indicators for a given year
@@ -1307,7 +1322,7 @@ class UnitCommitment:
         discount = self._get_year_discount_factor(m, year)
 
         # Fixed capacities
-        capacity_fixed = self._get_year_fixed_candidate_capacities(year, investment_plan_solution_dir)
+        capacity_fixed = self._get_year_fixed_candidate_capacities(m, year, investment_plan_solution_dir, use_default)
 
         # All year-specific parameters
         parameters = {'F_SCENARIO': retirement_indicator, 'U0': initial_on_state, 'P0': initial_power_output,
@@ -1482,6 +1497,11 @@ class UnitCommitment:
         return parameters
 
     @staticmethod
+    def get_validation_scenario_parameters(m):
+        """Get parameters used to validate model results"""
+        pass
+
+    @staticmethod
     def update_parameters(m, parameters):
         """Populate model object with parameters for a given operating scenario"""
 
@@ -1506,7 +1526,7 @@ class UnitCommitment:
         """Solve model"""
 
         # Solve model
-        self.opt.solve(m, tee=False, options=self.solver_options, keepfiles=self.keepfiles)
+        self.opt.solve(m, tee=True, options=self.solver_options, keepfiles=self.keepfiles)
 
         # Log infeasible constraints if they exist
         log_infeasible_constraints(m)
@@ -1578,47 +1598,34 @@ if __name__ == '__main__':
 
     # Parameters obtained from investment plan subproblem - updated once per model iteration
     investment_plan_solution_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'investment_plan')
-    iteration_parameters = uc.get_iteration_parameters(investment_plan_solution_directory)
+    iteration_parameters = uc.get_iteration_parameters(investment_plan_solution_directory, use_default=True)
+
+    # Update parameters for a given iteration
+    model = uc.update_parameters(model, iteration_parameters)
 
     # Directory for unit commitment subproblem results
     uc_results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'operational_plan')
 
+    # Define scenario
+    year, scenario = 2016, 1
+
     # Parameters depending on a given year
-    year_parameters = uc.get_year_parameters(model, 2016, investment_plan_solution_directory)
+    year_parameters = uc.get_year_parameters(model, year, investment_plan_solution_directory, use_default=True)
 
     # Update model parameters
-    model = uc.update_parameters(model, iteration_parameters)
     model = uc.update_parameters(model, year_parameters)
 
-    emissions = []
-    demand = []
+    # Parameters depending on a given operating scenario
+    scenario_parameters = uc.get_scenario_parameters(model, year, scenario)
 
-    # For each year in the model horizon
-    for y in model.Y:
+    # Update scenario parameters
+    model = uc.update_parameters(model, scenario_parameters)
 
-        for s in model.S:
+    # Solve model
+    model = uc.solve_model(model)
 
-            # Parameters depending on a given operating scenario
-            scenario_parameters = uc.get_scenario_parameters(model, y, s)
+    # Fix all binary variables
+    model = uc.fix_binary_variables(model)
 
-            # Update scenario parameters
-            model = uc.update_parameters(model, scenario_parameters)
-
-            # Solve model
-            model = uc.solve_model(model)
-
-            # Fix all binary variables
-            model = uc.fix_binary_variables(model)
-
-            # Re-solve to obtain dual variables
-            model = uc.solve_model(model)
-            print(f'Solved in {time.time() - start:.2f}s')
-
-            print(f'Scenario {s} emissions:', model.SCENARIO_EMISSIONS.expr())
-            print(f'Scenario {s} demand:', model.SCENARIO_DEMAND.expr())
-            print(f'Scenario {s} emissions_intensity:', model.SCENARIO_EMISSIONS_INTENSITY.expr())
-            emissions.append(model.SCENARIO_EMISSIONS.expr())
-            demand.append(model.SCENARIO_DEMAND.expr())
-
-            # Save subproblem results
-            uc.save_subproblem_results(model, y, s, uc_results_directory)
+    # Re-solve to obtain dual variables
+    model = uc.solve_model(model)
