@@ -195,7 +195,7 @@ class UnitCommitment:
                 return float(self.data.candidate_unit_build_limits_dict[zone]['STORAGE'])
 
             elif g in m.G_C_THERM:
-                # Arbitrarily large upper-bound for thermal units
+                # Arbitrarily large upper-bound for thermal build limit
                 return float(99999)
             else:
                 raise Exception(f'Unexpected generator encountered: {g}')
@@ -467,7 +467,7 @@ class UnitCommitment:
 
             # Operating cost related to energy output + emissions charge
             operating_costs = (m.RHO
-                               * sum((m.C_MC[g] + ((m.EMISSIONS_RATE[g] - m.baseline) * m.permit_price) * m.e[g, t])
+                               * sum((m.C_MC[g] + ((m.EMISSIONS_RATE[g] - m.baseline) * m.permit_price)) * m.e[g, t]
                                      for g in m.G_THERM for t in m.T))
 
             # Existing unit start-up costs
@@ -965,7 +965,7 @@ class UnitCommitment:
             return (sum(m.p_total[g, t] for g in generators) - m.DEMAND[z, t]
                     - sum(m.INCIDENCE_MATRIX[l, z] * m.p_flow[l, t] for l in m.L)
                     + sum(m.p_out[g, t] - m.p_in[g, t] for g in storage_units)
-                    # + m.p_V[z, t]
+                    + m.p_V[z, t]
                     == 0)
 
         # Power balance constraint for each zone and time period
@@ -1330,6 +1330,37 @@ class UnitCommitment:
 
         return parameters
 
+    def get_validation_year_parameters(self, m, validation_data_dir):
+        """Year parameters used to validate model formulation"""
+
+        # Load validation data used in alternative formulation (used to check results)
+        with open(os.path.join(validation_data_dir, 'validation_data.pickle'), 'rb') as f:
+            validation_data = pickle.load(f)
+
+        # No units have retired
+        retirement_indicator = {g: float(0) for g in m.G_E}
+
+        # Initial on-state for thermal generators
+        initial_on_state = validation_data['U0']
+
+        # Initial power output in interval preceding first model time interval
+        initial_power_output = validation_data['P0']
+
+        # Marginal costs applying to given year
+        marginal_costs = validation_data['C_MC']
+
+        # Discount factor to apply to given year
+        discount = float(1)
+
+        # Fixed candidate unit capacities - set to 0 for all candidate units
+        capacity_fixed = {g: float(0) for g in m.G_C}
+
+        # All year-specific parameters
+        parameters = {'F_SCENARIO': retirement_indicator, 'U0': initial_on_state, 'P0': initial_power_output,
+                      'C_MC': marginal_costs, 'DISCOUNT_FACTOR': discount, 'CAPACITY_FIXED': capacity_fixed}
+
+        return parameters
+
     def _get_scenario_demand(self, m, year, scenario):
         """Get demand for a given scenario"""
 
@@ -1413,6 +1444,10 @@ class UnitCommitment:
                 if val < 0.1:
                     val = 0
 
+                # Some capacity factors are > 1 in AEMO dataset. Set = 0.99 to prevent constraint violation
+                elif val >= 1:
+                    val = 0.99
+
                 # Convert to float and add to container
                 solar[(g, t)] = float(val)
 
@@ -1452,6 +1487,10 @@ class UnitCommitment:
                 # Set to zero if value is too small (prevent numerical ill conditioning)
                 if val < 0.1:
                     val = 0
+
+                # Some capacity factors are > 1 in AEMO dataset. Set = 0.99 to prevent constraint violation
+                elif val >= 1:
+                    val = 0.99
 
                 # Wind capacity factor - existing units
                 wind[(g, t)] = float(val)
@@ -1497,9 +1536,22 @@ class UnitCommitment:
         return parameters
 
     @staticmethod
-    def get_validation_scenario_parameters(m):
+    def get_validation_scenario_parameters(m, validation_data_dir):
         """Get parameters used to validate model results"""
-        pass
+
+        # Load validation data used in alternative formulation (used to check results)
+        with open(os.path.join(validation_data_dir, 'validation_data.pickle'), 'rb') as f:
+            validation_data = pickle.load(f)
+
+        # Set all wind and solar output = 0 for validation case
+        wind = {(g, t): float(0) for g in model.G_C_WIND.union(model.G_E_WIND) for t in m.T}
+        solar = {(g, t): float(0) for g in model.G_C_SOLAR.union(model.G_E_SOLAR) for t in m.T}
+
+        # All scenario parameters
+        parameters = {'DEMAND': validation_data['DEMAND'], 'P_H': validation_data['P_H'],
+                      'Q_SOLAR': solar, 'Q_WIND': wind, 'RHO': float(1)}
+
+        return parameters
 
     @staticmethod
     def update_parameters(m, parameters):
@@ -1526,7 +1578,7 @@ class UnitCommitment:
         """Solve model"""
 
         # Solve model
-        self.opt.solve(m, tee=True, options=self.solver_options, keepfiles=self.keepfiles)
+        self.opt.solve(m, tee=False, options=self.solver_options, keepfiles=self.keepfiles)
 
         # Log infeasible constraints if they exist
         log_infeasible_constraints(m)
@@ -1576,7 +1628,8 @@ class UnitCommitment:
 
         # Results to be used in investment planning problem
         results = {'SCENARIO_EMISSIONS': m.SCENARIO_EMISSIONS.expr(), 'SCENARIO_DEMAND': m.SCENARIO_DEMAND.expr(),
-                   'PSI_FIXED': fixed_capacity_dual_var, 'CANDIDATE_CAPACITY_FIXED': m.b.get_values()}
+                   'PSI_FIXED': fixed_capacity_dual_var, 'CANDIDATE_CAPACITY_FIXED': m.b.get_values(),
+                   'SCENARIO_DURATION': m.RHO.value}
 
         # Filename
         filename = f'uc-results_{year}_{scenario}.pickle'
@@ -1594,6 +1647,7 @@ if __name__ == '__main__':
     # Construct model object
     model = uc.construct_model()
 
+    # Start timer - used to measure time it takes to construct and solve model
     start = time.time()
 
     # Parameters obtained from investment plan subproblem - updated once per model iteration
@@ -1603,8 +1657,11 @@ if __name__ == '__main__':
     # Update parameters for a given iteration
     model = uc.update_parameters(model, iteration_parameters)
 
-    # Directory for unit commitment subproblem results
-    uc_results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'operational_plan')
+    # Directory containing validation parameter data
+    validation_data_directory = r'C:\Users\eee\Desktop\git\research\FYP-review\NOTEBOOKS\model'
+
+    # # Directory for unit commitment subproblem results
+    # uc_results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'operational_plan')
 
     # Define scenario
     year, scenario = 2016, 1
@@ -1612,11 +1669,17 @@ if __name__ == '__main__':
     # Parameters depending on a given year
     year_parameters = uc.get_year_parameters(model, year, investment_plan_solution_directory, use_default=True)
 
+    # Validation data
+    # year_parameters = uc.get_validation_year_parameters(model, validation_data_directory)
+
     # Update model parameters
     model = uc.update_parameters(model, year_parameters)
 
     # Parameters depending on a given operating scenario
     scenario_parameters = uc.get_scenario_parameters(model, year, scenario)
+
+    # Validation data
+    # scenario_parameters = uc.get_validation_scenario_parameters(model, validation_data_directory)
 
     # Update scenario parameters
     model = uc.update_parameters(model, scenario_parameters)
@@ -1629,3 +1692,7 @@ if __name__ == '__main__':
 
     # Re-solve to obtain dual variables
     model = uc.solve_model(model)
+
+    # Plot prices in NCEN (used as basis of comparison)
+    plt.plot([model.dual[model.POWER_BALANCE['NCEN', t]] for t in model.T])
+    plt.show()

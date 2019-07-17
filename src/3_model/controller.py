@@ -22,6 +22,9 @@ def convergence_check(model, investment_solutions_dir):
     # Difference between installed capacity solution in successive iterations
     capacity_difference = {k: abs(model.a[k].value - previous_solution['CAPACITY_FIXED'][k]) for k in model.a.keys()}
 
+    # Units for which the difference between solutions is greater than zero
+    capacity_difference_gt_zero = {k: {'previous': previous_solution['CAPACITY_FIXED'][k], 'current': model.a[k].value} for k, v in capacity_difference.items() if v > 0}
+
     # Max capacity difference
     max_capacity_difference = max(capacity_difference.values())
 
@@ -36,6 +39,12 @@ def convergence_check(model, investment_solutions_dir):
     Lambda difference: {lambda_difference}
     """
     print(message)
+
+    logging.info(message)
+    logging.info(f"Previous variable capacity solution: {previous_solution['CAPACITY_FIXED']}")
+    logging.info(f"Current variable capacity solution: {model.a.get_values()}")
+    logging.info(f"Difference between solutions: {capacity_difference}")
+    logging.info(f"Indices with difference > 0: {capacity_difference_gt_zero}")
 
     if (max_capacity_difference < 1) and (lambda_difference < 1):
         return True

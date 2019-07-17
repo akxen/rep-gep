@@ -373,7 +373,7 @@ class InvestmentPlan:
                 # Extract dual variables associated with capacity sizing decision for each candidate generator
                 for generator, val in scenario_solution['PSI_FIXED'].items():
 
-                    # Update dual variables
+                    # Update dual variables - add previously to previously computed value
                     m.PSI_FIXED[generator, year, scenario] = val
 
                 # Extract fixed capacity used in subproblems
