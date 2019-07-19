@@ -22,7 +22,7 @@ class InvestmentPlan:
         # Solver options
         self.keepfiles = False
         self.solver_options = {}  # 'MIPGap': 0.0005
-        self.opt = SolverFactory('gurobi', solver_io='lp')
+        self.opt = SolverFactory('gurobi', solver_io='mps')
 
     def define_parameters(self, m):
         """Investment plan model parameters"""
@@ -98,14 +98,14 @@ class InvestmentPlan:
             """
 
             if g in m.G_E:
-                return float(self.data.existing_units_dict[('PARAMETERS', 'FOM')][g])
+                return float(self.data.existing_units_dict[('PARAMETERS', 'FOM')][g] * 1000)
 
             elif g in m.G_C_THERM.union(m.G_C_WIND, m.G_C_SOLAR):
-                return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')][g])
+                return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')][g] * 1000)
 
             elif g in m.G_STORAGE:
                 # TODO: Need to find reasonable FOM cost for storage units - setting = MEL-WIND for now
-                return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')]['MEL-WIND'])
+                return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')]['MEL-WIND'] * 1000)
             else:
                 raise Exception(f'Unexpected generator encountered: {g}')
 
@@ -127,7 +127,7 @@ class InvestmentPlan:
         m.TOTAL_EMISSIONS = Param(initialize=0, mutable=True)
 
         # Cumulative emissions target
-        m.CUMULATIVE_EMISSIONS_TARGET = Param(initialize=120219777.25042877 * 20, mutable=True)
+        m.CUMULATIVE_EMISSIONS_TARGET = Param(initialize=100e9, mutable=True)
 
         # Cost of violating cumulative emissions constraint (assumed) [$/tCO2]
         m.C_E = Param(initialize=10000)
@@ -373,8 +373,11 @@ class InvestmentPlan:
                 # Extract dual variables associated with capacity sizing decision for each candidate generator
                 for generator, val in scenario_solution['PSI_FIXED'].items():
 
+                    # Compute update amount
+                    increment = (val - m.PSI_FIXED[generator, year, scenario].value) / 2
+
                     # Update dual variables - add previously to previously computed value
-                    m.PSI_FIXED[generator, year, scenario] = val
+                    m.PSI_FIXED[generator, year, scenario] += increment
 
                 # Extract fixed capacity used in subproblems
                 for generator, val in scenario_solution['CANDIDATE_CAPACITY_FIXED'].items():

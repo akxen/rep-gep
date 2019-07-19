@@ -23,8 +23,8 @@ class UnitCommitment:
     def __init__(self):
         # Solver options
         self.keepfiles = False
-        self.solver_options = {}  # 'MIPGap': 0.0005
-        self.opt = SolverFactory('gurobi', solver_io='lp')
+        self.solver_options = {'FeasibilityTol': 1e-2} # 'MIPGap': 0.0005
+        self.opt = SolverFactory('gurobi', solver_io='mps')
 
     def define_parameters(self, m):
         """Define unit commitment problem parameters"""
@@ -1544,8 +1544,8 @@ class UnitCommitment:
             validation_data = pickle.load(f)
 
         # Set all wind and solar output = 0 for validation case
-        wind = {(g, t): float(0) for g in model.G_C_WIND.union(model.G_E_WIND) for t in m.T}
-        solar = {(g, t): float(0) for g in model.G_C_SOLAR.union(model.G_E_SOLAR) for t in m.T}
+        wind = {(g, t): float(0) for g in m.G_C_WIND.union(m.G_E_WIND) for t in m.T}
+        solar = {(g, t): float(0) for g in m.G_C_SOLAR.union(m.G_E_SOLAR) for t in m.T}
 
         # All scenario parameters
         parameters = {'DEMAND': validation_data['DEMAND'], 'P_H': validation_data['P_H'],

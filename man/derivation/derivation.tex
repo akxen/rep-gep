@@ -71,7 +71,7 @@
 \newcommand{\cOperatingCostWind}[1][\iYear,\iScenario]{\mathrm{OP}^{\mathrm{W}}_{#1}}
 \newcommand{\cOperatingCostSolar}[1][\iYear,\iScenario]{\mathrm{OP}^{\mathrm{S}}_{#1}}
 \newcommand{\cOperatingCostStorage}[1][\iYear,\iScenario]{\mathrm{OP}^{\mathrm{Q}}_{#1}}
-\newcommand{\cFixedOperationsMaintenanceCost}[1][\iGenerator]{\mathrm{FOM}_{#1}}
+\newcommand{\cFixedOperationsMaintenanceCost}[1][\iYear]{\mathrm{FOM}_{#1}}
 \newcommand{\cFixedOperationsMaintenanceCostGenerator}[1][\iGenerator]{C^{\mathrm{FOM}}_{#1}}
 \newcommand{\cScenarioDuration}[1][\iYear,\iScenario]{\rho_{#1}}
 \newcommand{\cMarginalCost}[1][\iGenerator,\iYear]{C^{\mathrm{MC}}_{#1}}
@@ -86,7 +86,9 @@
 \newcommand{\cAssetLifetime}[1][\iGenerator]{A_{#1}}
 \newcommand{\cTotalPresentValue}[1][]{\mathrm{TPV}_{#1}}
 \newcommand{\cInvestmentSize}{X^{\mathrm{C,T}}_{\iGenerator,\iInvestmentSizeOption}}
-\newcommand{\cBuildLimit}[1][]{B^{\mathrm{C,#1}}_{\iZone}}
+\newcommand{\cBuildLimitWind}{B^{\mathrm{C,\mathrm{W}}}_{\iZone}}
+\newcommand{\cBuildLimitSolar}{B^{\mathrm{C,\mathrm{S}}}_{\iZone}}
+\newcommand{\cBuildLimitStorage}{B^{\mathrm{C,\mathrm{Q}}}_{\iZone}}
 \newcommand{\cReserveUpRequirement}[1][\iRegion]{D^{+}_{#1}}
 \newcommand{\cUpTimeMin}[1][\iGenerator]{TU_{#1}}
 \newcommand{\cDownTimeMin}[1][\iGenerator]{TD_{#1}}
@@ -97,7 +99,8 @@
 \newcommand{\cStartupTrajectory}[1][\iGenerator,\iIntervalAlias]{P^{\mathrm{SU}}_{#1}}
 \newcommand{\cShutdownDuration}[1][\iGenerator]{SD_{#1}^{\mathrm{D}}}
 \newcommand{\cShutdownTrajectory}[1][\iGenerator,\iIntervalAlias]{P^{\mathrm{SD}}_{#1}}
-\newcommand{\cCapacityFactor}[1][\iGenerator,\iYear,\iScenario,\iInterval]{Q_{#1}}
+\newcommand{\cCapacityFactorWind}[1][\iGenerator,\iYear,\iScenario,\iInterval]{Q_{#1}^{\mathrm{W}}}
+\newcommand{\cCapacityFactorSolar}[1][\iGenerator,\iYear,\iScenario,\iInterval]{Q_{#1}^{\mathrm{S}}}
 \newcommand{\cPowerChargingMax}[1][\iGenerator]{\overline{P}^{\mathrm{in}}_{#1}}
 \newcommand{\cPowerDischargingMax}[1][\iGenerator]{\overline{P}^{\mathrm{out}}_{#1}}
 \newcommand{\cStorageUnitEnergyMax}[1][\iGenerator]{\overline{Q}_{#1}}
@@ -160,10 +163,187 @@
 \begin{document}
 	\maketitle
 	
-\section{Notation}
 
-\section{Constraints}
-\subsection{Investment constraints}
+\section{Notation}
+\renewcommand*{\arraystretch}{1.3}
+\begin{longtable}{ p{.09\textwidth}  p{.75\textwidth}}
+	\textbf{Symbol} & \textbf{Description}\\
+	\hline\hline
+	\multicolumn{2}{l}{\textbf{Indices}}\\
+	$\iGenerator$ & Generator\\ 
+	$\iYear$ & Year\\
+	$\iYearAlias$ & Year alias\\
+	$\iYearTerminal$ & Final year in model horizon\\
+	$\iScenario$ & Scenario\\
+	$\iScenarioAlias$ & Scenario alias\\
+	$\iInterval$ & Interval\\
+	$\iIntervalAlias$ & Interval alias\\
+	$\iIntervalTerminal$ & Final interval\\
+	$\iZone$ & NEM zone\\
+	$\iRegion$ & NEM region\\
+	$\iInvestmentSizeOption$ & Investment size option\\
+	$\iLink$ & Link connecting adjacent NEM zones\\
+	& \\
+	\multicolumn{2}{l}{\textbf{Sets}}\\
+	$\sGenerators$ & All generators\\
+	$\sGeneratorsExisting$ & Existing generators\\
+	$\sGeneratorsExistingThermal$ & Existing thermal generators\\
+	$\sGeneratorsExistingWind$ & Existing wind units\\
+	$\sGeneratorsExistingSolar$ & Existing solar units\\
+	$\sGeneratorsCandidate$ & Candidate generators\\
+	$\sGeneratorsCandidateThermal$ & Candidate thermal generators\\
+	$\sGeneratorsCandidateWind$ & Candidate wind units\\
+	$\sGeneratorsCandidateSolar$ & Candidate solar units\\
+	$\sGeneratorsThermal$ & All thermal generators\\
+	$\sGeneratorsHydro$ & Hydro generators\\
+	$\sStorage$ & All storage units\\
+	$\sStorageExisting$ & Existing storage units\\
+	$\sStorageCandidate$ & Candidate storage units\\
+	$\sYears$ & Years in model horizon\\
+	$\sScenarios$ & Operating scenarios\\
+	$\sIntervals$ & Time intervals\\
+	$\sZones$ & NEM zones\\
+	$\sRegions$ & NEM regions\\
+	$\sInvestmentSizeOptions$ & Investment size options\\
+	$\sInvestmentSizeOptionsGenerator$ & Investment size options for generator $\iGenerator$\\
+	$\sGeneratorsExistingThermalQuickStart$ & Existing quick-start thermal generators\\
+	$\sGeneratorsCandidateThermalQuickStart$ & Candidate quick-start thermal generators\\
+	$\sGeneratorsThermalQuickStart$ & All quick-start thermal generators\\
+	$\sGeneratorsExistingThermalSlowStart$ & Existing slow-start generators\\
+	$\sLinks$ & Links connecting NEM zones\\
+	$\sScenariosYear$ & Operating scenarios constituting with year $\iYear$\\
+	& \\
+	\multicolumn{2}{l}{\textbf{Variables}}\\
+	$\vBaseline$ & Emissions intensity baseline [tCO$_{2}$/MWh]\\
+	$\vPermitPrice$ & Permit price [\$/tCO$_{2}$]\\
+
+	$\vOnIndicator$ & On indicator [--]\\
+	$\vStartupIndicator$ & Startup indicator [--]\\
+	$\vShutdownIndicator$ & Shutdown indicator [--]\\
+
+	$\vPower$ & Power output above minimum dispatchable level [MW]\\
+	$\vPowerTotal$ & Total power output [MW]\\
+	$\vPowerTotalIn$ & Total charging power (storage unit) [MW]\\
+	$\vPowerTotalOut$ & Total discharging power (storage unit) [MW]\\
+
+	$\vReserveUp$ & Reserve provision [MW]\\
+	$\vReserveUpViolation$ & Up-reserve constraint violation [MW]\\
+	
+	$\vEnergy$ & Energy output [MWh]\\
+	$\vStorageUnitEnergy$ & Energy within storage unit [MWh]\\
+
+	$\vLostLoadPower$ & Lost load power [MW]\\
+	$\vLostLoadEnergy$ & Lost load energy [MWh]\\
+	$\vPowerFlow$ & Powerflow over link connecting adjacent NEM zones [MW]\\
+	$\vEmissionsTargetViolation$ & Emissions target violation [tCO$_{2}$]\\
+	$\vInstalledCapacity$ & Capacity installed in year $\iYear$ [MW]\\
+	$\vInvestmentSizeIndicator$ & Investment size indicator [--]\\
+	$\vInstalledCapacityTotal$ & Total capacity available in year $\iYear$ [MW]\\
+	$\vInstalledCapacityTotalScenario$ & Total installed capacity for scenario $\iScenario$ [MW]\\
+	$\vInstalledCapacityOnStateAux$ & Auxiliary variable - installed capacity and on-state interaction [--]\\
+	$\vInstalledCapacityStartupStateAux$ & Auxiliary variable - installed capacity and startup-state interaction [--]\\
+	$\vInstalledCapacityShutdownStateAux$ & Auxiliary variable - installed capacity and shutdown-state interaction [--]\\
+	& \\
+	\multicolumn{2}{l}{\textbf{Parameters}}\\
+	$\cObjectiveFunction$ & Total cost over model horizon [\$]\\
+	$\cTotalPresentValue$ & Total present value of operating, investment, and FOM costs [\$]\\
+	$\cInvestmentCost$ & Total investment cost [\$]\\
+	$\cFixedOperationsMaintenanceCost$ & Total fixed operations and maintenance cost for year $\iYear$ [\$]\\
+	$\cEmissionsViolationTotalCost$ & Cost of violating emissions target [\$]\\
+	$\cOperatingCostScenario$ & Total cost for scenario $\iScenario$ in year $\iYear$ [\$]\\
+	$\cOperatingCost$ & Total operating cost for scenario $\iScenario$ in year $\iYear$ [\$]\\
+	$\cOperatingCostThermal$ & Cost to operate thermal units for scenario $\iScenario$ in year $\iYear$ [\$]\\
+	$\cOperatingCostHydro$ & Cost to operate hydro units for scenario $\iScenario$ in year $\iYear$ [\$]\\
+	$\cOperatingCostWind$ & Cost to operate wind units for scenario $\iScenario$ in year $\iYear$ [\$]\\
+	$\cOperatingCostSolar$ & Cost to operate solar units for scenario $\iScenario$ in year $\iYear$ [\$]\\
+	$\cOperatingCostStorage$ & Cost to operate storage units for scenario $\iScenario$ in year $\iYear$ [\$]\\
+	$\cOperatingCostReserveUpViolation$ & Cost of reserve violation [\$]\\
+	$\cOperatingCostLostLoad$ & Lost load cost [\$]\\
+	$\cCandidateInvestmentCost$ & Candidate unit investment cost [\$/MW]\\
+	$\cLostLoadCost$ & Lost load penalty [\$/MWh]\\
+	$\cReserveUpViolationPenalty$ & Minimum upward reserve violation [MW]\\
+	$\cFixedOperationsMaintenanceCostGenerator$ & Fixed operations and maintenance cost for generator $\iGenerator$ [\$]\\
+	$\cEmissionsTargetViolationPenalty$ & Emissions target violation penalty [\$/tCO$_{2}$]\\
+	$\cMarginalCost$ & Short-run marginal cost [\$/MWh]\\
+	$\cStartupCost$ & Normalised startup-cost [\$/MW]\\
+	$\cShutdownCost$ & Normalised shutdown-cost [\$/MW]\\
+	$\cAmortisationRate$ & Amorisation rate [--]\\
+	$\cInterestRate$ & Interest rate (weighted average cost of capital) [--]\\
+	$\cAssetLifetime$ & Asset lifetime [years]\\
+	$\cInvestmentSize$ & Investment size option [MW]\\
+	$\cScenarioDuration$ & Scenario duration [h]\\
+	$\cRetirementIndicator$ & Retirement indicator [--]\\
+	$\cEmissionsIntensity$ & Emissions intensity for generator $\iGenerator$\\
+	$\cPowerOutputMax$ & Maximum power output [MW]\\
+	$\cPowerOutputMin$ & Minimum power output [MW]\\
+	$\cPowerOutputMinProportion$ & Minimum dispatchable output level as a proportion of total capacity [--]\\
+	$\cPowerOutputHydro$ & Hydro power output [MW]\\
+	$\cUpTimeMin$ & Minimum up time [hours]\\
+	$\cDownTimeMin$ & Minimum down time [hours]\\
+	$\cStartupDuration$ & Hours required to reach minimum dispatchable output following startup [hours]\\
+	$\cShutdownDuration$ & Hours required to transition from minimum dispatchable output to zero MW [hours]\\
+	$\cStartupTrajectory$ & Power output along startup trajectory [MW]\\
+	$\cShutdownTrajectory$ & Power output along shutdown trajectory [MW]\\
+	$\cRampRateUp$ & Ramp rate up (normal operation) [MW/h]\\
+	$\cRampRateDown$ & Ramp down up (normal operation) [MW/h]\\
+	$\cRampRateStartup$ & Ramp rate (startup) [MW/h]\\
+	$\cRampRateShutdown$ & Ramp rate (shutdown) [MW/h]\\
+	$\cPowerChargingMax$ & Storage unit maximum charging power [MW]\\
+	$\cPowerDischargingMax$ & Storage unit maximum discharging power [MW]\\
+	$\cStorageUnitEnergyMax$ & Storage unit maximum energy capacity [MWh]\\
+	$\cStorageUnitEnergyIntervalEndMax$ & Storage unit maximum energy at end of operating scenario [MWh]\\
+	$\cStorageUnitEnergyIntervalEndMin$ & Storage unit minimum energy at end of operating scenario [MWh]\\
+	$\cStorageUnitEfficiencyCharging$ & Storage unit charging efficiency [--]\\
+	$\cStorageUnitEfficiencyDischarging$ & Storage unit discharging efficiency [--]\\
+	$\cDemand$ & Demand [MW]\\
+	$\cReserveUpRequirement$ & Minimum up reserve requirement [MW]\\
+	$\cCapacityFactorWind$ & Capacity factor for wind units [--]\\
+	$\cCapacityFactorSolar$ & Capacity factor for solar units [--]\\
+	$\cBuildLimitWind$ & Build limit for wind units in zone $\iZone$ [MW]\\
+	$\cBuildLimitSolar$ & Build limit for wind units in zone $\iZone$ [MW]\\
+	$\cBuildLimitStorage$ & Build limit for storage units in zone $\iZone$ [MW]\\
+	$\cIncidenceMatrix$ & Network incidence matrix [--]\\
+	$\cPowerFlowMin$ & Minimum powerflow over link $\iLink$ [MW]\\
+	$\cPowerFlowMax$ & Maximum powerflow over link $\iLink$ [MW]\\
+	$\cEmissionsTotal$ & Total emissions [tCO$_{2}$]\\
+	$\cEmmissionsCumulativeTarget$ & Cumulative emissions target [tCO$_{2}$]\\
+	$\cSchemeRevenueCumulativeTarget$ & Cumulative scheme revenue target [\$]\\
+	\hline
+	\caption{Notation}
+\end{longtable}
+
+\section{Data}
+Build costs and fuel costs are time varying, which will in turn impact the timing of investment decisions. Profiles for both build costs and fuel costs are made available by AEMO, and have been used in the analysis.
+
+\subsection{Build costs}
+Build cost profiles for selected units:
+
+\subsection{Fuel costs}
+Fuel cost profiles for selected units:
+
+\subsection{Capacity factors}
+The availability of renewable energy resources will also impact the decision to invest in wind and solar units. Capacity factors for solar and wind units 
+
+\subsection{Demand}
+Demand profiles
+
+
+\subsection{K-means scenario reduction}
+A total of ten operating scenarios, each 24 hours in duration have been constructed from the aforementioned data. Nine of these operating scenarios are obtained using a k-means scenario reduction algorithm detailed in REF. The tenth is the 24 hour interval that contains peak system demand for that year. Including the peak day is important in capacity expansion planning models as it can help determine if there is sufficient capacity within the system to meet peak demand, and penalise any load that is lost.
+
+Demand profiles - with representative scenario:
+
+Solar profiles - with representative scenarios:
+
+Wind profiles - with representative scenarios:
+
+\section{Model}
+The goal is to model operational investment decisions for Australia, with a model horizon from 2016-50. Furthermore, a unit commitment model is to be embedded within a generation expansion planning model to better represent operating scenarios under scenarios where renewables and storage are likely to play an increasing role within the grid. These considerations are in-line with recent work that has suggested unit commitment constraints are important in when considering generation expansion planning issues. As the proportion of intermittent renewables within a power system increases, it's likely that the ramping capabilities and constraints of incumbent generators are likely to play a greater role in accommodating the influx of renewables (either ramping up or down to account for fluctuations in output from wind or solar units). 
+
+A key challenge with embedding a unit commitment model within a generation expansion planning framework is the computational complexity such an arrangement elicits. While solving the model for one scenario is fine (taking on average 20s), considering multiple scenarios simultaneously is extremely challenging; the model cannot even be loaded into memory when considering a large number of scenarios, let alone be solved within a reasonable duration. Consequently, a decomposition strategy is required in order to solve this problem. The approach adopted makes use of Optimality Condition Decomposition, which is essentially a particular implementation of a Lagrangian Relaxation procedure. While the OCD method has been used to solve the powerflow problems REF, to my knowledge this is the first time it has been used used within a generation expansion planning type framework.
+
+\subsection{Constraints}
+\subsubsection{Investment constraints}
 
 Discrete investment decisions for candidate thermal generators:
 
@@ -199,15 +379,15 @@ Define additional auxiliary variable that will be present within each sub-proble
 
 Build limits for different technologies in each zone:
 \begin{equation}
-\sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar_{\iZone}} \vInstalledCapacityTotal - \cBuildLimit[S] \leq 0 \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears
+\sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar_{\iZone}} \vInstalledCapacityTotal - \cBuildLimitSolar \leq 0 \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears
 \end{equation}
 
 \begin{equation}
-\sum\limits_{\iGenerator \in \sGeneratorsCandidateWind_{\iZone}} \vInstalledCapacityTotal - \cBuildLimit[W] \leq 0 \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears 
+\sum\limits_{\iGenerator \in \sGeneratorsCandidateWind_{\iZone}} \vInstalledCapacityTotal - \cBuildLimitWind \leq 0 \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears 
 \end{equation}
 
 \begin{equation}
-\sum\limits_{\iGenerator \in \sStorageCandidate_{\iZone}} \vInstalledCapacityTotal - \cBuildLimit[Q] \leq 0  \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears
+\sum\limits_{\iGenerator \in \sStorageCandidate_{\iZone}} \vInstalledCapacityTotal - \cBuildLimitStorage \leq 0  \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears
 \label{eqn: storage build limits}
 \end{equation}
 
@@ -293,21 +473,21 @@ Ensure total power output + reserve requirement is less than installed capacity 
 
 Total power output - wind units:
 \begin{equation}
-0 \leq \vPowerTotal \leq \cCapacityFactor^{\mathrm{W}} \cPowerOutputMax[\iGenerator] \quad \forall \iGenerator \in \sGeneratorsExistingWind \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals 
+0 \leq \vPowerTotal \leq \cCapacityFactorWind \cPowerOutputMax[\iGenerator] \quad \forall \iGenerator \in \sGeneratorsExistingWind \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals 
 \end{equation}
 
 \begin{equation}
-0 \leq \vPowerTotal \leq \cCapacityFactor^{\mathrm{W}} \vInstalledCapacityTotalScenario \quad \forall \iGenerator \in \sGeneratorsCandidateWind \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+0 \leq \vPowerTotal \leq \cCapacityFactorWind \vInstalledCapacityTotalScenario \quad \forall \iGenerator \in \sGeneratorsCandidateWind \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
 \end{equation}
 
 Total power output - solar units:
 
 \begin{equation}
-0 \leq \vPowerTotal \leq \cCapacityFactor^{\mathrm{S}} \cPowerOutputMax[\iGenerator] \quad \forall \iGenerator \in \sGeneratorsExistingSolar \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals 
+0 \leq \vPowerTotal \leq \cCapacityFactorSolar \cPowerOutputMax[\iGenerator] \quad \forall \iGenerator \in \sGeneratorsExistingSolar \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals 
 \end{equation}
 
 \begin{equation}
-0 \leq \vPowerTotal \leq \cCapacityFactor^{\mathrm{S}} \vInstalledCapacityTotalScenario \quad \forall \iGenerator \in \sGeneratorsCandidateSolar \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
+0 \leq \vPowerTotal \leq \cCapacityFactorSolar \vInstalledCapacityTotalScenario \quad \forall \iGenerator \in \sGeneratorsCandidateSolar \quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals
 \end{equation}
 
 Total power output - hydro units (may need to fix notation for max hydro output):
@@ -423,8 +603,8 @@ Non-negative emissions target violation:
 %\label{eqn: cumulative revenue constraint}
 %\end{equation}
 
-\section{Costs}
-\subsection{Operating costs}
+\subsection{Costs}
+\subsubsection{Operating costs}
 Thermal generators:
 \begin{align}
 	\begin{split}
@@ -474,12 +654,12 @@ Total operating cost for a given year, $\iYear$:
 \begin{equation}
 	\cOperatingCost[\iYear] = \sum\limits_{\iScenario \in \sScenarios} \cOperatingCostScenario
 \end{equation}
-%	\cOperatingCost[\iYear] = \sum\limits_{\iScenario \in \sScenariosYear} \cOperatingCostScenario
 
-\subsection{Fixed operation and maintenance (FOM) costs}
+
+\subsubsection{Fixed operation and maintenance (FOM) costs}
 
 \begin{equation}
-	\cFixedOperationsMaintenanceCost[\iYear] = \left[\sum\limits_{\iGenerator \in \sGeneratorsCandidate} \cFixedOperationsMaintenanceCostGenerator \vInstalledCapacityTotal + \sum\limits_{\iGenerator \in \sGeneratorsExisting} \cFixedOperationsMaintenanceCostGenerator \cPowerOutputMax[\iGenerator] \left(1 - \cRetirementIndicator\right) \right]
+	\cFixedOperationsMaintenanceCost = \left[\sum\limits_{\iGenerator \in \sGeneratorsCandidate} \cFixedOperationsMaintenanceCostGenerator \vInstalledCapacityTotal + \sum\limits_{\iGenerator \in \sGeneratorsExisting} \cFixedOperationsMaintenanceCostGenerator \cPowerOutputMax[\iGenerator] \left(1 - \cRetirementIndicator\right) \right]
 \end{equation}
 
 \subsection{Investment cost}
@@ -494,18 +674,18 @@ Where $\cAmortisationRate$ is the amortisation rate for the investment:
 	\cAmortisationRate = \frac{\cInterestRate(1+\cInterestRate)^{\cAssetLifetime}}{(1+\cInterestRate)^{\cAssetLifetime} - 1}
 \end{equation}
 
-\subsection{Constraint violation penalties}
+\subsubsection{Constraint violation penalties}
 Cumulative emissions constraint violation penalty:
 \begin{equation}
 	\cEmissionsViolationTotalCost = \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation
 \end{equation}
 
-\subsection{Total present value}
+\subsubsection{Total present value}
 
 Total present value over planning horizon:
 \begin{align}
 	\begin{split}
-		\cTotalPresentValue & = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \left[(1+\cInterestRate)^{-\iYear} (\cOperatingCost[\iYear] + \cFixedOperationsMaintenanceCost[\iYear]) \right] + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\cOperatingCost[\iYearTerminal] + \cFixedOperationsMaintenanceCost[\iYearTerminal] \right)
+		\cTotalPresentValue & = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \left[(1+\cInterestRate)^{-\iYear} (\cOperatingCost[\iYear] + \cFixedOperationsMaintenanceCost) \right] + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\cOperatingCost[\iYearTerminal] + \cFixedOperationsMaintenanceCost[\iYearTerminal] \right)
 	\end{split}
 \end{align}
 
@@ -522,8 +702,182 @@ The objective function is equal to the total present value of the investment and
 The mathematical program described in the preceding sections is a mixed integer non-linear program (MINLP). The size of the problem becomes very large even when considering a small number of years and operating scenarios. To improve the computational tractability of the model a decomposition procedure is employed. A key source of non-linearity arises from the interaction of policy variables, $\vBaseline$ and $\vPermitPrice$, with energy output $\vEnergy$ in the objective function. To address this issue the decomposition approach first fixes these policy variables to zero, and simply seeks to solve for the investment path that achieves the cumulative emissions target given by (\ref{eqn: cumulative emissions target}). Having found the investment path that achieves this target for the lowest cost, the next goal is to identify the path of permit prices that achieves the same outcome. In some sense this approach is a similar to that adopted when solving macroeconomic models - first the social planner's problem is solved, with prices then introduced to see if an equivalent optimal outcome can be obtained. Having found the path of permit prices that replicates the cost minimising investment and output trajectory, an auxiliary objective function can then be solved to find the path of baselines that minimises disruptions to electricity prices while respecting the scheme revenue constraint.
 
 \subsection{Cost minimising investment and production trajectory}
-First, the policy parameters $\vBaseline$ and $\vPermitPrice$ are set equal to zero. Note that~(\ref{eqn: non negative investment capacity})--(\ref{eqn: storage build limits}) and (\ref{eqn: cumulative emissions target}) are complicating constraints. Without these constraints the problem could be solved in blocks - one for each operating scenario, $\iScenario$. \textbf{Optimality Condition Decomposition (OCD)} is used to decompose this problem into blocks. This strategy involves distributing the complicating constraints to different blocks of equations (operating scenarios), and solving each block. Updated values for Lagrangian multipliers and fixed variables values are obtained upon finding solutions to these sub-problems. The following sections outline the decomposition strategy adopted.
+First, the policy parameters $\vBaseline$ and $\vPermitPrice$ are set equal to zero. Note that~(\ref{eqn: non negative investment capacity})--(\ref{eqn: storage build limits}) and (\ref{eqn: cumulative emissions target}) are complicating constraints. Without these constraints the problem could be solved in blocks - one for each operating scenario, $\iScenario$. Optimality Condition Decomposition (OCD) is used to decompose this problem into blocks. This strategy involves distributing the complicating constraints to different blocks of equations (operating scenarios), and solving each block. Updated values for Lagrangian multipliers and fixed variables values are obtained upon finding solutions to these sub-problems. The following sections outline the decomposition strategy adopted.
 
+\subsection{Optimality condition decomposition}
+This approach is a particular implementation of a Lagrangian Relaxation strategy. The goal is to break-up a large problem into a series of smaller problems by distributing complicating constraints to different sub-problems, as well as the objective functions of different sub-problems. Variables within complicating constraints assigned to a sub-problem, that are not decision variables for that sub-problem, are fixed. Once solutions have been obtained for all sub-problems the values of these fixed variables are updated, with the process repeated until the difference between successive iterations is less than some predefined tolerance. The following example, adapted from REF illustrates the basic principles of this decomposition approach.
+
+Consider the problem:
+
+\begin{equation}
+	\minimise\limits_{\bm{x}_{a}; a=1,\ldots, A} \quad \sum\limits_{a=1}^{A}f_{a}(\bm{x}_{a})
+\end{equation}
+
+subject to
+
+Constraints coupling variables between blocks.
+\begin{equation}
+	\bm{b}\left(\bm{x}_{1}, \ldots, \bm{x}_{A}\right) \leq \bm{0}
+	\label{eqn: complicating inequality constraint}
+\end{equation}
+
+\begin{equation}
+	\bm{c}\left(\bm{x}_{1}, \ldots, \bm{x}_{A}\right) = \bm{0}
+	\label{eqn: complicating equality constraint}
+\end{equation}
+
+Constraints containing variables only relating to block $a$.
+\begin{equation}
+	\bm{d}_{a}\left(\bm{x}_{a}\right) \leq \bm{0} \quad \forall a = 1,\ldots,A
+\end{equation}
+
+\begin{equation}
+	\bm{e}_{a}\left(\bm{x}_{a}\right) = \bm{0} \quad \forall a = 1,\ldots,A
+\end{equation}
+
+Constraints (\ref{eqn: complicating inequality constraint}) and (\ref{eqn: complicating equality constraint}) can be separated into different blocks, and terms for each complicating constraint included within the objective. The problem can then be re-written as:
+
+\begin{equation}
+\minimise\limits_{\bm{x}_{a}; a=1,\ldots, A} \quad \sum\limits_{a=1}^{A}f_{a}(\bm{x}_{a}) + \sum\limits_{a=1}^{A}\bm{\lambda}^{T}_{a}\bm{b}_{a}\left(\bm{x}_{1},\ldots,\bm{x}_{A}\right) + \sum\limits_{a=1}^{A}\bm{\mu}^{T}_{a}\bm{c}_{a}\left(\bm{x}_{1},\ldots,\bm{x}_{A}\right)
+\end{equation}
+
+subject to
+
+Constraints coupling variables between blocks.
+\begin{equation}
+\bm{b}_{a}\left(\bm{x}_{1}, \ldots, \bm{x}_{A}\right) \leq \bm{0} \quad \forall a = 1,\ldots,A
+\end{equation}
+
+\begin{equation}
+\bm{c}_{a}\left(\bm{x}_{1}, \ldots, \bm{x}_{A}\right) = \bm{0} \quad \forall a = 1,\ldots,A
+\end{equation}
+
+Constraints containing variables only relating to block $a$.
+\begin{equation}
+\bm{d}_{a}\left(\bm{x}_{a}\right) \leq \bm{0} \quad \forall a = 1,\ldots,A
+\end{equation}
+
+\begin{equation}
+\bm{e}_{a}\left(\bm{x}_{a}\right) = \bm{0} \quad \forall a = 1,\ldots,A
+\end{equation}
+
+For each block, trial values are given to all variables that are not decision variables within that block. For example, block $a$'s problem could be expressed as:
+
+\begin{equation}
+\minimise\limits_{\bm{x}_{a}} \quad k + f_{a}(\bm{x}_{a}) + \sum\limits_{b=1,b\neq a}^{A}\overline{\bm{\lambda}}^{T}_{a}\bm{b}_{a}\left(\overline{\bm{x}}_{1},\ldots,\overline{\bm{x}}_{a-1},\bm{x}_{a},\overline{\bm{x}}_{a+1},\ldots,\overline{\bm{x}}_{A}\right) + \sum\limits_{b=1,b \neq a}^{A}\overline{\bm{\mu}}^{T}_{a}\bm{c}_{a}\left(\overline{\bm{x}}_{1},\ldots,\overline{\bm{x}}_{a-1},\bm{x}_{a},\overline{\bm{x}}_{a+1},\ldots,\overline{\bm{x}}_{A}\right)
+\end{equation}
+
+subject to
+
+Constraints coupling variables between blocks.
+\begin{equation}
+\bm{b}_{a}\left(\overline{\bm{x}}_{1},\ldots,\overline{\bm{x}}_{a-1},\bm{x}_{a},\overline{\bm{x}}_{a+1},\ldots,\overline{\bm{x}}_{A}\right) \leq \bm{0} \quad (\bm{\lambda}_{a}^{T})
+\end{equation}
+
+\begin{equation}
+\bm{c}_{a}\left(\overline{\bm{x}}_{1},\ldots,\overline{\bm{x}}_{a-1},\bm{x}_{a},\overline{\bm{x}}_{a+1},\ldots,\overline{\bm{x}}_{A}\right) = \bm{0} \quad (\bm{\mu}_{a}^{T})
+\end{equation}
+
+Constraints containing variables only relating to block $a$.
+\begin{equation}
+\bm{d}_{a}\left(\bm{x}_{a}\right) \leq \bm{0}
+\end{equation}
+
+\begin{equation}
+\bm{e}_{a}\left(\bm{x}_{a}\right) = \bm{0}
+\end{equation}
+
+Where $k$ is a constant:
+
+\begin{equation}
+	k = \sum\limits_{b=1,b \neq a}^{A} f_{b}\left(\overline{\bm{x}_{b}}\right)
+\end{equation}
+
+Once all the sub-problems have been solved, their solutions are used to update values for dual variables in the objective functions (which are obtained from complicating constraints within each sub-problem), along with the values fixed values in each complicating constraint.
+
+A generation expansion planning model has a similar structure to the model described above. For example:
+
+\begin{equation}
+\minimise\limits_{\bm{x}_{i},\bm{x}_{a}; a=1,\ldots, A} \quad f_{i}(\bm{x}_{i}) + \sum\limits_{a=1}^{A}f_{a}(\bm{x}_{a})
+\end{equation}
+
+subject to
+
+Block of constraints for investment planning problem (e.g. ensuring build limits):
+
+\begin{equation}
+\bm{b}\left(\bm{x}_{i}\right) \leq \bm{0}
+\end{equation}
+
+\begin{equation}
+\bm{c}\left(\bm{x}_{i}\right) = \bm{0}
+\end{equation}
+
+Blocks of constraints for each operating scenario, $a$ (e.g. standard unit commitment constraints).
+\begin{equation}
+\bm{d}_{a}\left(\bm{x}_{a}\right) \leq \bm{0} \quad \forall a = 1,\ldots,A
+\end{equation}
+
+\begin{equation}
+\bm{e}_{a}\left(\bm{x}_{a}\right) = \bm{0} \quad \forall a = 1,\ldots,A
+\end{equation}
+
+Blocks of constraints coupling investment problem decision (e.g. size of candidate units) with operating scenario sub-problems:
+
+\begin{equation}
+\bm{g}_{a}\left(\bm{x}_{i}, \bm{x}_{a}\right) = \bm{0} \quad \forall a = 1,\ldots,A
+\end{equation}
+
+Constraints coupling investment problem with all operating scenario sub-problems (e.g. an emissions constraint):
+\begin{equation}
+h\left(\bm{x}_{i}, \bm{x}_{1}, \ldots, \bm{x}_{A}\right) = 0
+\end{equation}
+
+
+The problem can then be decomposed into two different sub-problems: an investment planning sub-problem which seeks to identify the optimal capacities for different generating units over the model horizon, and a series of operating scenario sub-problems to represent system operation when different capacity sizing decisions are employed. The structure of the investment sub-problem is given below:
+
+\begin{equation}
+	\minimise\limits_{\bm{x}_{i}} \quad f_{i}(\bm{x}_{i}) + \sum\limits_{a=1}^{A} \overline{\bm{\psi}}_{a}^{T} \bm{g}_{a}\left(\bm{x}_{i}, \overline{\bm{x}}_{a}\right)
+\end{equation}
+
+subject to
+
+\begin{equation}
+\bm{b} \left(\bm{x}_{i}\right) \leq \bm{0}
+\end{equation}
+
+\begin{equation}
+\bm{c} \left(\bm{x}_{i}\right) = \bm{0}
+\end{equation}
+
+\begin{equation}
+h\left(\bm{x}_{i}, \overline{\bm{x}}_{1}, \ldots, \overline{\bm{x}}_{A}\right) = 0 \quad (\lambda)
+\end{equation}
+
+And an operating scenario sub-problem of the form:
+
+\begin{equation}
+\minimise\limits_{\bm{x}_{a}} \quad k + f_{a}(\bm{x}_{a}) + \overline{\lambda}h\left(\overline{\bm{x}}_{i}, \overline{\bm{x}}_{1}, \ldots, \overline{\bm{x}}_{a-1}, \bm{x}_{a}, \overline{\bm{x}}_{a+1}, \ldots \overline{\bm{x}}_{A}\right)
+\end{equation}
+
+Subject to
+
+Unit commitment constraints for operating scenario:
+\begin{equation}
+\bm{d}_{a}\left(\bm{x}_{a}\right) \leq \bm{0}
+\end{equation}
+
+\begin{equation}
+\bm{e}_{a}\left(\bm{x}_{a}\right) = \bm{0}
+\end{equation}
+
+Constraints coupling investment problem decision (e.g. size of candidate units) with available capacity in operating scenarios:
+\begin{equation}
+\bm{g}_{a}\left(\bm{x}_{i}, \bm{x}_{a}\right) = \bm{0} \quad (\bm{\psi}_{a})
+\end{equation}
+
+
+\subsection{OCD applied to GEP problem}
 \subsubsection{Feasible investment plan}
 The objective function is separated such that one program is dedicated to finding a feasible investment plan. Multiplier variables obtained from operating program sub-problems will be used to guide the feasible investment plan to the least-cost plan.
 
@@ -550,15 +904,15 @@ subject to
 \end{equation}
 
 \begin{equation}
-\sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar_{\iZone}} \vInstalledCapacityTotal - \cBuildLimit[S] \leq 0 \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears
+\sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar_{\iZone}} \vInstalledCapacityTotal - \cBuildLimitSolar \leq 0 \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears
 \end{equation}
 
 \begin{equation}
-\sum\limits_{\iGenerator \in \sGeneratorsCandidateWind_{\iZone}} \vInstalledCapacityTotal - \cBuildLimit[W] \leq 0 \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears 
+\sum\limits_{\iGenerator \in \sGeneratorsCandidateWind_{\iZone}} \vInstalledCapacityTotal - \cBuildLimitWind \leq 0 \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears 
 \end{equation}
 
 \begin{equation}
-\sum\limits_{\iGenerator \in \sStorageCandidate_{\iZone}} \vInstalledCapacityTotal - \cBuildLimit[Q] \leq 0  \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears
+\sum\limits_{\iGenerator \in \sStorageCandidate_{\iZone}} \vInstalledCapacityTotal - \cBuildLimitStorage \leq 0  \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears
 \end{equation}
 
 \begin{equation}
@@ -588,20 +942,20 @@ With $\cEmissionsTotal$ evaluated by computing total emissions from all sub-prob
 The objective function can be simplified by noting that power and energy output is fixed in all periods. Therefore only investment and fixed operation and maintenance costs will constitute variable components within the objective:
 
 \begin{equation}
-\cObjectiveFunction = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \left[(1+\cInterestRate)^{-\iYear} (\cOperatingCost[\iYear] + \cFixedOperationsMaintenanceCost[\iYear]) \right] + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\cOperatingCost[\iYearTerminal] + \cFixedOperationsMaintenanceCost[\iYearTerminal] \right) + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation
+\cObjectiveFunction = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \left[(1+\cInterestRate)^{-\iYear} (\cOperatingCost[\iYear] + \cFixedOperationsMaintenanceCost) \right] + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\cOperatingCost[\iYearTerminal] + \cFixedOperationsMaintenanceCost[\iYearTerminal] \right) + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation
 \end{equation}
 
 Note that operating costs will be fixed in each year for this sub-problem. Expressions where all variables are fixed are overlined:
 
 \begin{equation}
-\cObjectiveFunction = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \left[(1+\cInterestRate)^{-\iYear} (\overline{\cOperatingCost[]}_{\iYear} + \cFixedOperationsMaintenanceCost[\iYear]) \right] + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\overline{\cOperatingCost[]}_{\iYearTerminal} + \cFixedOperationsMaintenanceCost[\iYearTerminal] \right) + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation
+\cObjectiveFunction = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \left[(1+\cInterestRate)^{-\iYear} (\overline{\cOperatingCost[]}_{\iYear} + \cFixedOperationsMaintenanceCost) \right] + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\overline{\cOperatingCost[]}_{\iYearTerminal} + \cFixedOperationsMaintenanceCost[\iYearTerminal] \right) + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation
 \end{equation}
 
 Separating these fixed expressions:
 
 \begin{align}
 	\begin{split}
-		\cObjectiveFunction = &\sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost[\iYear]  + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation\\
+		\cObjectiveFunction = &\sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost  + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation\\
 		& + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \overline{\cOperatingCost[]}_{\iYear} + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \overline{\cOperatingCost[]}_{\iYearTerminal}
 	\end{split}
 \end{align}
@@ -609,7 +963,7 @@ Separating these fixed expressions:
 Which can be re-written as:
 
 \begin{equation}
-	\cObjectiveFunction = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost[\iYear]  + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation + k_{a}
+	\cObjectiveFunction = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost  + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation + k_{a}
 \end{equation}
 
 Where:
@@ -622,7 +976,7 @@ As this constant has no bearing on the optimal investment plan it can be removed
 
 \begin{align}
 	\begin{split}
-		\minimise\limits_{\bm{x}_{a}} \quad & \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost[\iYear]  + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation\\
+		\minimise\limits_{\bm{x}_{a}} \quad & \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} (1+\cInterestRate)^{-\iYear} \cFixedOperationsMaintenanceCost  + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation\\
 		& - \sum\limits_{\iGenerator \in \sGeneratorsCandidate}\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \overline{\psi}_{\iGenerator,\iYear,\iScenario}\left[\overline{\vInstalledCapacityTotalScenario[]}_{\iGenerator,\iYear,\iScenario} - \vInstalledCapacityTotal\right]
 	\end{split}
 \end{align}
@@ -682,7 +1036,7 @@ As $k_{a}$ and $k_{b}$ are constants they will not influence the optimal value o
 Expanding $\cObjectiveFunction$:
 
 \begin{equation}
-	\cObjectiveFunction = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \left[(1+\cInterestRate)^{-\iYear} (\cOperatingCost[\iYear] + \cFixedOperationsMaintenanceCost[\iYear]) \right] + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\cOperatingCost[\iYearTerminal] + \cFixedOperationsMaintenanceCost[\iYearTerminal] \right) + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation
+	\cObjectiveFunction = \sum\limits_{\iYear \in \sYears} \frac{(1+\cInterestRate)^{-\iYear}}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \left[(1+\cInterestRate)^{-\iYear} (\cOperatingCost[\iYear] + \cFixedOperationsMaintenanceCost) \right] + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \left(\cOperatingCost[\iYearTerminal] + \cFixedOperationsMaintenanceCost[\iYearTerminal] \right) + \cEmissionsTargetViolationPenalty \vEmissionsTargetViolation
 \end{equation}
 
 Note that $\cInvestmentCost$ only depends on $\vInstalledCapacity$ which is fixed when running each operating scenario. Similarly, $\cFixedOperationsMaintenanceCost$ only depends on $\vInstalledCapacityTotal$ which is also fixed when running each scenario. The amount by which the cumulative emissions target is exceeded, $\overline{\vEmissionsTargetViolation}$, is also fixed for all operating scenarios. Furthermore, the operating cost for all other scenarios, except the one under consideration, will also be fixed. These fixed expressions are denoted with overlines as shown below:

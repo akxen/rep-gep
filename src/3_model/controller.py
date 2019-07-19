@@ -138,6 +138,7 @@ if __name__ == '__main__':
             logging.info('UC - fixed candidate capacity: {0}'.format({i: j.value for i, j in model_uc.CAPACITY_FIXED._data.items()}))
 
             for s in model_uc.S:
+            # for s in [5, 6]:
                 print(f'Solving UC subproblem: year {y}, scenario {s}')
                 logging.info(f'Solving UC subproblem: year {y}, scenario {s}')
 
