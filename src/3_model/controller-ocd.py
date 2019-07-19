@@ -55,7 +55,7 @@ def convergence_check(model, investment_solutions_dir):
 if __name__ == '__main__':
 
     # Setup logger
-    logging.basicConfig(filename='controller.log', filemode='w',
+    logging.basicConfig(filename='controller-ocd.log', filemode='w',
                         format='%(asctime)s %(name)s %(levelname)s %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S',
                         level=logging.DEBUG)
