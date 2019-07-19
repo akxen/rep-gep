@@ -562,16 +562,8 @@ class UnitCommitment:
         # Total cost for operating scenario - including discounting
         m.COST = Expression(expr=m.DISCOUNT_FACTOR * m.SCEN)
 
-        def emission_target_cost_rule(_m):
-            """Penalty arising from emissions constraint in investment plan subproblem"""
-
-            return m.LAMBDA_FIXED * m.RHO * sum(m.e[g, t] * m.EMISSIONS_RATE[g] for g in m.G_THERM for t in m.T)
-
-        # Cost arising from emissions target - approximation based on investment plan subproblem solution
-        m.EMISSIONS_COST_APPROX = Expression(rule=emission_target_cost_rule)
-
         # Objective function - sum of operational costs + emissions target
-        m.OBJECTIVE_FUNCTION = Expression(expr=m.COST + m.EMISSIONS_COST_APPROX)
+        m.OBJECTIVE_FUNCTION = Expression(expr=m.COST)
 
         return m
 
@@ -1289,12 +1281,18 @@ class UnitCommitment:
     def _get_year_fixed_candidate_capacities(m, year, investment_plan_solution_dir, use_default):
         """Get fixed candidate capacities as determined by the investment plan subproblem"""
 
+        # Identify files relating to the latest master problem solution (will have the highest iteration count)
+        investment_plan_result_files = [f for f in os.listdir(investment_plan_solution_dir) if '.pickle' in f]
+
+        # Last iteration ID
+        last_iteration_id = max([int(f.split('_')[1].replace('.pickle', '')) for f in investment_plan_result_files])
+
         if use_default:
             # Use default value of 0 (assume no candidate capacity installed)
             fixed_capacities = {g: 0 for g in m.G_C}
 
         else:
-            with open(os.path.join(investment_plan_solution_dir, 'investment-results.pickle'), 'rb') as f:
+            with open(os.path.join(investment_plan_solution_dir, f'investment-results_{last_iteration_id}.pickle'), 'rb') as f:
                 # Load results obtained from solving the investment plan sub-problem
                 investment_results = pickle.load(f)
 
@@ -1528,7 +1526,8 @@ class UnitCommitment:
         wind = self._get_wind_capacity_factors(m, year, scenario)
 
         # Scenario duration
-        rho = self._get_scenario_duration_days(year, scenario)
+        # rho = self._get_scenario_duration_days(year, scenario)
+        rho = float(1)
 
         # All scenario parameters
         parameters = {'DEMAND': demand, 'P_H': hydro, 'Q_SOLAR': solar, 'Q_WIND': wind, 'RHO': rho}
@@ -1620,7 +1619,7 @@ class UnitCommitment:
         return m
 
     @staticmethod
-    def save_solution(m, year, scenario, results_dir):
+    def save_solution(m, iteration, year, scenario, results_dir):
         """Save selected results from subproblem - parameters to be passed to investment plan subproblem"""
 
         # Dual variable associated with fixed capacity constraint
@@ -1629,10 +1628,10 @@ class UnitCommitment:
         # Results to be used in investment planning problem
         results = {'SCENARIO_EMISSIONS': m.SCENARIO_EMISSIONS.expr(), 'SCENARIO_DEMAND': m.SCENARIO_DEMAND.expr(),
                    'PSI_FIXED': fixed_capacity_dual_var, 'CANDIDATE_CAPACITY_FIXED': m.b.get_values(),
-                   'SCENARIO_DURATION': m.RHO.value}
+                   'SCENARIO_DURATION': m.RHO.value, 'OBJECTIVE': m.OBJECTIVE.expr()}
 
         # Filename
-        filename = f'uc-results_{year}_{scenario}.pickle'
+        filename = f'uc-results_{iteration}_{year}_{scenario}.pickle'
 
         with open(os.path.join(results_dir, filename), 'wb') as f:
             pickle.dump(results, f)
@@ -1667,12 +1666,12 @@ if __name__ == '__main__':
     year, scenario = 2016, 1
 
     # Parameters depending on a given year
-    year_parameters = uc.get_year_parameters(model, year, investment_plan_solution_directory, use_default=True)
+    year_parameters = uc.get_year_parameters(model, year, investment_plan_solution_directory, use_default=False)
 
-    # Validation data
-    # year_parameters = uc.get_validation_year_parameters(model, validation_data_directory)
-
-    # Update model parameters
+    # # Validation data
+    # # year_parameters = uc.get_validation_year_parameters(model, validation_data_directory)
+    #
+    # Update parameters applying to a given year
     model = uc.update_parameters(model, year_parameters)
 
     # Parameters depending on a given operating scenario
