@@ -108,18 +108,18 @@ class InvestmentPlan:
 
             if g in m.G_E:
                 # TODO: FIX COSTS
-                # return float(self.data.existing_units_dict[('PARAMETERS', 'FOM')][g] * 1000)
-                return float(self.data.existing_units_dict[('PARAMETERS', 'FOM')][g])
+                return float(self.data.existing_units_dict[('PARAMETERS', 'FOM')][g] * 1000)
+                # return float(self.data.existing_units_dict[('PARAMETERS', 'FOM')][g])
 
             elif g in m.G_C_THERM.union(m.G_C_WIND, m.G_C_SOLAR):
                 # TODO: FIX COSTS
-                # return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')][g] * 1000)
-                return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')][g])
+                return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')][g] * 1000)
+                # return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')][g])
 
             elif g in m.G_STORAGE:
                 # TODO: Need to find reasonable FOM cost for storage units - setting = MEL-WIND for now
-                # return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')]['MEL-WIND'] * 1000)
-                return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')]['MEL-WIND'])
+                return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')]['MEL-WIND'] * 1000)
+                # return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')]['MEL-WIND'])
 
             else:
                 raise Exception(f'Unexpected generator encountered: {g}')
@@ -144,11 +144,8 @@ class InvestmentPlan:
         # Candidate capacity dual variable obtained from sub-problem solution. Updated each iteration.
         m.PSI_FIXED = Param(m.G_C, m.Y, m.S, initialize=0, mutable=True)
 
-        # Candidate capacity variable obtained from sub-problem
-        m.CANDIDATE_CAPACITY_FIXED = Param(m.G_C, m.Y, m.S, initialize=0, mutable=True)
-
         # Lower bound for Benders auxiliary variable
-        m.ALPHA_LOWER_BOUND = Param(initialize=0)
+        m.ALPHA_LOWER_BOUND = Param(initialize=float(-10e9))
 
         return m
 
@@ -197,6 +194,26 @@ class InvestmentPlan:
 
         # Fixed operating cost for candidate existing generators for each year in model horizon
         m.FOM = Expression(m.Y, rule=fom_cost_rule)
+
+        def total_discounted_investment_and_fom_cost_rule(_m):
+            """Total discounted cost investment and fix operations and maintenance costs (includes end-of-year cost)"""
+
+            # Total investment cost over model horizon
+            investment_cost = sum((m.DISCOUNT_FACTOR[y] / m.WACC) * m.INV[y] for y in m.Y)
+
+            # Fixed operations and maintenance cost over model horizon
+            fom_cost = sum(m.DISCOUNT_FACTOR[y] * m.FOM[y] for y in m.Y)
+
+            # End of year operating costs (assumed to be paid in perpetuity to take into account end-of-year effects)
+            end_of_year_cost = (m.DISCOUNT_FACTOR[m.Y.last()] / m.WACC) * m.FOM[m.Y.last()]
+
+            # Objective function - note: also considers penalty (m.PEN) associated with emissions constraint violation
+            total_discounted_cost = investment_cost + fom_cost + end_of_year_cost
+
+            return total_discounted_cost
+
+        # Total discounted cost for fixed operations and maintenance costs
+        m.TOTAL_DISCOUNTED_INV_FOM_COST = Expression(rule=total_discounted_investment_and_fom_cost_rule)
 
         return m
 
@@ -288,17 +305,8 @@ class InvestmentPlan:
         def objective_function_rule(_m):
             """Investment plan objective function"""
 
-            # Total investment cost over model horizon
-            investment_cost = sum((m.DISCOUNT_FACTOR[y] / m.WACC) * m.INV[y] for y in m.Y)
-
-            # Fixed operations and maintenance cost over model horizon
-            fom_cost = sum(m.DISCOUNT_FACTOR[y] * m.FOM[y] for y in m.Y)
-
-            # End of year operating costs (assumed to be paid in perpetuity to take into account end-of-year effects)
-            end_of_year_cost = (m.DISCOUNT_FACTOR[m.Y.last()] / m.WACC) * m.FOM[m.Y.last()]
-
-            # Objective function - note: also considers penalty (m.PEN) associated with emissions constraint violation
-            objective_function = investment_cost + fom_cost + end_of_year_cost + m.alpha
+            # Objective function
+            objective_function = m.TOTAL_DISCOUNTED_INV_FOM_COST + m.alpha
 
             return objective_function
 
@@ -350,7 +358,7 @@ class InvestmentPlan:
 
         return m
 
-    def _get_scenario_duration_days(self, year, scenario):
+    def get_scenario_duration_days(self, year, scenario):
         """Get duration of operating scenarios (days)"""
 
         # Account for leap-years
@@ -365,20 +373,31 @@ class InvestmentPlan:
 
         return days
 
+    def get_discount_factor(self, year, base_year=2016):
+        """Compute discount factor applying to a given year"""
+
+        # Discount factor applying to given year - assume computation in terms of 2016 present values
+        discount = 1 / ((1 + self.data.WACC) ** (year - base_year))
+
+        return discount
+
     def add_benders_cut(self, m, iteration, uc_solution_dir):
         """Update model parameters"""
 
         # All results from unit commitment subproblem solution to be used to construct Benders cut
         result_files = [f for f in os.listdir(uc_solution_dir) if ('.pickle' in f) and (f'uc-results_{iteration}' in f)]
 
-        # Total objective function
+        # Total objective function value for all years and operating scenarios
         objective_value = 0
+
+        # Objective function value taking into account end-of-year effects
+        objective_value_final_year = 0
 
         # For each unit commitment results file
         for f in result_files:
 
-            # Get iteration, year, and scenario from filename
-            iteration, year, scenario = int(f.split('_')[-3]), int(f.split('_')[-2]), int(f.split('_')[-1].replace('.pickle', ''))
+            # Get year and scenario from filename
+            year, scenario = int(f.split('_')[-2]), int(f.split('_')[-1].replace('.pickle', ''))
 
             # Container for Benders cut components
             cut_components = []
@@ -390,22 +409,26 @@ class InvestmentPlan:
                 scenario_results = pickle.load(g)
 
                 # Days for representative scenario
-                rho = self._get_scenario_duration_days(year, scenario)
+                rho = self.get_scenario_duration_days(year, scenario)
 
+                # Discount factor
+                discount = self.get_discount_factor(year, base_year=2016)
+
+                # Objective function value
+                objective_value += rho * discount * scenario_results['OBJECTIVE']
+
+                # Objective function value taking into account end-of-year effects
                 if year == m.Y.last():
-                    # Take into account end of year cost - last year operating cost paid in perpetuity
-                    objective_value += (rho * scenario_results['OBJECTIVE']) * ((self.data.WACC + 1) / self.data.WACC)
-
-                else:
-                    # Objective function value
-                    objective_value += rho * scenario_results['OBJECTIVE']
+                    objective_value_final_year += rho * (discount / self.data.WACC) * scenario_results['OBJECTIVE']
 
                 # Components used to  formulate Benders cut
-                cut_component = rho * sum(scenario_results['PSI_FIXED'][g] * (m.a[g, year] - scenario_results['CANDIDATE_CAPACITY_FIXED'][g]) for g in m.G_C)
+                cut_component = discount * rho * sum(scenario_results['PSI_FIXED'][g] * (m.a[g, year] - scenario_results['CANDIDATE_CAPACITY_FIXED'][g]) for g in m.G_C)
                 cut_components.append(cut_component)
 
-        cut = m.alpha >= objective_value + sum(cut_components)
+        # Construct benders cut
+        cut = m.alpha >= objective_value + objective_value_final_year + sum(cut_components)
 
+        # Add Benders cut to constraint list
         m.BENDERS_CUTS.add(expr=cut)
 
         return m
@@ -439,7 +462,10 @@ class InvestmentPlan:
         """Save model solution"""
 
         # Save investment plan
-        investment_plan_output = {'CAPACITY_FIXED': m.a.get_values()}
+        investment_plan_output = {'CAPACITY_FIXED': m.a.get_values(),
+                                  'TOTAL_DISCOUNTED_INVESTMENT_AND_FOM_COST': m.TOTAL_DISCOUNTED_INV_FOM_COST.expr(),
+                                  'OBJECTIVE': m.OBJECTIVE.expr(),
+                                  'ALPHA': m.alpha.value}
 
         # Save investment plan results
         with open(os.path.join(solution_dir, f'investment-results_{iteration}.pickle'), 'wb') as f:

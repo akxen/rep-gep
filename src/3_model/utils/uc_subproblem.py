@@ -319,10 +319,10 @@ class UnitCommitment:
         m.DEMAND = Param(m.Z, m.T, mutable=True, within=NonNegativeReals, initialize=0)
 
         # Scenario duration
-        m.RHO = Param(initialize=0, mutable=True)
+        m.RHO = Param(initialize=1, mutable=True)
 
         # Discount factor
-        m.DISCOUNT_FACTOR = Param(initialize=0, mutable=True)
+        m.DISCOUNT_FACTOR = Param(initialize=1, mutable=True)
 
         # Dual variable associated with emissions constraint in investment plan problem
         m.LAMBDA_FIXED = Param(initialize=0, mutable=True)
@@ -1278,7 +1278,7 @@ class UnitCommitment:
         return discount
 
     @staticmethod
-    def _get_year_fixed_candidate_capacities(m, year, investment_plan_solution_dir, use_default):
+    def _get_year_fixed_candidate_capacities(year, investment_plan_solution_dir):
         """Get fixed candidate capacities as determined by the investment plan subproblem"""
 
         # Identify files relating to the latest master problem solution (will have the highest iteration count)
@@ -1287,21 +1287,16 @@ class UnitCommitment:
         # Last iteration ID
         last_iteration_id = max([int(f.split('_')[1].replace('.pickle', '')) for f in investment_plan_result_files])
 
-        if use_default:
-            # Use default value of 0 (assume no candidate capacity installed)
-            fixed_capacities = {g: 0 for g in m.G_C}
+        with open(os.path.join(investment_plan_solution_dir, f'investment-results_{last_iteration_id}.pickle'), 'rb') as f:
+            # Load results obtained from solving the investment plan sub-problem
+            investment_results = pickle.load(f)
 
-        else:
-            with open(os.path.join(investment_plan_solution_dir, f'investment-results_{last_iteration_id}.pickle'), 'rb') as f:
-                # Load results obtained from solving the investment plan sub-problem
-                investment_results = pickle.load(f)
-
-            # Fixed capacities for candidate units for a given year - determined by investment plan sub-problem
-            fixed_capacities = {gen: val for (gen, y), val in investment_results['CAPACITY_FIXED'].items() if y == year}
+        # Fixed capacities for candidate units for a given year - determined by investment plan sub-problem
+        fixed_capacities = {gen: val for (gen, y), val in investment_results['CAPACITY_FIXED'].items() if y == year}
 
         return fixed_capacities
 
-    def get_year_parameters(self, m, year, investment_plan_solution_dir, use_default=False):
+    def get_year_parameters(self, m, year, investment_plan_solution_dir):
         """Get year specific for a given year"""
 
         # Retirement indicators for a given year
@@ -1317,10 +1312,11 @@ class UnitCommitment:
         marginal_costs = self._get_year_marginal_costs(m, year)
 
         # Discount factor to apply to given year
-        discount = self._get_year_discount_factor(m, year)
+        # discount = self._get_year_discount_factor(m, year)
+        discount = float(1)
 
         # Fixed capacities
-        capacity_fixed = self._get_year_fixed_candidate_capacities(m, year, investment_plan_solution_dir, use_default)
+        capacity_fixed = self._get_year_fixed_candidate_capacities(year, investment_plan_solution_dir)
 
         # All year-specific parameters
         parameters = {'F_SCENARIO': retirement_indicator, 'U0': initial_on_state, 'P0': initial_power_output,
@@ -1666,11 +1662,11 @@ if __name__ == '__main__':
     year, scenario = 2016, 1
 
     # Parameters depending on a given year
-    year_parameters = uc.get_year_parameters(model, year, investment_plan_solution_directory, use_default=False)
+    year_parameters = uc.get_year_parameters(model, year, investment_plan_solution_directory)
 
     # # Validation data
     # # year_parameters = uc.get_validation_year_parameters(model, validation_data_directory)
-    #
+
     # Update parameters applying to a given year
     model = uc.update_parameters(model, year_parameters)
 
