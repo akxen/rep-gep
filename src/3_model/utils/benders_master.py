@@ -306,7 +306,7 @@ class InvestmentPlan:
             """Investment plan objective function"""
 
             # Objective function
-            objective_function = m.TOTAL_DISCOUNTED_INV_FOM_COST + m.alpha
+            objective_function = m.alpha
 
             return objective_function
 
@@ -381,54 +381,176 @@ class InvestmentPlan:
 
         return discount
 
-    def add_benders_cut(self, m, iteration, uc_solution_dir):
-        """Update model parameters"""
+    @staticmethod
+    def get_total_discounted_investment_cost(m, iteration, investment_solution_dir):
+        """Total discounted investment cost"""
 
-        # All results from unit commitment subproblem solution to be used to construct Benders cut
-        result_files = [f for f in os.listdir(uc_solution_dir) if ('.pickle' in f) and (f'uc-results_{iteration}' in f)]
+        with open(os.path.join(investment_solution_dir, f'investment-results_{iteration}.pickle'), 'rb') as f:
+            result = pickle.load(f)
 
-        # Total objective function value for all years and operating scenarios
-        objective_value = 0
+        # Total discounted investment cost
+        investment_cost = sum((m.DISCOUNT_FACTOR[y] / m.WACC) * m.GAMMA[g] * m.I_C[g, y] * result['x_c'][(g, y)]
+                              for g in m.G_C for y in m.Y)
 
-        # Objective function value taking into account end-of-year effects
-        objective_value_final_year = 0
+        return investment_cost
 
-        # Container for Benders cut components
-        cut_components = []
+    @staticmethod
+    def get_total_discounted_fom_cost(m, iteration, investment_solution_dir):
+        """Total discounted FOM cost"""
 
-        # For each unit commitment results file
-        for f in result_files:
+        with open(os.path.join(investment_solution_dir, f'investment-results_{iteration}.pickle'), 'rb') as f:
+            result = pickle.load(f)
 
-            # Get year and scenario from filename
+        # FOM costs for candidate units
+        candidate_fom = sum(m.DISCOUNT_FACTOR[y] * m.C_FOM[g] * result['a'][(g, y)] for g in m.G_C for y in m.Y)
+
+        # FOM costs for existing units - note no FOM cost paid if unit retires
+        existing_fom = sum(m.DISCOUNT_FACTOR[y] * m.C_FOM[g] * m.P_MAX[g] * (1 - m.F[g, y]) for g in m.G_E for y in m.Y)
+
+        # Expression for total FOM cost
+        total_fom = candidate_fom + existing_fom
+
+        return total_fom
+
+    @staticmethod
+    def get_end_of_horizon_fom_cost(m, iteration, investment_solution_dir):
+        """Total discounted FOM cost after model horizon (assume cost in last year is paid in perpetuity)"""
+
+        with open(os.path.join(investment_solution_dir, f'investment-results_{iteration}.pickle'), 'rb') as f:
+            result = pickle.load(f)
+
+        # FOM costs for candidate units
+        candidate_fom = sum((m.DISCOUNT_FACTOR[m.Y.last()] / m.WACC) * m.C_FOM[g] * result['a'][(g, m.Y.last())]
+                            for g in m.G_C)
+
+        # FOM costs for existing units - note no FOM cost paid if unit retires
+        existing_fom = sum((m.DISCOUNT_FACTOR[m.Y.last()] / m.WACC) * m.C_FOM[g] * m.P_MAX[g] * (1 - m.F[g, m.Y.last()])
+                           for g in m.G_E)
+
+        # Expression for total FOM cost
+        total_fom = candidate_fom + existing_fom
+
+        return total_fom
+
+    @staticmethod
+    def get_operating_scenario_cost(iteration, year, scenario, uc_solution_dir):
+        """Get total operating cost"""
+
+        with open(os.path.join(uc_solution_dir, f'uc-results_{iteration}_{year}_{scenario}.pickle'), 'rb') as f:
+            result = pickle.load(f)
+
+        # Objective value (not discounted, and not scaled by day weighting)
+        objective = result['OBJECTIVE']
+
+        return objective
+
+    def get_total_discounted_operating_scenario_cost(self, iteration, uc_solution_dir):
+        """Get total discounted cost for all operating scenarios"""
+
+        # Files containing operating scenario results
+        files = [f for f in os.listdir(uc_solution_dir) if '.pickle' in f]
+
+        # Initialise operating scenario total cost
+        total_cost = 0
+
+        for f in files:
+            # Get year and scenario ID from filename
             year, scenario = int(f.split('_')[-2]), int(f.split('_')[-1].replace('.pickle', ''))
 
-            # Open scenario solution file
-            with open(os.path.join(uc_solution_dir, f), 'rb') as g:
+            # Get scenario duration
+            duration = self.get_scenario_duration_days(year, scenario)
 
-                # Open file containing scenario results
-                scenario_results = pickle.load(g)
+            # Discount factor
+            discount = self.get_discount_factor(year, base_year=2016)
 
-                # Days for representative scenario
-                rho = self.get_scenario_duration_days(year, scenario)
+            # Nominal operating cost for given scenario
+            nominal_cost = self.get_operating_scenario_cost(iteration, year, scenario, uc_solution_dir)
 
-                # Discount factor
-                discount = self.get_discount_factor(year, base_year=2016)
+            # Discounted cost and scaled by number of days assigned to scenario
+            total_cost += duration * discount * nominal_cost
 
-                # Objective function value
-                objective_value += rho * discount * scenario_results['OBJECTIVE']
+        return total_cost
 
-                # Objective function value taking into account end-of-year effects
-                if year == m.Y.last():
-                    objective_value_final_year += rho * (discount / self.data.WACC) * scenario_results['OBJECTIVE']
+    def get_end_of_horizon_operating_cost(self, m, iteration, uc_solution_dir):
+        """Get term representing operating cost to be paid in perpetuity after end of model horizon"""
 
-                # Components used to  formulate Benders cut
-                cut_component = discount * rho * sum(scenario_results['PSI_FIXED'][g] * (m.a[g, year] - scenario_results['CANDIDATE_CAPACITY_FIXED'][g]) for g in m.G_C)
-                cut_components.append(cut_component)
+        # Files containing scenario results for final year in model horizon
+        files = [f for f in os.listdir(uc_solution_dir) if (f'uc_results_{iteration}_{m.Y.last()}' in f)]
 
-        # Construct benders cut
-        cut = m.alpha >= objective_value + objective_value_final_year + sum(cut_components)
+        # Initialise total cost for final year
+        total_cost = 0
 
-        print(f'objective_value: {objective_value}, objective_value_final_year: {objective_value_final_year}')
+        for f in files:
+            # Get year and scenario ID from filename
+            year, scenario = int(f.split('_')[-2]), int(f.split('_')[-1].replace('.pickle', ''))
+
+            assert year == m.Y.last(), f'Year is not final year in model horizon: {year}'
+
+            # Get scenario duration
+            duration = self.get_scenario_duration_days(year, scenario)
+
+            # Discount factor
+            discount = self.get_discount_factor(year, base_year=2016)
+
+            # Nominal operating cost for given scenario
+            nominal_cost = self.get_operating_scenario_cost(iteration, year, scenario, uc_solution_dir)
+
+            # Discounted cost and scaled by number of days assigned to scenario. Cost paid in perpetuity.
+            total_cost += duration * (discount / m.WACC) * nominal_cost
+
+        return total_cost
+
+    def get_cut_component(self, m, iteration, year, scenario, uc_solution_dir):
+        """Construct cut component"""
+
+        # Discount factor
+        discount = self.get_discount_factor(year, base_year=2016)
+
+        # Duration
+        duration = self.get_scenario_duration_days(year, scenario)
+
+        with open(os.path.join(uc_solution_dir, f'uc-results_{iteration}_{year}_{scenario}.pickle'), 'rb') as f:
+            uc_result = pickle.load(f)
+
+        with open(os.path.join(uc_solution_dir, f'investment-results_{iteration}.pickle'), 'rb') as f:
+            inv_result = pickle.load(f)
+
+        # Construct cut
+        cut = discount * duration * sum(uc_result['PSI_FIXED'][g] * (m.a[g, year] - inv_result['a'][(g, year)]) for g in m.G_C)
+
+        return cut
+
+    def get_benders_cut(self, m, iteration, investment_solution_dir, uc_solution_dir):
+        """Construct a Benders optimality cut"""
+
+        # Total investment cost
+        inv_cost = self.get_total_discounted_investment_cost(m, iteration, investment_solution_dir)
+
+        # Total FOM cost
+        fom_cost = self.get_total_discounted_fom_cost(m, iteration, investment_solution_dir)
+
+        # FOM cost beyond end of model horizon
+        fom_cost_end = self.get_end_of_horizon_fom_cost(m, iteration, investment_solution_dir)
+
+        # Operating cost over model horizon
+        op_cost = self.get_total_discounted_operating_scenario_cost(iteration, uc_solution_dir)
+
+        # Operating cost beyond end of model horizon
+        op_cost_end = self.get_end_of_horizon_operating_cost(m, iteration, uc_solution_dir)
+
+        # Cut components containing dual variables
+        cut_components = sum(self.get_cut_component(m, iteration, y, s, uc_solution_dir) for y in m.Y for s in m.S)
+
+        # Benders cut
+        cut = m.alpha >= inv_cost + fom_cost + fom_cost_end + op_cost + op_cost_end + cut_components
+
+        return cut
+
+    def add_benders_cut(self, m, iteration, investment_solution_dir, uc_solution_dir):
+        """Update model parameters"""
+
+        # Construct Benders optimality cut
+        cut = self.get_benders_cut(m, iteration, investment_solution_dir, uc_solution_dir)
 
         # Add Benders cut to constraint list
         m.BENDERS_CUTS.add(expr=cut)
@@ -464,14 +586,26 @@ class InvestmentPlan:
         """Save model solution"""
 
         # Save investment plan
-        investment_plan_output = {'CAPACITY_FIXED': m.a.get_values(),
-                                  'TOTAL_DISCOUNTED_INVESTMENT_AND_FOM_COST': m.TOTAL_DISCOUNTED_INV_FOM_COST.expr(),
-                                  'OBJECTIVE': m.OBJECTIVE.expr(),
-                                  'ALPHA': m.alpha.value}
+        investment_plan_output = {'a': m.a.get_values(),
+                                  'x_c': m.x_c.get_values()}
 
         # Save investment plan results
         with open(os.path.join(solution_dir, f'investment-results_{iteration}.pickle'), 'wb') as f:
             pickle.dump(investment_plan_output, f)
+
+    @staticmethod
+    def initialise_investment_plan(m, solution_dir):
+        """Initial values for investment plan - used in first iteration. Assume candidate capacity = 0"""
+
+        # Feasible investment plan for first iteration
+        plan = {'a': {(g, y): float(0) for g in m.G_C for y in m.Y},
+                'x_c': {(g, y): float(0) for g in m.G_C for y in m.Y}}
+
+        # Save investment plan
+        with open(os.path.join(solution_dir, 'investment-results_1.pickle'), 'wb') as f:
+            pickle.dump(plan, f)
+
+        return plan
 
 
 if __name__ == '__main__':
@@ -487,17 +621,20 @@ if __name__ == '__main__':
     # Directory in which to store investment plan (master problem) results
     investment_plan_results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'investment_plan')
 
-    # Solve master problem first time (no cuts)
-    model = investment_plan.solve_model(model)
+    # Initialise feasible solution
+    investment_plan.initialise_investment_plan(model, investment_plan_results_directory)
 
-    # Before constraint
-    print(model.alpha.display())
-
-    # Add benders cut
-    model = investment_plan.add_benders_cut(model, 1, uc_results_directory)
-
-    # Solve master problem (with Benders cut)
-    model = investment_plan.solve_model(model)
-
-    # After cut
-    print(model.alpha.display())
+    # # Solve master problem first time (no cuts)
+    # model = investment_plan.solve_model(model)
+    #
+    # # Before constraint
+    # print(model.alpha.display())
+    #
+    # # Add benders cut
+    # model = investment_plan.add_benders_cut(model, 1, uc_results_directory)
+    #
+    # # Solve master problem (with Benders cut)
+    # model = investment_plan.solve_model(model)
+    #
+    # # After cut
+    # print(model.alpha.display())

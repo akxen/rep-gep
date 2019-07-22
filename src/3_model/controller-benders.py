@@ -135,15 +135,12 @@ class BendersAlgorithmController:
         logging.info('INV - constructing model')
         model_inv = self.master.construct_model()
 
+        logging.info('INIT - Initialising feasible investment plan (set all candidate capacity = 0)')
+        self.master.initialise_investment_plan()
+
         for i in range(1, 5):
             print(f"Performing iteration {i}\n{''.join(['-'] * 70)}")
             logging.info(f"Performing iteration {i}\n{''.join(['-'] * 70)}")
-
-            # Solve master problem
-            logging.info(f"Solving investment (master) problem")
-            model_inv = self.master.solve_model(model_inv)
-            self.master.save_solution(model_inv, i, self.master_solution_dir)
-            logging.info(f"Investment capacity solution: {model_inv.a.get_values()}")
 
             # Solve subproblems
             for y in model_uc.Y:
