@@ -64,13 +64,13 @@ class InvestmentPlan:
 
             if g in m.G_C_STORAGE:
                 # TODO: FIX COSTS
-                # return float(self.data.battery_build_costs_dict[y][g] * 1000)
-                return float(self.data.battery_build_costs_dict[y][g])
+                return float(self.data.battery_build_costs_dict[y][g] * 1000)
+                # return float(self.data.battery_build_costs_dict[y][g])
 
             else:
                 # TODO: FIX COSTS
-                # return float(self.data.candidate_units_dict[('BUILD_COST', y)][g] * 1000)
-                return float(self.data.candidate_units_dict[('BUILD_COST', y)][g])
+                return float(self.data.candidate_units_dict[('BUILD_COST', y)][g] * 1000)
+                # return float(self.data.candidate_units_dict[('BUILD_COST', y)][g])
 
         # Candidate unit build cost
         m.I_C = Param(m.G_C, m.Y, rule=candidate_unit_build_costs_rule)
@@ -393,14 +393,14 @@ class InvestmentPlan:
         # Objective function value taking into account end-of-year effects
         objective_value_final_year = 0
 
+        # Container for Benders cut components
+        cut_components = []
+
         # For each unit commitment results file
         for f in result_files:
 
             # Get year and scenario from filename
             year, scenario = int(f.split('_')[-2]), int(f.split('_')[-1].replace('.pickle', ''))
-
-            # Container for Benders cut components
-            cut_components = []
 
             # Open scenario solution file
             with open(os.path.join(uc_solution_dir, f), 'rb') as g:
@@ -427,6 +427,8 @@ class InvestmentPlan:
 
         # Construct benders cut
         cut = m.alpha >= objective_value + objective_value_final_year + sum(cut_components)
+
+        print(f'objective_value: {objective_value}, objective_value_final_year: {objective_value_final_year}')
 
         # Add Benders cut to constraint list
         m.BENDERS_CUTS.add(expr=cut)

@@ -1245,8 +1245,12 @@ It is important to note that the discount factor, $\cDiscountRate$, and the dura
 \subsection{Investment plan master problem}
 The master problem is used to identify suitable values for candidate capacity variables.
 
+%\begin{equation}
+%	\minimise\limits_{\bm{y}} \quad \sum\limits_{\iYear \in \sYears} \frac{\cDiscountRate}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \cDiscountRate \cFixedOperationsMaintenanceCost  + \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \alpha
+%\end{equation}
+
 \begin{equation}
-	\minimise\limits_{\bm{y}} \quad \sum\limits_{\iYear \in \sYears} \frac{\cDiscountRate}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \cDiscountRate \cFixedOperationsMaintenanceCost  + \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \alpha
+\minimise\limits_{\bm{y}} \quad \alpha
 \end{equation}
 
 %Where: 
@@ -1259,8 +1263,11 @@ The master problem is used to identify suitable values for candidate capacity va
 
 Subject to (\ref{eqn: discrete capacity decision})--(\ref{eqn: storage build limit constraint}). Benders cuts are given by:
 
-\begin{equation}
-	\alpha \geq \sum\limits_{\iYear \in \sYears} \cDiscountRate \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \cOperatingCostScenario^{(j)} + \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration[\iYearTerminal,\iScenario] \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cOperatingCostScenario[\iYearTerminal,\iScenario]^{(j)} + \sum\limits_{\iYear \in \sYears} \cDiscountRate \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \sum\limits_{\iGenerator \in \sGeneratorsCandidate} \vFixedCapacityDual^{(j)} \left(\vInstalledCapacityTotal - \vInstalledCapacityTotal^{(j)}\right) \quad \forall j = 1,\ldots,\nu-1
-\end{equation}
+\begin{align}
+	\begin{split}
+		\alpha \geq & \sum\limits_{\iYear \in \sYears} \frac{\cDiscountRate}{\cInterestRate}\cInvestmentCost^{(j)} + \sum\limits_{\iYear \in \sYears} \cDiscountRate \cFixedOperationsMaintenanceCost^{(j)}  + \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal]^{(j)} +  \sum\limits_{\iYear \in \sYears} \cDiscountRate \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \cOperatingCostScenario^{(j)} + \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration[\iYearTerminal,\iScenario] \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cOperatingCostScenario[\iYearTerminal,\iScenario]^{(j)}\\
+		& + \sum\limits_{\iYear \in \sYears} \cDiscountRate \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \sum\limits_{\iGenerator \in \sGeneratorsCandidate} \vFixedCapacityDual^{(j)} \left(\vInstalledCapacityTotal - \vInstalledCapacityTotal^{(j)}\right) \quad \forall j = 1,\ldots,\nu-1
+	\end{split}
+\end{align}
 
 \end{document}

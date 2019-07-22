@@ -124,6 +124,10 @@ class BendersAlgorithmController:
     def run_benders(self):
         """Run Benders decomposition algorithm"""
 
+        # Remove pickle files in results directories
+        self.cleanup_results(self.subproblem_solution_dir)
+        self.cleanup_results(self.master_solution_dir)
+
         logging.info("Running Benders decomposition algorithm")
         logging.info('UC - constructing model')
         model_uc = self.subproblem.construct_model()
@@ -184,6 +188,17 @@ class BendersAlgorithmController:
             print('Adding Benders cut')
             logging.info('Adding Benders cut')
             model_inv = self.master.add_benders_cut(model_inv, i, self.subproblem_solution_dir)
+
+    @staticmethod
+    def cleanup_results(directory):
+        """Remove all pickle files from a given directory"""
+
+        # All pickle files in a directory
+        files = [f for f in os.listdir(directory) if '.pickle' in f]
+
+        # Remove files
+        for f in files:
+            os.remove(os.path.join(directory, f))
 
 
 if __name__ == '__main__':

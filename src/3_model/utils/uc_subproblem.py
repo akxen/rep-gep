@@ -942,17 +942,18 @@ class UnitCommitment:
 
             # Existing units within zone
             existing_units = [gen for gen, zone in self.data.existing_units_dict[('PARAMETERS', 'NEM_ZONE')].items()
-                              if zone == z]
+                              if (zone == z) and (gen in m.G_C)]
 
             # Candidate units within zone
             candidate_units = [gen for gen, zone in self.data.candidate_units_dict[('PARAMETERS', 'ZONE')].items()
-                               if zone == z]
+                               if (zone == z) and (gen in m.G_C)]
 
             # All generators within a given zone
             generators = existing_units + candidate_units
 
             # Storage units within a given zone TODO: will need to update if existing storage units are included
-            storage_units = [gen for gen, zone in self.data.battery_properties_dict['NEM_ZONE'].items() if zone == z]
+            storage_units = [gen for gen, zone in self.data.battery_properties_dict['NEM_ZONE'].items()
+                             if (zone == z) and (gen in m.G_C)]
 
             return (sum(m.p_total[g, t] for g in generators) - m.DEMAND[z, t]
                     - sum(m.INCIDENCE_MATRIX[l, z] * m.p_flow[l, t] for l in m.L)
