@@ -33,54 +33,15 @@ class BendersAlgorithmController:
         # Directory containing subproblem (UC) output files
         self.subproblem_solution_dir = subproblem_solution_dir
 
-    def get_solution_upper_bound(self, iteration, final_year):
+    def get_solution_upper_bound(self, m, iteration):
         """Get solution upper-bound"""
 
-        # Load investment plan solution
-        with open(os.path.join(self.master_solution_dir, f'investment-results_{iteration}.pickle'), 'rb') as f:
-            investment_solution = pickle.load(f)
+        # Upper bound for total cost
+        upper_bound = self.master.get_cost_upper_bound(m, iteration,
+                                                       self.master_solution_dir,
+                                                       self.subproblem_solution_dir)
 
-            # Total discounted cost involving investment capacity variables (includes end-of-year costs)
-            total_discounted_cost = investment_solution['TOTAL_DISCOUNTED_INVESTMENT_AND_FOM_COST']
-
-        # Compute total cost from sub-problems
-        files = [f for f in os.listdir(self.subproblem_solution_dir) if f'uc-results_{iteration}' in f]
-
-        # Initialise total subproblem (discounted costs)
-        subproblem_total_cost = 0
-
-        # Initialise total cost to account for all years beyond end of model horizon
-        subproblem_end_of_year_cost = 0
-
-        for f in files:
-
-            # Extract year and scenario from filename
-            year, scenario = int(f.split('_')[-2]), int(f.split('_')[-1].replace('.pickle', ''))
-
-            with open(os.path.join(self.subproblem_solution_dir, f), 'rb') as g:
-                # Unit commitment subproblem solution
-                uc_solution = pickle.load(g)
-
-                # Scenario duration
-                duration = self.master.get_scenario_duration_days(year, scenario)
-
-                # Discount factor
-                discount = self.master.get_discount_factor(year)
-
-                # Interest rate (weighted average cost of capital)
-                interest_rate = self.master.data.WACC
-
-                # Update total cost
-                subproblem_total_cost += discount * duration * uc_solution['OBJECTIVE']
-
-                # Additional cost taking into account all years beyond end of model horizon
-                if year == final_year:
-                    subproblem_end_of_year_cost += (discount / interest_rate) * duration * uc_solution['OBJECTIVE']
-
-        # Total investment and operating cost (objective function upper-bound)
-        total_cost = total_discounted_cost + subproblem_total_cost + subproblem_end_of_year_cost
-
-        return total_cost
+        return upper_bound
 
     def get_solution_lower_bound(self, iteration):
         """Get solution lower-bound"""
@@ -90,14 +51,15 @@ class BendersAlgorithmController:
             investment_solution = pickle.load(f)
 
         # Total cost including Benders auxiliary variable
-        total_cost = investment_solution['OBJECTIVE']
+        lower_bound = investment_solution['OBJECTIVE']
+        print(f'LOWER BOUND: {lower_bound}')
 
-        return total_cost
+        return lower_bound
 
-    def convergence_check(self, iteration, final_year, relative_bound_tolerance=0.05):
+    def convergence_check(self, m, iteration, relative_bound_tolerance=0.05):
         """Check if model has converged"""
 
-        upper = self.get_solution_upper_bound(iteration, final_year)
+        upper = self.get_solution_upper_bound(m, iteration)
         print(f'Solution upper bound: {upper}')
         logging.info(f'Solution upper bound: {upper}')
 
@@ -135,12 +97,18 @@ class BendersAlgorithmController:
         logging.info('INV - constructing model')
         model_inv = self.master.construct_model()
 
-        logging.info('INIT - Initialising feasible investment plan (set all candidate capacity = 0)')
-        self.master.initialise_investment_plan()
-
-        for i in range(1, 5):
+        for i in range(1, 100):
             print(f"Performing iteration {i}\n{''.join(['-'] * 70)}")
             logging.info(f"Performing iteration {i}\n{''.join(['-'] * 70)}")
+
+            if i == 1:
+                logging.info('INIT - Initialising feasible investment plan (set all candidate capacity = 0)')
+                self.master.initialise_investment_plan(model_inv, self.master_solution_dir)
+            else:
+                logging.info('INV - Solving investment plan problem')
+                self.master.solve_model(model_inv)
+                print(model_inv.alpha.value)
+                self.master.save_solution(model_inv, i, self.master_solution_dir)
 
             # Solve subproblems
             for y in model_uc.Y:
@@ -176,7 +144,7 @@ class BendersAlgorithmController:
                     model_uc = self.subproblem.unfix_binary_variables(model_uc)
 
             # Check for convergence
-            converged = self.convergence_check(i, final_year=model_inv.Y.last())
+            converged = self.convergence_check(model_inv, i)
 
             if converged:
                 break
@@ -184,7 +152,7 @@ class BendersAlgorithmController:
             # Add Benders cut
             print('Adding Benders cut')
             logging.info('Adding Benders cut')
-            model_inv = self.master.add_benders_cut(model_inv, i, self.subproblem_solution_dir)
+            model_inv = self.master.add_benders_cut(model_inv, i, self.master_solution_dir, self.subproblem_solution_dir)
 
     @staticmethod
     def cleanup_results(directory):

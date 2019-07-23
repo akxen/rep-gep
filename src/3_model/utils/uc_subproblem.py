@@ -23,7 +23,7 @@ class UnitCommitment:
     def __init__(self):
         # Solver options
         self.keepfiles = False
-        self.solver_options = {'FeasibilityTol': 1e-2} # 'MIPGap': 0.0005
+        self.solver_options = {} # 'MIPGap': 0.0005, 'FeasibilityTol': 1e-2
         self.opt = SolverFactory('gurobi', solver_io='mps')
 
     def define_parameters(self, m):

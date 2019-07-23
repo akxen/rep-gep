@@ -176,7 +176,7 @@ class InvestmentPlan:
             return sum(m.GAMMA[g] * m.I_C[g, y] * m.x_c[g, y] for g in m.G_C)
 
         # Investment cost in a given year
-        m.INV = Expression(m.Y, rule=investment_cost_rule)
+        # m.INV = Expression(m.Y, rule=investment_cost_rule)
 
         def fom_cost_rule(_m, y):
             """Total fixed operations and maintenance cost for a given year (not discounted)"""
@@ -193,7 +193,7 @@ class InvestmentPlan:
             return total_fom
 
         # Fixed operating cost for candidate existing generators for each year in model horizon
-        m.FOM = Expression(m.Y, rule=fom_cost_rule)
+        # m.FOM = Expression(m.Y, rule=fom_cost_rule)
 
         def total_discounted_investment_and_fom_cost_rule(_m):
             """Total discounted cost investment and fix operations and maintenance costs (includes end-of-year cost)"""
@@ -213,7 +213,7 @@ class InvestmentPlan:
             return total_discounted_cost
 
         # Total discounted cost for fixed operations and maintenance costs
-        m.TOTAL_DISCOUNTED_INV_FOM_COST = Expression(rule=total_discounted_investment_and_fom_cost_rule)
+        # m.TOTAL_DISCOUNTED_INV_FOM_COST = Expression(rule=total_discounted_investment_and_fom_cost_rule)
 
         return m
 
@@ -500,28 +500,8 @@ class InvestmentPlan:
 
         return total_cost
 
-    def get_cut_component(self, m, iteration, year, scenario, uc_solution_dir):
-        """Construct cut component"""
-
-        # Discount factor
-        discount = self.get_discount_factor(year, base_year=2016)
-
-        # Duration
-        duration = self.get_scenario_duration_days(year, scenario)
-
-        with open(os.path.join(uc_solution_dir, f'uc-results_{iteration}_{year}_{scenario}.pickle'), 'rb') as f:
-            uc_result = pickle.load(f)
-
-        with open(os.path.join(uc_solution_dir, f'investment-results_{iteration}.pickle'), 'rb') as f:
-            inv_result = pickle.load(f)
-
-        # Construct cut
-        cut = discount * duration * sum(uc_result['PSI_FIXED'][g] * (m.a[g, year] - inv_result['a'][(g, year)]) for g in m.G_C)
-
-        return cut
-
-    def get_benders_cut(self, m, iteration, investment_solution_dir, uc_solution_dir):
-        """Construct a Benders optimality cut"""
+    def get_cost_upper_bound(self, m, iteration, investment_solution_dir, uc_solution_dir):
+        """Get constant cost term to include in Benders cut"""
 
         # Total investment cost
         inv_cost = self.get_total_discounted_investment_cost(m, iteration, investment_solution_dir)
@@ -538,11 +518,43 @@ class InvestmentPlan:
         # Operating cost beyond end of model horizon
         op_cost_end = self.get_end_of_horizon_operating_cost(m, iteration, uc_solution_dir)
 
+        # Total constant cost in Benders cut
+        total_cost = inv_cost + fom_cost + fom_cost_end + op_cost + op_cost_end
+
+        return total_cost
+
+    def get_cut_component(self, m, iteration, year, scenario, investment_solution_dir, uc_solution_dir):
+        """Construct cut component"""
+
+        # Discount factor
+        discount = self.get_discount_factor(year, base_year=2016)
+
+        # Duration
+        duration = self.get_scenario_duration_days(year, scenario)
+
+        with open(os.path.join(uc_solution_dir, f'uc-results_{iteration}_{year}_{scenario}.pickle'), 'rb') as f:
+            uc_result = pickle.load(f)
+
+        with open(os.path.join(investment_solution_dir, f'investment-results_{iteration}.pickle'), 'rb') as f:
+            inv_result = pickle.load(f)
+
+        # Construct cut component
+        cut = discount * duration * sum(
+            uc_result['PSI_FIXED'][g] * (m.a[g, year] - inv_result['a'][(g, year)]) for g in m.G_C)
+
+        return cut
+
+    def get_benders_cut(self, m, iteration, investment_solution_dir, uc_solution_dir):
+        """Construct a Benders optimality cut"""
+
+        # Total constant cost included in objective
+        total_cost = self.get_cost_upper_bound(m, iteration, investment_solution_dir, uc_solution_dir)
+
         # Cut components containing dual variables
-        cut_components = sum(self.get_cut_component(m, iteration, y, s, uc_solution_dir) for y in m.Y for s in m.S)
+        cut_components = sum(self.get_cut_component(m, iteration, y, s, investment_solution_dir, uc_solution_dir) for y in m.Y for s in m.S)
 
         # Benders cut
-        cut = m.alpha >= inv_cost + fom_cost + fom_cost_end + op_cost + op_cost_end + cut_components
+        cut = m.alpha >= total_cost + cut_components
 
         return cut
 
@@ -581,17 +593,17 @@ class InvestmentPlan:
 
         return m
 
-    @staticmethod
-    def save_solution(m, iteration, solution_dir):
+    def save_solution(self, m, iteration, investment_solution_dir):
         """Save model solution"""
 
         # Save investment plan
-        investment_plan_output = {'a': m.a.get_values(),
-                                  'x_c': m.x_c.get_values()}
+        output = {'a': m.a.get_values(),
+                  'x_c': m.x_c.get_values(),
+                  'OBJECTIVE': m.OBJECTIVE.expr()}
 
         # Save investment plan results
-        with open(os.path.join(solution_dir, f'investment-results_{iteration}.pickle'), 'wb') as f:
-            pickle.dump(investment_plan_output, f)
+        with open(os.path.join(investment_solution_dir, f'investment-results_{iteration}.pickle'), 'wb') as f:
+            pickle.dump(output, f)
 
     @staticmethod
     def initialise_investment_plan(m, solution_dir):
@@ -599,7 +611,8 @@ class InvestmentPlan:
 
         # Feasible investment plan for first iteration
         plan = {'a': {(g, y): float(0) for g in m.G_C for y in m.Y},
-                'x_c': {(g, y): float(0) for g in m.G_C for y in m.Y}}
+                'x_c': {(g, y): float(0) for g in m.G_C for y in m.Y},
+                'OBJECTIVE': -1e9}
 
         # Save investment plan
         with open(os.path.join(solution_dir, 'investment-results_1.pickle'), 'wb') as f:
@@ -619,7 +632,8 @@ if __name__ == '__main__':
     uc_results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'operational_plan')
 
     # Directory in which to store investment plan (master problem) results
-    investment_plan_results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'investment_plan')
+    investment_plan_results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output',
+                                                     'investment_plan')
 
     # Initialise feasible solution
     investment_plan.initialise_investment_plan(model, investment_plan_results_directory)
