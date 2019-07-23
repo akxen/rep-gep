@@ -37,7 +37,6 @@ class CommonComponents:
 
         # Candidate thermal units
         m.G_C_THERM = Set(initialize=self.data.candidate_thermal_unit_ids)
-        # m.G_C_THERM = Set(initialize=[])
 
         # All existing and candidate thermal generators
         m.G_THERM = Set(initialize=m.G_E_THERM.union(m.G_C_THERM))
@@ -50,14 +49,12 @@ class CommonComponents:
 
         # Candidate wind units
         m.G_C_WIND = Set(initialize=self.data.candidate_wind_unit_ids)
-        # m.G_C_WIND = Set(initialize=['NSA-WIND', 'SESA-WIND', 'TAS-WIND', 'ADE-WIND'])
 
         # Existing solar units
         m.G_E_SOLAR = Set(initialize=self.data.existing_solar_unit_ids)
 
         # Candidate solar units
         m.G_C_SOLAR = Set(initialize=self.data.candidate_solar_unit_ids)
-        # m.G_C_SOLAR = Set(initialize=[])
 
         # Available technologies
         m.G_C_SOLAR_TECHNOLOGIES = Set(initialize=list(set(y.split('-')[-1] for y in m.G_C_SOLAR)))
@@ -70,7 +67,6 @@ class CommonComponents:
 
         # Candidate storage units
         m.G_C_STORAGE = Set(initialize=self.data.candidate_storage_units)
-        # m.G_C_STORAGE = Set(initialize=[])
 
         # Existing + candidate storage units
         m.G_STORAGE = m.G_E_STORAGE.union(m.G_C_STORAGE)
@@ -91,11 +87,9 @@ class CommonComponents:
         m.G = m.G_E.union(m.G_C)
 
         # All years in model horizon
-        # m.Y = RangeSet(2016, 2050)
         m.Y = RangeSet(2016, 2020)
 
         # Operating scenarios for each year
-        # m.S = RangeSet(1, 10)
         m.S = RangeSet(1, 10)
 
         # Operating scenario hour

@@ -172,6 +172,3 @@ if __name__ == '__main__':
 
     # Run algorithm
     benders.run_benders()
-
-    # with open(os.path.join(benders.subproblem_solution_dir, 'uc-results_3_2016_1.pickle'), 'rb') as f:
-    #     uc_results = pickle.load(f)

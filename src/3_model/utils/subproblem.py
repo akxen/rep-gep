@@ -1,7 +1,6 @@
 """Unit commitment model subproblem"""
 
 import os
-import time
 import pickle
 from collections import OrderedDict
 
@@ -23,8 +22,8 @@ class UnitCommitment:
     def __init__(self):
         # Solver options
         self.keepfiles = False
-        self.solver_options = {} # 'MIPGap': 0.0005, 'FeasibilityTol': 1e-2
-        self.opt = SolverFactory('gurobi', solver_io='mps')
+        self.solver_options = {}  # 'MIPGap': 0.0005
+        self.opt = SolverFactory('gurobi', solver_io='lp')
 
     def define_parameters(self, m):
         """Define unit commitment problem parameters"""
@@ -318,15 +317,6 @@ class UnitCommitment:
         # Demand
         m.DEMAND = Param(m.Z, m.T, mutable=True, within=NonNegativeReals, initialize=0)
 
-        # Scenario duration
-        m.RHO = Param(initialize=1, mutable=True)
-
-        # Discount factor
-        m.DISCOUNT_FACTOR = Param(initialize=1, mutable=True)
-
-        # Dual variable associated with emissions constraint in investment plan problem
-        m.LAMBDA_FIXED = Param(initialize=0, mutable=True)
-
         # Fixed candidate capacity - determined in investment plan subproblem
         m.CAPACITY_FIXED = Param(m.G_C, initialize=0, mutable=True)
 
@@ -441,7 +431,7 @@ class UnitCommitment:
         def scenario_emissions_rule(_m):
             """Total emissions for a given scenario"""
 
-            return sum(m.e[g, t] * m.EMISSIONS_RATE[g] for g in m.G_THERM for t in m.T) * m.RHO
+            return sum(m.e[g, t] * m.EMISSIONS_RATE[g] for g in m.G_THERM for t in m.T)
 
         # Total scenario emissions
         m.SCENARIO_EMISSIONS = Expression(rule=scenario_emissions_rule)
@@ -449,7 +439,7 @@ class UnitCommitment:
         def scenario_demand_rule(_m):
             """Total demand accounted for by given scenario"""
 
-            return sum(m.DEMAND[z, t] for z in m.Z for t in m.T) * m.RHO
+            return sum(m.DEMAND[z, t] for z in m.Z for t in m.T)
 
         # Total scenario energy demand
         m.SCENARIO_DEMAND = Expression(rule=scenario_demand_rule)
@@ -466,19 +456,16 @@ class UnitCommitment:
             """Cost to operate thermal generators for given scenario"""
 
             # Operating cost related to energy output + emissions charge
-            operating_costs = (m.RHO
-                               * sum((m.C_MC[g] + ((m.EMISSIONS_RATE[g] - m.baseline) * m.permit_price)) * m.e[g, t]
-                                     for g in m.G_THERM for t in m.T))
+            operating_costs = (sum((m.C_MC[g] + ((m.EMISSIONS_RATE[g] - m.baseline) * m.permit_price)) * m.e[g, t]
+                                   for g in m.G_THERM for t in m.T))
 
             # Existing unit start-up costs
-            existing_on_off_costs = (m.RHO
-                                     * sum((m.C_SU_MW[g] * m.P_MAX[g] * m.v[g, t])
-                                           + (m.C_SD_MW[g] * m.P_MAX[g] * m.w[g, t]) for g in m.G_E_THERM for t in m.T))
+            existing_on_off_costs = (sum((m.C_SU_MW[g] * m.P_MAX[g] * m.v[g, t])
+                                         + (m.C_SD_MW[g] * m.P_MAX[g] * m.w[g, t]) for g in m.G_E_THERM for t in m.T))
 
             # Candidate unit start-up costs (note this depends on installed capacity)
-            candidate_on_off_costs = (m.RHO
-                                      * sum((m.C_SU_MW[g] * m.y[g, t]) + (m.C_SD_MW[g] * m.z[g, t])
-                                            for g in m.G_C_THERM for t in m.T))
+            candidate_on_off_costs = (sum((m.C_SU_MW[g] * m.y[g, t]) + (m.C_SD_MW[g] * m.z[g, t])
+                                          for g in m.G_C_THERM for t in m.T))
 
             # Total thermal unit costs
             total_cost = operating_costs + existing_on_off_costs + candidate_on_off_costs
@@ -491,7 +478,7 @@ class UnitCommitment:
         def hydro_operating_costs_rule(_m):
             """Cost to operate hydro generators"""
 
-            return m.RHO * sum(m.C_MC[g] * m.e[g, t] for g in m.G_E_HYDRO for t in m.T)
+            return sum(m.C_MC[g] * m.e[g, t] for g in m.G_E_HYDRO for t in m.T)
 
         # Operating cost - hydro generators
         m.OP_H = Expression(rule=hydro_operating_costs_rule)
@@ -500,11 +487,11 @@ class UnitCommitment:
             """Cost to operate wind generators"""
 
             # Existing wind generators - not eligible for subsidy
-            existing = m.RHO * sum(m.C_MC[g] * m.e[g, t] for g in m.G_E_WIND for t in m.T)
+            existing = sum(m.C_MC[g] * m.e[g, t] for g in m.G_E_WIND for t in m.T)
 
             # Candidate wind generators - eligible for subsidy
-            candidate = (m.RHO * sum((m.C_MC[g] - (m.baseline * m.permit_price)) * m.e[g, t]
-                                     for g in m.G_C_WIND for t in m.T))
+            candidate = (sum((m.C_MC[g] - (m.baseline * m.permit_price)) * m.e[g, t]
+                             for g in m.G_C_WIND for t in m.T))
 
             # Total cost to operate wind units for the scenario
             total_cost = existing + candidate
@@ -518,11 +505,11 @@ class UnitCommitment:
             """Cost to operate solar generators"""
 
             # Existing wind generators - not eligible for subsidy
-            existing = m.RHO * sum(m.C_MC[g] * m.e[g, t] for g in m.G_E_SOLAR for t in m.T)
+            existing = sum(m.C_MC[g] * m.e[g, t] for g in m.G_E_SOLAR for t in m.T)
 
             # Candidate wind generators - eligible for subsidy
-            candidate = (m.RHO * sum((m.C_MC[g] - (m.baseline * m.permit_price)) * m.e[g, t]
-                                     for g in m.G_C_SOLAR for t in m.T))
+            candidate = (sum((m.C_MC[g] - (m.baseline * m.permit_price)) * m.e[g, t]
+                             for g in m.G_C_SOLAR for t in m.T))
 
             # Total cost to operate wind units for the scenario
             total_cost = existing + candidate
@@ -535,7 +522,7 @@ class UnitCommitment:
         def storage_operating_costs_rule(_m):
             """Cost to operate storage units"""
 
-            return m.RHO * sum(m.C_MC[g] * m.e[g, t] for g in m.G_STORAGE for t in m.T)
+            return sum(m.C_MC[g] * m.e[g, t] for g in m.G_STORAGE for t in m.T)
 
         # Operating cost - storage units
         m.OP_Q = Expression(rule=storage_operating_costs_rule)
@@ -543,7 +530,7 @@ class UnitCommitment:
         def lost_load_value_rule(_m):
             """Vale of lost load"""
 
-            return m.RHO * sum(m.C_L * m.e_V[z, t] for z in m.Z for t in m.T)
+            return sum(m.C_L * m.e_V[z, t] for z in m.Z for t in m.T)
 
         # Value of lost load
         m.OP_L = Expression(rule=lost_load_value_rule)
@@ -551,7 +538,7 @@ class UnitCommitment:
         def reserve_violation_penalty_rule(_m):
             """Penalty for violating reserve requirements"""
 
-            return m.RHO * sum(m.C_L * m.r_up_violation[r, t] for r in m.R for t in m.T)
+            return sum(m.C_L * m.r_up_violation[r, t] for r in m.R for t in m.T)
 
         # Value of reserve violation penalty - assumed penalty factor is same as that for lost load
         m.OP_R = Expression(rule=reserve_violation_penalty_rule)
@@ -559,11 +546,8 @@ class UnitCommitment:
         # Total operating cost for a given scenario
         m.SCEN = Expression(expr=m.OP_T + m.OP_H + m.OP_W + m.OP_S + m.OP_Q + m.OP_L + m.OP_R)
 
-        # Total cost for operating scenario - including discounting
-        m.COST = Expression(expr=m.DISCOUNT_FACTOR * m.SCEN)
-
         # Objective function - sum of operational costs + emissions target
-        m.OBJECTIVE_FUNCTION = Expression(expr=m.COST)
+        m.OBJECTIVE_FUNCTION = Expression(expr=m.SCEN)
 
         return m
 
@@ -942,18 +926,17 @@ class UnitCommitment:
 
             # Existing units within zone
             existing_units = [gen for gen, zone in self.data.existing_units_dict[('PARAMETERS', 'NEM_ZONE')].items()
-                              if (zone == z) and (gen in m.G_C)]
+                              if zone == z]
 
             # Candidate units within zone
             candidate_units = [gen for gen, zone in self.data.candidate_units_dict[('PARAMETERS', 'ZONE')].items()
-                               if (zone == z) and (gen in m.G_C)]
+                               if zone == z]
 
             # All generators within a given zone
             generators = existing_units + candidate_units
 
             # Storage units within a given zone TODO: will need to update if existing storage units are included
-            storage_units = [gen for gen, zone in self.data.battery_properties_dict['NEM_ZONE'].items()
-                             if (zone == z) and (gen in m.G_C)]
+            storage_units = [gen for gen, zone in self.data.battery_properties_dict['NEM_ZONE'].items() if zone == z]
 
             return (sum(m.p_total[g, t] for g in generators) - m.DEMAND[z, t]
                     - sum(m.INCIDENCE_MATRIX[l, z] * m.p_flow[l, t] for l in m.L)
@@ -1108,25 +1091,6 @@ class UnitCommitment:
         return m
 
     @staticmethod
-    def get_iteration_parameters(investment_plan_solution_dir, use_default=False):
-        """Get parameters that only need to be update once per iteration"""
-
-        # Use default parameters
-        if use_default:
-            parameters = {'LAMBDA_FIXED': float(0)}
-
-        # Else read parameters from previous investment plan solution
-        else:
-            with open(os.path.join(investment_plan_solution_dir, 'investment-results.pickle'), 'rb') as f:
-                # Load results obtained from solving the investment plan sub-problem
-                investment_results = pickle.load(f)
-
-            # All parameters that should be updated once per iteration
-            parameters = {'LAMBDA_FIXED': investment_results['LAMBDA_FIXED']}
-
-        return parameters
-
-    @staticmethod
     def _get_year_retirement_indicator(m, year):
         """Get retirement indicator for each generator and year in model horizon"""
 
@@ -1262,42 +1226,25 @@ class UnitCommitment:
 
         return marginal_costs
 
-    def _get_year_discount_factor(self, m, year):
-        """Compute discount factor applying to a given year"""
-
-        # Discount factor applying to given year - assume computation in terms of 2016 present values
-        if 2016 <= year < m.Y.last():
-            discount = 1 / ((1 + self.data.WACC) ** (year - 2016))
-
-        # If the last year in the model horizon (2050), discount such that operating costs are paid in perpetuity
-        elif year == m.Y.last():
-            discount = (1 / ((1 + self.data.WACC) ** (year - 2016))) * ((self.data.WACC + 1) / self.data.WACC)
-
-        else:
-            raise Exception(f'Check year. Value should be between 2016-2050, with 2016 as the base year: {year}')
-
-        return discount
-
     @staticmethod
-    def _get_year_fixed_candidate_capacities(year, investment_plan_solution_dir):
+    def _get_year_fixed_candidate_capacities(m, year, iteration, master_solution_dir, use_default):
         """Get fixed candidate capacities as determined by the investment plan subproblem"""
 
-        # Identify files relating to the latest master problem solution (will have the highest iteration count)
-        investment_plan_result_files = [f for f in os.listdir(investment_plan_solution_dir) if '.pickle' in f]
+        if use_default:
+            # Use default value of 0 (assume no candidate capacity installed)
+            fixed_capacities = {g: 0 for g in m.G_C}
 
-        # Last iteration ID
-        last_iteration_id = max([int(f.split('_')[1].replace('.pickle', '')) for f in investment_plan_result_files])
+        else:
+            with open(os.path.join(master_solution_dir, f'investment-results_{iteration}.pickle'), 'rb') as f:
+                # Load results obtained from solving the investment plan sub-problem
+                investment_results = pickle.load(f)
 
-        with open(os.path.join(investment_plan_solution_dir, f'investment-results_{last_iteration_id}.pickle'), 'rb') as f:
-            # Load results obtained from solving the investment plan sub-problem
-            investment_results = pickle.load(f)
-
-        # Fixed capacities for candidate units for a given year - determined by investment plan sub-problem
-        fixed_capacities = {gen: val for (gen, y), val in investment_results['a'].items() if y == year}
+            # Fixed capacities for candidate units for a given year - determined by investment plan sub-problem
+            fixed_capacities = {gen: val for (gen, y), val in investment_results['CAPACITY_FIXED'].items() if y == year}
 
         return fixed_capacities
 
-    def get_year_parameters(self, m, year, investment_plan_solution_dir):
+    def get_year_parameters(self, m, year, iteration, master_solution_dir, use_default=False):
         """Get year specific for a given year"""
 
         # Retirement indicators for a given year
@@ -1312,16 +1259,12 @@ class UnitCommitment:
         # Marginal costs applying to given year
         marginal_costs = self._get_year_marginal_costs(m, year)
 
-        # Discount factor to apply to given year
-        # discount = self._get_year_discount_factor(m, year)
-        discount = float(1)
-
         # Fixed capacities
-        capacity_fixed = self._get_year_fixed_candidate_capacities(year, investment_plan_solution_dir)
+        capacity_fixed = self._get_year_fixed_candidate_capacities(m, year, iteration, master_solution_dir, use_default)
 
         # All year-specific parameters
         parameters = {'F_SCENARIO': retirement_indicator, 'U0': initial_on_state, 'P0': initial_power_output,
-                      'C_MC': marginal_costs, 'DISCOUNT_FACTOR': discount, 'CAPACITY_FIXED': capacity_fixed}
+                      'C_MC': marginal_costs, 'CAPACITY_FIXED': capacity_fixed}
 
         return parameters
 
@@ -1344,15 +1287,12 @@ class UnitCommitment:
         # Marginal costs applying to given year
         marginal_costs = validation_data['C_MC']
 
-        # Discount factor to apply to given year
-        discount = float(1)
-
         # Fixed candidate unit capacities - set to 0 for all candidate units
         capacity_fixed = {g: float(0) for g in m.G_C}
 
         # All year-specific parameters
         parameters = {'F_SCENARIO': retirement_indicator, 'U0': initial_on_state, 'P0': initial_power_output,
-                      'C_MC': marginal_costs, 'DISCOUNT_FACTOR': discount, 'CAPACITY_FIXED': capacity_fixed}
+                      'C_MC': marginal_costs, 'CAPACITY_FIXED': capacity_fixed}
 
         return parameters
 
@@ -1522,12 +1462,8 @@ class UnitCommitment:
         # Wind capacity factors for scenario
         wind = self._get_wind_capacity_factors(m, year, scenario)
 
-        # Scenario duration
-        # rho = self._get_scenario_duration_days(year, scenario)
-        rho = float(1)
-
         # All scenario parameters
-        parameters = {'DEMAND': demand, 'P_H': hydro, 'Q_SOLAR': solar, 'Q_WIND': wind, 'RHO': rho}
+        parameters = {'DEMAND': demand, 'P_H': hydro, 'Q_SOLAR': solar, 'Q_WIND': wind}
 
         return parameters
 
@@ -1540,12 +1476,12 @@ class UnitCommitment:
             validation_data = pickle.load(f)
 
         # Set all wind and solar output = 0 for validation case
-        wind = {(g, t): float(0) for g in m.G_C_WIND.union(m.G_E_WIND) for t in m.T}
-        solar = {(g, t): float(0) for g in m.G_C_SOLAR.union(m.G_E_SOLAR) for t in m.T}
+        wind = {(g, t): float(0) for g in model.G_C_WIND.union(model.G_E_WIND) for t in m.T}
+        solar = {(g, t): float(0) for g in model.G_C_SOLAR.union(model.G_E_SOLAR) for t in m.T}
 
         # All scenario parameters
         parameters = {'DEMAND': validation_data['DEMAND'], 'P_H': validation_data['P_H'],
-                      'Q_SOLAR': solar, 'Q_WIND': wind, 'RHO': float(1)}
+                      'Q_SOLAR': solar, 'Q_WIND': wind}
 
         return parameters
 
@@ -1623,9 +1559,8 @@ class UnitCommitment:
         fixed_capacity_dual_var = {g: m.dual[m.FIXED_SUBPROBLEM_CAPACITY[g]] for g in m.G_C}
 
         # Results to be used in investment planning problem
-        results = {'SCENARIO_EMISSIONS': m.SCENARIO_EMISSIONS.expr(),
-                   'PSI_FIXED': fixed_capacity_dual_var,
-                   'OBJECTIVE': m.OBJECTIVE.expr()}
+        results = {'SCENARIO_EMISSIONS': m.SCENARIO_EMISSIONS.expr(), 'SCENARIO_DEMAND': m.SCENARIO_DEMAND.expr(),
+                   'PSI_FIXED': fixed_capacity_dual_var, 'CANDIDATE_CAPACITY_FIXED': m.b.get_values()}
 
         # Filename
         filename = f'uc-results_{iteration}_{year}_{scenario}.pickle'
@@ -1637,45 +1572,34 @@ class UnitCommitment:
 
 
 if __name__ == '__main__':
+    # Parameters obtained from investment plan subproblem - updated once per model iteration
+    master_solution_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'investment_plan')
+
+    # Directory containing validation parameter data
+    validation_data_directory = r'C:\Users\eee\Desktop\git\research\FYP-review\NOTEBOOKS\model'
+
     # Initialise object used to construct model
     uc = UnitCommitment()
 
     # Construct model object
     model = uc.construct_model()
 
-    # Start timer - used to measure time it takes to construct and solve model
-    start = time.time()
-
-    # Parameters obtained from investment plan subproblem - updated once per model iteration
-    investment_plan_solution_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'investment_plan')
-    iteration_parameters = uc.get_iteration_parameters(investment_plan_solution_directory, use_default=True)
-
-    # Update parameters for a given iteration
-    model = uc.update_parameters(model, iteration_parameters)
-
-    # Directory containing validation parameter data
-    validation_data_directory = r'C:\Users\eee\Desktop\git\research\FYP-review\NOTEBOOKS\model'
-
-    # # Directory for unit commitment subproblem results
-    # uc_results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'operational_plan')
+    # Validation data
+    # year_parameters = uc.get_validation_year_parameters(model, validation_data_directory)
+    # scenario_parameters = uc.get_validation_scenario_parameters(model, validation_data_directory)
 
     # Define scenario
     year, scenario = 2016, 1
 
-    # Parameters depending on a given year
-    year_parameters = uc.get_year_parameters(model, year, investment_plan_solution_directory)
+    # Iteration count
+    iteration = 1
 
-    # # Validation data
-    # # year_parameters = uc.get_validation_year_parameters(model, validation_data_directory)
-
-    # Update parameters applying to a given year
-    model = uc.update_parameters(model, year_parameters)
-
-    # Parameters depending on a given operating scenario
+    # Parameters depending on a given year and scenario
+    year_parameters = uc.get_year_parameters(model, year, iteration, master_solution_directory, use_default=True)
     scenario_parameters = uc.get_scenario_parameters(model, year, scenario)
 
-    # Validation data
-    # scenario_parameters = uc.get_validation_scenario_parameters(model, validation_data_directory)
+    # Update model parameters
+    model = uc.update_parameters(model, year_parameters)
 
     # Update scenario parameters
     model = uc.update_parameters(model, scenario_parameters)
