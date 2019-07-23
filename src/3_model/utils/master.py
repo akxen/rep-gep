@@ -1,7 +1,6 @@
 """Benders decomposition master problem"""
 
 import os
-import time
 import pickle
 
 from pyomo.environ import *
@@ -9,6 +8,7 @@ from pyomo.util.infeasible import log_infeasible_constraints
 
 from data import ModelData
 from components import CommonComponents
+from calculations import Calculations
 
 
 class InvestmentPlan:
@@ -17,6 +17,9 @@ class InvestmentPlan:
 
     # Common model components to investment plan and operating sub-problems (sets)
     components = CommonComponents()
+
+    # Object used to perform common calculations. E.g. discount factors.
+    calculations = Calculations()
 
     def __init__(self):
         # Solver options
@@ -63,14 +66,10 @@ class InvestmentPlan:
             """
 
             if g in m.G_C_STORAGE:
-                # TODO: FIX COSTS
                 return float(self.data.battery_build_costs_dict[y][g] * 1000)
-                # return float(self.data.battery_build_costs_dict[y][g])
 
             else:
-                # TODO: FIX COSTS
                 return float(self.data.candidate_units_dict[('BUILD_COST', y)][g] * 1000)
-                # return float(self.data.candidate_units_dict[('BUILD_COST', y)][g])
 
         # Candidate unit build cost
         m.I_C = Param(m.G_C, m.Y, rule=candidate_unit_build_costs_rule)
@@ -107,36 +106,20 @@ class InvestmentPlan:
             """
 
             if g in m.G_E:
-                # TODO: FIX COSTS
                 return float(self.data.existing_units_dict[('PARAMETERS', 'FOM')][g] * 1000)
-                # return float(self.data.existing_units_dict[('PARAMETERS', 'FOM')][g])
 
             elif g in m.G_C_THERM.union(m.G_C_WIND, m.G_C_SOLAR):
-                # TODO: FIX COSTS
                 return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')][g] * 1000)
-                # return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')][g])
 
             elif g in m.G_STORAGE:
                 # TODO: Need to find reasonable FOM cost for storage units - setting = MEL-WIND for now
                 return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')]['MEL-WIND'] * 1000)
-                # return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')]['MEL-WIND'])
 
             else:
                 raise Exception(f'Unexpected generator encountered: {g}')
 
         # Fixed operations and maintenance cost
         m.C_FOM = Param(m.G, rule=fixed_operations_and_maintenance_cost_rule)
-
-        def discount_factor_rule(_m, y):
-            """Discount factor"""
-
-            # Discount factor
-            discount_factor = 1 / ((1 + self.data.WACC) ** (y - m.Y.first()))
-
-            return discount_factor
-
-        # Discount factor - used to take into account the time value of money and compute present values
-        m.DISCOUNT_FACTOR = Param(m.Y, rule=discount_factor_rule)
 
         # Weighted cost of capital - interest rate assumed in discounting + amortisation calculations
         m.WACC = Param(initialize=float(self.data.WACC))
@@ -167,8 +150,7 @@ class InvestmentPlan:
 
         return m
 
-    @staticmethod
-    def define_expressions(m):
+    def define_expressions(self, m):
         """Define investment plan expressions"""
 
         def investment_cost_rule(_m, y):
@@ -176,7 +158,7 @@ class InvestmentPlan:
             return sum(m.GAMMA[g] * m.I_C[g, y] * m.x_c[g, y] for g in m.G_C)
 
         # Investment cost in a given year
-        # m.INV = Expression(m.Y, rule=investment_cost_rule)
+        m.INV = Expression(m.Y, rule=investment_cost_rule)
 
         def fom_cost_rule(_m, y):
             """Total fixed operations and maintenance cost for a given year (not discounted)"""
@@ -193,27 +175,43 @@ class InvestmentPlan:
             return total_fom
 
         # Fixed operating cost for candidate existing generators for each year in model horizon
-        # m.FOM = Expression(m.Y, rule=fom_cost_rule)
+        m.FOM = Expression(m.Y, rule=fom_cost_rule)
 
-        def total_discounted_investment_and_fom_cost_rule(_m):
-            """Total discounted cost investment and fix operations and maintenance costs (includes end-of-year cost)"""
+        def total_fom_cost_rule(_m):
+            """Total discounted FOM cost over all years in model horizon"""
 
-            # Total investment cost over model horizon
-            investment_cost = sum((m.DISCOUNT_FACTOR[y] / m.WACC) * m.INV[y] for y in m.Y)
+            return sum(self.calculations.discount_factor(y, m.Y.first()) * m.FOM[y] for y in m.Y)
 
-            # Fixed operations and maintenance cost over model horizon
-            fom_cost = sum(m.DISCOUNT_FACTOR[y] * m.FOM[y] for y in m.Y)
+        # Total discounted FOM cost over model horizon
+        m.FOM_TOTAL = Expression(rule=total_fom_cost_rule)
 
-            # End of year operating costs (assumed to be paid in perpetuity to take into account end-of-year effects)
-            end_of_year_cost = (m.DISCOUNT_FACTOR[m.Y.last()] / m.WACC) * m.FOM[m.Y.last()]
+        def total_fom_end_of_horizon_rule(_m):
+            """FOM cost assumed to propagate beyond end of model horizon"""
 
-            # Objective function - note: also considers penalty (m.PEN) associated with emissions constraint violation
-            total_discounted_cost = investment_cost + fom_cost + end_of_year_cost
+            # Discount factor
+            discount_factor = self.calculations.discount_factor(m.Y.last(), m.Y.first() * m.FOM[m.Y.last()])
 
-            return total_discounted_cost
+            # Assumes discounted FOM cost in final year paid in perpetuity
+            total_cost = (discount_factor / m.WACC) * m.FOM[m.Y.last()]
 
-        # Total discounted cost for fixed operations and maintenance costs
-        # m.TOTAL_DISCOUNTED_INV_FOM_COST = Expression(rule=total_discounted_investment_and_fom_cost_rule)
+            return total_cost
+
+        # Accounting for FOM beyond end of model horizon (EOH)
+        m.FOM_EOH = Expression(rule=total_fom_end_of_horizon_rule)
+
+        def total_investment_cost_rule(_m):
+            """Total discounted amortised investment cost"""
+
+            # Total discounted amortised investment cost
+            total_cost = sum((self.calculations.discount_factor(y, m.Y.first()) / m.WACC) * m.INV[y] for y in m.Y)
+
+            return total_cost
+
+        # Total investment cost
+        m.INV_TOTAL = Expression(rule=total_investment_cost_rule)
+
+        # Total discounted investment and FOM cost (taking into account costs beyond end of model horizon)
+        m.TOTAL_PLANNING_COST = Expression(expr=m.FOM_TOTAL + m.FOM_EOH + m.INV_TOTAL)
 
         return m
 
@@ -306,7 +304,7 @@ class InvestmentPlan:
             """Investment plan objective function"""
 
             # Objective function
-            objective_function = m.alpha
+            objective_function = m.TOTAL_PLANNING_COST + m.alpha
 
             return objective_function
 
@@ -358,179 +356,14 @@ class InvestmentPlan:
 
         return m
 
-    def get_scenario_duration_days(self, year, scenario):
-        """Get duration of operating scenarios (days)"""
-
-        # Account for leap-years
-        if year % 4 == 0:
-            days_in_year = 366
-        else:
-            days_in_year = 365
-
-        # Total days represented by scenario
-        days = float(self.data.input_traces_dict[('K_MEANS', 'METRIC', 'NORMALISED_DURATION')][(year, scenario)]
-                     * days_in_year)
-
-        return days
-
-    def get_discount_factor(self, year, base_year=2016):
-        """Compute discount factor applying to a given year"""
-
-        # Discount factor applying to given year - assume computation in terms of 2016 present values
-        discount = 1 / ((1 + self.data.WACC) ** (year - base_year))
-
-        return discount
-
-    @staticmethod
-    def get_total_discounted_investment_cost(m, iteration, investment_solution_dir):
-        """Total discounted investment cost"""
-
-        with open(os.path.join(investment_solution_dir, f'investment-results_{iteration}.pickle'), 'rb') as f:
-            result = pickle.load(f)
-
-        # Total discounted investment cost
-        investment_cost = sum((m.DISCOUNT_FACTOR[y] / m.WACC) * m.GAMMA[g] * m.I_C[g, y] * result['x_c'][(g, y)]
-                              for g in m.G_C for y in m.Y)
-
-        return investment_cost
-
-    @staticmethod
-    def get_total_discounted_fom_cost(m, iteration, investment_solution_dir):
-        """Total discounted FOM cost"""
-
-        with open(os.path.join(investment_solution_dir, f'investment-results_{iteration}.pickle'), 'rb') as f:
-            result = pickle.load(f)
-
-        # FOM costs for candidate units
-        candidate_fom = sum(m.DISCOUNT_FACTOR[y] * m.C_FOM[g] * result['a'][(g, y)] for g in m.G_C for y in m.Y)
-
-        # FOM costs for existing units - note no FOM cost paid if unit retires
-        existing_fom = sum(m.DISCOUNT_FACTOR[y] * m.C_FOM[g] * m.P_MAX[g] * (1 - m.F[g, y]) for g in m.G_E for y in m.Y)
-
-        # Expression for total FOM cost
-        total_fom = candidate_fom + existing_fom
-
-        return total_fom
-
-    @staticmethod
-    def get_end_of_horizon_fom_cost(m, iteration, investment_solution_dir):
-        """Total discounted FOM cost after model horizon (assume cost in last year is paid in perpetuity)"""
-
-        with open(os.path.join(investment_solution_dir, f'investment-results_{iteration}.pickle'), 'rb') as f:
-            result = pickle.load(f)
-
-        # FOM costs for candidate units
-        candidate_fom = sum((m.DISCOUNT_FACTOR[m.Y.last()] / m.WACC) * m.C_FOM[g] * result['a'][(g, m.Y.last())]
-                            for g in m.G_C)
-
-        # FOM costs for existing units - note no FOM cost paid if unit retires
-        existing_fom = sum((m.DISCOUNT_FACTOR[m.Y.last()] / m.WACC) * m.C_FOM[g] * m.P_MAX[g] * (1 - m.F[g, m.Y.last()])
-                           for g in m.G_E)
-
-        # Expression for total FOM cost
-        total_fom = candidate_fom + existing_fom
-
-        return total_fom
-
-    @staticmethod
-    def get_operating_scenario_cost(iteration, year, scenario, uc_solution_dir):
-        """Get total operating cost"""
-
-        with open(os.path.join(uc_solution_dir, f'uc-results_{iteration}_{year}_{scenario}.pickle'), 'rb') as f:
-            result = pickle.load(f)
-
-        # Objective value (not discounted, and not scaled by day weighting)
-        objective = result['OBJECTIVE']
-
-        return objective
-
-    def get_total_discounted_operating_scenario_cost(self, iteration, uc_solution_dir):
-        """Get total discounted cost for all operating scenarios"""
-
-        # Files containing operating scenario results
-        files = [f for f in os.listdir(uc_solution_dir) if '.pickle' in f]
-
-        # Initialise operating scenario total cost
-        total_cost = 0
-
-        for f in files:
-            # Get year and scenario ID from filename
-            year, scenario = int(f.split('_')[-2]), int(f.split('_')[-1].replace('.pickle', ''))
-
-            # Get scenario duration
-            duration = self.get_scenario_duration_days(year, scenario)
-
-            # Discount factor
-            discount = self.get_discount_factor(year, base_year=2016)
-
-            # Nominal operating cost for given scenario
-            nominal_cost = self.get_operating_scenario_cost(iteration, year, scenario, uc_solution_dir)
-
-            # Discounted cost and scaled by number of days assigned to scenario
-            total_cost += duration * discount * nominal_cost
-
-        return total_cost
-
-    def get_end_of_horizon_operating_cost(self, m, iteration, uc_solution_dir):
-        """Get term representing operating cost to be paid in perpetuity after end of model horizon"""
-
-        # Files containing scenario results for final year in model horizon
-        files = [f for f in os.listdir(uc_solution_dir) if (f'uc_results_{iteration}_{m.Y.last()}' in f)]
-
-        # Initialise total cost for final year
-        total_cost = 0
-
-        for f in files:
-            # Get year and scenario ID from filename
-            year, scenario = int(f.split('_')[-2]), int(f.split('_')[-1].replace('.pickle', ''))
-
-            assert year == m.Y.last(), f'Year is not final year in model horizon: {year}'
-
-            # Get scenario duration
-            duration = self.get_scenario_duration_days(year, scenario)
-
-            # Discount factor
-            discount = self.get_discount_factor(year, base_year=2016)
-
-            # Nominal operating cost for given scenario
-            nominal_cost = self.get_operating_scenario_cost(iteration, year, scenario, uc_solution_dir)
-
-            # Discounted cost and scaled by number of days assigned to scenario. Cost paid in perpetuity.
-            total_cost += duration * (discount / m.WACC) * nominal_cost
-
-        return total_cost
-
-    def get_cost_upper_bound(self, m, iteration, investment_solution_dir, uc_solution_dir):
-        """Get constant cost term to include in Benders cut"""
-
-        # Total investment cost
-        inv_cost = self.get_total_discounted_investment_cost(m, iteration, investment_solution_dir)
-
-        # Total FOM cost
-        fom_cost = self.get_total_discounted_fom_cost(m, iteration, investment_solution_dir)
-
-        # FOM cost beyond end of model horizon
-        fom_cost_end = self.get_end_of_horizon_fom_cost(m, iteration, investment_solution_dir)
-
-        # Operating cost over model horizon
-        op_cost = self.get_total_discounted_operating_scenario_cost(iteration, uc_solution_dir)
-
-        # Operating cost beyond end of model horizon
-        op_cost_end = self.get_end_of_horizon_operating_cost(m, iteration, uc_solution_dir)
-
-        # Total constant cost in Benders cut
-        total_cost = inv_cost + fom_cost + fom_cost_end + op_cost + op_cost_end
-
-        return total_cost
-
     def get_cut_component(self, m, iteration, year, scenario, investment_solution_dir, uc_solution_dir):
         """Construct cut component"""
 
         # Discount factor
-        discount = self.get_discount_factor(year, base_year=2016)
+        discount = self.calculations.discount_factor(year, base_year=2016)
 
         # Duration
-        duration = self.get_scenario_duration_days(year, scenario)
+        duration = self.calculations.scenario_duration_days(year, scenario)
 
         with open(os.path.join(uc_solution_dir, f'uc-results_{iteration}_{year}_{scenario}.pickle'), 'rb') as f:
             uc_result = pickle.load(f)
@@ -547,11 +380,18 @@ class InvestmentPlan:
     def get_benders_cut(self, m, iteration, investment_solution_dir, uc_solution_dir):
         """Construct a Benders optimality cut"""
 
-        # Total constant cost included in objective
-        total_cost = self.get_cost_upper_bound(m, iteration, investment_solution_dir, uc_solution_dir)
+        # Cost accounting for total operating cost for each scenario over model horizon
+        scenario_cost = self.calculations.get_total_discounted_operating_scenario_cost(iteration, uc_solution_dir)
+
+        # Cost account for operating costs beyond end of model horizon
+        scenario_cost_eoh = self.calculations.get_end_of_horizon_operating_cost(m, iteration, uc_solution_dir)
+
+        # Total (fixed) cost to include in Benders cut
+        total_cost = scenario_cost + scenario_cost_eoh
 
         # Cut components containing dual variables
-        cut_components = sum(self.get_cut_component(m, iteration, y, s, investment_solution_dir, uc_solution_dir) for y in m.Y for s in m.S)
+        cut_components = sum(self.get_cut_component(m, iteration, y, s, investment_solution_dir, uc_solution_dir)
+                             for y in m.Y for s in m.S)
 
         # Benders cut
         cut = m.alpha >= total_cost + cut_components
@@ -593,7 +433,8 @@ class InvestmentPlan:
 
         return m
 
-    def save_solution(self, m, iteration, investment_solution_dir):
+    @staticmethod
+    def save_solution(m, iteration, investment_solution_dir):
         """Save model solution"""
 
         # Save investment plan
@@ -637,18 +478,3 @@ if __name__ == '__main__':
 
     # Initialise feasible solution
     investment_plan.initialise_investment_plan(model, investment_plan_results_directory)
-
-    # # Solve master problem first time (no cuts)
-    # model = investment_plan.solve_model(model)
-    #
-    # # Before constraint
-    # print(model.alpha.display())
-    #
-    # # Add benders cut
-    # model = investment_plan.add_benders_cut(model, 1, uc_results_directory)
-    #
-    # # Solve master problem (with Benders cut)
-    # model = investment_plan.solve_model(model)
-    #
-    # # After cut
-    # print(model.alpha.display())

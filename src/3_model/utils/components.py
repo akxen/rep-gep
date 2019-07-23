@@ -8,11 +8,10 @@ from data import ModelData
 
 
 class CommonComponents:
-    # Model data
-    data = ModelData()
 
     def __init__(self):
-        pass
+        # Model data
+        self.data = ModelData()
 
     def define_sets(self, m):
         """Define sets to be used in model"""
@@ -87,7 +86,7 @@ class CommonComponents:
         m.G = m.G_E.union(m.G_C)
 
         # All years in model horizon
-        m.Y = RangeSet(2016, 2020)
+        m.Y = RangeSet(2016, 2017)
 
         # Operating scenarios for each year
         m.S = RangeSet(1, 10)

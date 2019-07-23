@@ -1242,24 +1242,28 @@ The solution to this problem will yield: $\cOperatingCostScenario^{(j)}$ and $\v
 
 It is important to note that the discount factor, $\cDiscountRate$, and the duration of the operating scenario, $\cScenarioDuration$, are not taken into account when solving each sub-problem. These parameters are constants, and will not affect the solution of primal variables when solving each operating scenario. They will however impact the magnitude of dual variables. Consequently, dual variables will be scaled by these constants within the master problem to take this effect into account.
 
-\subsection{Investment plan master problem}
+\subsection{Investment plan master problem (v1)}
 The master problem is used to identify suitable values for candidate capacity variables.
 
-%\begin{equation}
-%	\minimise\limits_{\bm{y}} \quad \sum\limits_{\iYear \in \sYears} \frac{\cDiscountRate}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \cDiscountRate \cFixedOperationsMaintenanceCost  + \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \alpha
-%\end{equation}
+\begin{equation}
+	\minimise\limits_{\bm{y}} \quad \sum\limits_{\iYear \in \sYears} \frac{\cDiscountRate}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \cDiscountRate \cFixedOperationsMaintenanceCost  + \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal] + \alpha
+\end{equation}
+
+Subject to (\ref{eqn: discrete capacity decision})--(\ref{eqn: storage build limit constraint}). Benders cuts are given by:
+
+\begin{align}
+	\begin{split}
+		\alpha \geq & \sum\limits_{\iYear \in \sYears} \cDiscountRate \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \cOperatingCostScenario^{(j)} + \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration[\iYearTerminal,\iScenario] \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cOperatingCostScenario[\iYearTerminal,\iScenario]^{(j)} + \sum\limits_{\iYear \in \sYears} \cDiscountRate \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \sum\limits_{\iGenerator \in \sGeneratorsCandidate} \vFixedCapacityDual^{(j)} \left(\vInstalledCapacityTotal - \vInstalledCapacityTotal^{(j)}\right) \quad \forall j = 1,\ldots,\nu-1
+	\end{split}
+\end{align}
+
+\subsection{Investment plan master problem (v2)}
+In this formulation all investment and fixed operations costs are accounted for within the cut.
 
 \begin{equation}
 \minimise\limits_{\bm{y}} \quad \alpha
 \end{equation}
 
-%Where: 
-%\begin{align}
-%	\begin{split}
-%		\cObjectiveFunction = &\sum\limits_{\iYear \in \sYears} \frac{\cDiscountRate}{\cInterestRate}\cInvestmentCost + \sum\limits_{\iYear \in \sYears} \cDiscountRate \cFixedOperationsMaintenanceCost  + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \cFixedOperationsMaintenanceCost[\iYearTerminal]\\
-%		& + \sum\limits_{\iYear \in \sYears} \sum\limits_{\iScenario \in \sScenarios}  \cDiscountRate \overline{\cOperatingCostScenario[]}_{\iYear,\iScenario} + \frac{(1+\cInterestRate)^{-\iYearTerminal}}{\cInterestRate} \overline{\cOperatingCostScenario[]}_{\iYearTerminal,\iScenario}\\
-%	\end{split}
-%\end{align}
 
 Subject to (\ref{eqn: discrete capacity decision})--(\ref{eqn: storage build limit constraint}). Benders cuts are given by:
 

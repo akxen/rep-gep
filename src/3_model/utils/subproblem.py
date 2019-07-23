@@ -1240,7 +1240,7 @@ class UnitCommitment:
                 investment_results = pickle.load(f)
 
             # Fixed capacities for candidate units for a given year - determined by investment plan sub-problem
-            fixed_capacities = {gen: val for (gen, y), val in investment_results['CAPACITY_FIXED'].items() if y == year}
+            fixed_capacities = {gen: val for (gen, y), val in investment_results['a'].items() if y == year}
 
         return fixed_capacities
 
@@ -1560,7 +1560,8 @@ class UnitCommitment:
 
         # Results to be used in investment planning problem
         results = {'SCENARIO_EMISSIONS': m.SCENARIO_EMISSIONS.expr(), 'SCENARIO_DEMAND': m.SCENARIO_DEMAND.expr(),
-                   'PSI_FIXED': fixed_capacity_dual_var, 'CANDIDATE_CAPACITY_FIXED': m.b.get_values()}
+                   'PSI_FIXED': fixed_capacity_dual_var, 'CANDIDATE_CAPACITY_FIXED': m.b.get_values(),
+                   'OBJECTIVE': m.OBJECTIVE.expr()}
 
         # Filename
         filename = f'uc-results_{iteration}_{year}_{scenario}.pickle'
