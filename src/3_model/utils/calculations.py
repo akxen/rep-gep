@@ -173,3 +173,17 @@ class Calculations:
         total_cost = inv_cost + fom_cost + fom_cost_end + op_cost + op_cost_end
 
         return total_cost
+
+    @staticmethod
+    def get_lower_bound(iteration, investment_solution_dir):
+        """Get solution lower-bound"""
+
+        # Load investment plan solution
+        with open(os.path.join(investment_solution_dir, f'investment-results_{iteration}.pickle'), 'rb') as f:
+            investment_solution = pickle.load(f)
+
+        # Total cost including Benders auxiliary variable
+        lower_bound = investment_solution['OBJECTIVE']
+
+        return lower_bound
+

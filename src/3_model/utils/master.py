@@ -99,6 +99,14 @@ class InvestmentPlan:
         # Amortisation rate for a given investment
         m.GAMMA = Param(m.G_C, rule=amortisation_rate_rule)
 
+        def discount_factor_rule(_m, y):
+            """Discount factor for each year in model horizon"""
+
+            return self.calculations.discount_factor(y, m.Y.first())
+
+        # Discount factor
+        m.DISCOUNT_FACTOR = Param(m.Y, rule=discount_factor_rule)
+
         def fixed_operations_and_maintenance_cost_rule(_m, g):
             """Fixed FOM cost [$/MW/year]
 
@@ -180,7 +188,7 @@ class InvestmentPlan:
         def total_fom_cost_rule(_m):
             """Total discounted FOM cost over all years in model horizon"""
 
-            return sum(self.calculations.discount_factor(y, m.Y.first()) * m.FOM[y] for y in m.Y)
+            return sum(m.DISCOUNT_FACTOR[y] * m.FOM[y] for y in m.Y)
 
         # Total discounted FOM cost over model horizon
         m.FOM_TOTAL = Expression(rule=total_fom_cost_rule)
@@ -188,11 +196,8 @@ class InvestmentPlan:
         def total_fom_end_of_horizon_rule(_m):
             """FOM cost assumed to propagate beyond end of model horizon"""
 
-            # Discount factor
-            discount_factor = self.calculations.discount_factor(m.Y.last(), m.Y.first() * m.FOM[m.Y.last()])
-
             # Assumes discounted FOM cost in final year paid in perpetuity
-            total_cost = (discount_factor / m.WACC) * m.FOM[m.Y.last()]
+            total_cost = (m.DISCOUNT_FACTOR[m.Y.last()] / m.WACC) * m.FOM[m.Y.last()]
 
             return total_cost
 
@@ -203,7 +208,7 @@ class InvestmentPlan:
             """Total discounted amortised investment cost"""
 
             # Total discounted amortised investment cost
-            total_cost = sum((self.calculations.discount_factor(y, m.Y.first()) / m.WACC) * m.INV[y] for y in m.Y)
+            total_cost = sum((m.DISCOUNT_FACTOR[y] / m.WACC) * m.INV[y] for y in m.Y)
 
             return total_cost
 
@@ -447,7 +452,7 @@ class InvestmentPlan:
             pickle.dump(output, f)
 
     @staticmethod
-    def initialise_investment_plan(m, solution_dir):
+    def initialise_investment_plan(m, iteration, solution_dir):
         """Initial values for investment plan - used in first iteration. Assume candidate capacity = 0"""
 
         # Feasible investment plan for first iteration
@@ -456,7 +461,7 @@ class InvestmentPlan:
                 'OBJECTIVE': -1e9}
 
         # Save investment plan
-        with open(os.path.join(solution_dir, 'investment-results_1.pickle'), 'wb') as f:
+        with open(os.path.join(solution_dir, f'investment-results_{iteration}.pickle'), 'wb') as f:
             pickle.dump(plan, f)
 
         return plan

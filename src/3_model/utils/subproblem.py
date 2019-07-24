@@ -1510,12 +1510,12 @@ class UnitCommitment:
         """Solve model"""
 
         # Solve model
-        self.opt.solve(m, tee=False, options=self.solver_options, keepfiles=self.keepfiles)
+        solve_status = self.opt.solve(m, tee=False, options=self.solver_options, keepfiles=self.keepfiles)
 
         # Log infeasible constraints if they exist
         log_infeasible_constraints(m)
 
-        return m
+        return m, solve_status
 
     @staticmethod
     def fix_binary_variables(m):
@@ -1552,16 +1552,23 @@ class UnitCommitment:
         return m
 
     @staticmethod
-    def save_solution(m, iteration, year, scenario, results_dir):
+    def save_solution(m, solve_status, iteration, year, scenario, results_dir):
         """Save selected results from subproblem - parameters to be passed to investment plan subproblem"""
 
         # Dual variable associated with fixed capacity constraint
         fixed_capacity_dual_var = {g: m.dual[m.FIXED_SUBPROBLEM_CAPACITY[g]] for g in m.G_C}
 
+        # Energy output from selected generator (test if output as expected)
+        energy = {g: {t: m.e[g, t].expr() for t in m.T} for g in m.G}
+
+        # Prices for selected region (test if output as expected)
+        prices = {z: {t: m.dual[m.POWER_BALANCE[z, t]] for t in m.T} for z in m.Z}
+
         # Results to be used in investment planning problem
         results = {'SCENARIO_EMISSIONS': m.SCENARIO_EMISSIONS.expr(), 'SCENARIO_DEMAND': m.SCENARIO_DEMAND.expr(),
                    'PSI_FIXED': fixed_capacity_dual_var, 'CANDIDATE_CAPACITY_FIXED': m.b.get_values(),
-                   'OBJECTIVE': m.OBJECTIVE.expr()}
+                   'OBJECTIVE': m.OBJECTIVE.expr(),
+                   'ENERGY': energy, 'PRICES': prices, 'SOLVE_STATUS': solve_status}
 
         # Filename
         filename = f'uc-results_{iteration}_{year}_{scenario}.pickle'
