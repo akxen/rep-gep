@@ -1,7 +1,5 @@
 """Model components common to both subproblem and master problem"""
 
-from collections import OrderedDict
-
 from pyomo.environ import *
 
 from data import ModelData
@@ -86,7 +84,7 @@ class CommonComponents:
         m.G = m.G_E.union(m.G_C)
 
         # All years in model horizon
-        m.Y = RangeSet(2016, 2026)
+        m.Y = RangeSet(2016, 2050)
 
         # Operating scenarios for each year
         m.S = RangeSet(1, 10)

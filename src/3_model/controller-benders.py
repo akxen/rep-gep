@@ -18,7 +18,7 @@ class BendersAlgorithmController:
                  subproblem_solution_dir=os.path.join(os.path.dirname(__file__), 'output', 'dispatch_plan')):
 
         # Setup logger
-        logging.basicConfig(filename='controller-benders.log', filemode='w',
+        logging.basicConfig(filename='controller-benders.log', filemode='a',
                             format='%(asctime)s %(name)s %(levelname)s %(message)s',
                             datefmt='%Y-%m-%d %H:%M:%S',
                             level=logging.DEBUG)
@@ -89,8 +89,8 @@ class BendersAlgorithmController:
         self.logger.info("Running Benders decomposition algorithm")
 
         # Remove pickle files in results directories
-        self.cleanup_results(self.master_solution_dir)
-        self.cleanup_results(self.subproblem_solution_dir)
+        # self.cleanup_results(self.master_solution_dir)
+        # self.cleanup_results(self.subproblem_solution_dir)
 
         # Construct model objects
         self.logger.info("UC - constructing model")
@@ -99,14 +99,27 @@ class BendersAlgorithmController:
         self.logger.info('INV - constructing model')
         m_in = self.master.construct_model()
 
-        for i in range(1, 10):
+        # Index for first iteration
+        start_iteration = 10
+
+        for i in range(start_iteration, 100):
             self.print_log(f"Performing iteration {i}\n{''.join(['-'] * 70)}")
+
+            # Hot-start - create cuts from previous iterations and add to master problem
+            if start_iteration != 1:
+
+                for c in range(1, start_iteration):
+                    self.print_log(f'Adding Benders cut for iteration {c}')
+                    m_in = self.master.add_benders_cut(m_in, c, self.master_solution_dir, self.subproblem_solution_dir)
 
             if i == 1:
                 logging.info('INIT - Initialising feasible investment plan (set all candidate capacity = 0)')
                 self.master.initialise_investment_plan(m_in, i, self.master_solution_dir)
+
             else:
-                self.master.solve_model(m_in), self.print_log('INV - Solving investment plan problem')
+                self.print_log('INV - Solving investment plan problem')
+                self.master.solve_model(m_in)
+                self.print_log(f'INV - Candidate capacity solution: {m_in.a.get_values()}')
                 self.master.save_solution(m_in, i, self.master_solution_dir)
 
             # Store model object containing solution for given iteration
@@ -114,6 +127,7 @@ class BendersAlgorithmController:
 
             # Solve subproblems
             for y in m_uc.Y:
+            # for y in [2020]:
                 self.print_log(f"\nSolving UC subproblems for year: {y}\n{''.join(['-'] * 70)}")
 
                 # Update parameters for a given year
@@ -124,6 +138,7 @@ class BendersAlgorithmController:
                 self.logger.info(f'Fixed candidate capacity for subproblems: {fixed_cap}')
 
                 for s in m_uc.S:
+                # for s in [7]:
                     self.print_log(f'Solving UC subproblem: year {y}, scenario {s}')
 
                     # Update parameters for a given scenario
@@ -131,13 +146,16 @@ class BendersAlgorithmController:
                     m_uc = self.subproblem.update_parameters(m_uc, scenario_parameters)
 
                     # Solve subproblem (MILP)
-                    m_uc, _ = self.subproblem.solve_model(m_uc)
+                    m_uc, solve_status = self.subproblem.solve_model(m_uc)
+                    self.logger.info(f'Solved MILP: {solve_status}')
 
                     # Fix binary variables
                     m_uc = self.subproblem.fix_binary_variables(m_uc)
 
                     # Re-solve to obtain dual variables
+                    # self.subproblem.solver_options = {'simplex.tolerances.feasibility': 0.1}
                     m_uc, solve_status = self.subproblem.solve_model(m_uc)
+                    self.logger.info(f'Solved LP: {solve_status}')
 
                     # Save model output
                     self.subproblem.save_solution(m_uc, solve_status, i, y, s, self.subproblem_solution_dir)
@@ -167,7 +185,7 @@ if __name__ == '__main__':
     # Object used to run Benders decomposition algorithm
     benders = BendersAlgorithmController()
 
-    model_inv = benders.master.construct_model()
+    # model_inv = benders.master.construct_model()
     # benders.master.solve_model(model_inv)
 
     # Run algorithm

@@ -23,7 +23,7 @@ class UnitCommitment:
         # Solver options
         self.keepfiles = False
         self.solver_options = {}  # 'MIPGap': 0.0005
-        self.opt = SolverFactory('gurobi', solver_io='lp')
+        self.opt = SolverFactory('cplex', solver_io='mps')
 
     def define_parameters(self, m):
         """Define unit commitment problem parameters"""
@@ -382,6 +382,10 @@ class UnitCommitment:
         m.permit_price = Var(initialize=0)
         m.permit_price.fix()
 
+        # Dummy variables to ensure to prevent infeasible power output constraints
+        # m.dummy_1 = Var(m.G_THERM, m.T, within=NonNegativeReals, initialize=0)
+        # m.dummy_2 = Var(m.G_THERM, m.T, within=NonNegativeReals, initialize=0)
+
         return m
 
     @staticmethod
@@ -543,6 +547,14 @@ class UnitCommitment:
         # Value of reserve violation penalty - assumed penalty factor is same as that for lost load
         m.OP_R = Expression(rule=reserve_violation_penalty_rule)
 
+        # def power_output_within_limits_penalty_rule(_m):
+        #     """Penalty for constraint power output constraint violation (ensures feasibility)"""
+        #
+        #     return sum(m.C_L * (m.dummy_1[g, t] + m.dummy_2[g, t]) for g in m.G_C_THERM for t in m.T)
+        #
+        # # Power output within limits penalty
+        # m.OP_P = Expression(rule=power_output_within_limits_penalty_rule)
+
         # Total operating cost for a given scenario
         m.SCEN = Expression(expr=m.OP_T + m.OP_H + m.OP_W + m.OP_S + m.OP_Q + m.OP_L + m.OP_R)
 
@@ -680,11 +692,11 @@ class UnitCommitment:
                     rhs_2 = (m.P_MAX[g] - m.RR_SD[g]) * m.w[g, t + 1]
                     rhs_3 = (m.RR_SU[g] - m.P_MIN[g]) * m.v[g, t + 1]
 
-                    return lhs <= rhs_1 - rhs_2 + rhs_3
+                    return lhs <= rhs_1 - rhs_2 + rhs_3  # + m.dummy_1[g, t] - m.dummy_1[g, t]
 
                 # If the last period - startup and shutdown state variables assumed = 0
                 else:
-                    return lhs <= rhs_1
+                    return lhs <= rhs_1  # + m.dummy_1[g, t] - m.dummy_1[g, t]
 
             # Candidate thermal units - must take into account variable capacity
             elif g in m.G_C_THERM:
@@ -694,11 +706,11 @@ class UnitCommitment:
                     rhs_2 = m.z[g, t] - (m.RR_SD[g] * m.w[g, t + 1])
                     rhs_3 = (m.RR_SU[g] * m.v[g, t + 1]) - (m.P_MIN_PROP[g] * m.y[g, t + 1])
 
-                    return lhs <= rhs_1 - rhs_2 + rhs_3
+                    return lhs <= rhs_1 - rhs_2 + rhs_3  # + m.dummy_1[g, t] - m.dummy_1[g, t]
 
                 # If the last period - startup and shutdown state variables assumed = 0
                 else:
-                    return lhs <= rhs_1
+                    return lhs <= rhs_1  # + m.dummy_1[g, t] - m.dummy_1[g, t]
 
             else:
                 raise Exception(f'Unknown generator: {g}')
@@ -1523,14 +1535,14 @@ class UnitCommitment:
 
         for t in m.T:
             for g in m.G_THERM:
-                m.u[g, t].fix()
-                m.v[g, t].fix()
-                m.w[g, t].fix()
+                m.u[g, t].fix(round(m.u[g, t].value, 4))
+                m.v[g, t].fix(round(m.v[g, t].value, 4))
+                m.w[g, t].fix(round(m.w[g, t].value, 4))
 
                 if g in m.G_C_THERM:
-                    m.x[g, t].fix()
-                    m.y[g, t].fix()
-                    m.z[g, t].fix()
+                    m.x[g, t].fix(round(m.x[g, t].value, 4))
+                    m.y[g, t].fix(round(m.y[g, t].value, 4))
+                    m.z[g, t].fix(round(m.z[g, t].value, 4))
 
         return m
 
@@ -1597,7 +1609,7 @@ if __name__ == '__main__':
     # scenario_parameters = uc.get_validation_scenario_parameters(model, validation_data_directory)
 
     # Define scenario
-    year, scenario = 2016, 1
+    year, scenario = 2020, 1
 
     # Iteration count
     iteration = 1

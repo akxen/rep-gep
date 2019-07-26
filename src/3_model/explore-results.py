@@ -157,15 +157,18 @@ if __name__ == '__main__':
 
     # Plot all price results
     # plot_all_prices(subproblem_results_dir)
-    #
+
     # Plot all dispatch data
     # plot_all_dispatch(subproblem_results_dir)
     #
     # Check solve status
-    check_all_solve_statuses(subproblem_results_dir)
+    # check_all_solve_statuses(subproblem_results_dir)
 
     # compare_iterations()
 
     # upper = calculations.get_upper_bound(master, 2, 'output/investment_plan', 'output/dispatch_plan')
     # op_cost = calculations.get_total_discounted_operating_scenario_cost(2, 'output/dispatch_plan')
     # op_cost_eoh = calculations.get_end_of_horizon_operating_cost(master, 2, 'output/dispatch_plan')
+
+    r1 = load_investment_results(8)
+    r2 = load_investment_results(9)

@@ -25,7 +25,7 @@ class InvestmentPlan:
         # Solver options
         self.keepfiles = False
         self.solver_options = {}  # 'MIPGap': 0.0005
-        self.opt = SolverFactory('gurobi', solver_io='mps')
+        self.opt = SolverFactory('cplex', solver_io='mps')
 
     def define_sets(self, m):
         """Define investment plan sets"""
