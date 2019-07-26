@@ -18,7 +18,7 @@ class BendersAlgorithmController:
                  subproblem_solution_dir=os.path.join(os.path.dirname(__file__), 'output', 'dispatch_plan')):
 
         # Setup logger
-        logging.basicConfig(filename='controller-benders.log', filemode='a',
+        logging.basicConfig(filename='controller-benders.log', filemode='w',
                             format='%(asctime)s %(name)s %(levelname)s %(message)s',
                             datefmt='%Y-%m-%d %H:%M:%S',
                             level=logging.DEBUG)
@@ -89,8 +89,8 @@ class BendersAlgorithmController:
         self.logger.info("Running Benders decomposition algorithm")
 
         # Remove pickle files in results directories
-        # self.cleanup_results(self.master_solution_dir)
-        # self.cleanup_results(self.subproblem_solution_dir)
+        self.cleanup_results(self.master_solution_dir)
+        self.cleanup_results(self.subproblem_solution_dir)
 
         # Construct model objects
         self.logger.info("UC - constructing model")
@@ -100,7 +100,7 @@ class BendersAlgorithmController:
         m_in = self.master.construct_model()
 
         # Index for first iteration
-        start_iteration = 10
+        start_iteration = 1
 
         for i in range(start_iteration, 100):
             self.print_log(f"Performing iteration {i}\n{''.join(['-'] * 70)}")
@@ -122,12 +122,8 @@ class BendersAlgorithmController:
                 self.print_log(f'INV - Candidate capacity solution: {m_in.a.get_values()}')
                 self.master.save_solution(m_in, i, self.master_solution_dir)
 
-            # Store model object containing solution for given iteration
-            # self.master_models[i] = copy.deepcopy(m_in)
-
             # Solve subproblems
             for y in m_uc.Y:
-            # for y in [2020]:
                 self.print_log(f"\nSolving UC subproblems for year: {y}\n{''.join(['-'] * 70)}")
 
                 # Update parameters for a given year
@@ -138,33 +134,18 @@ class BendersAlgorithmController:
                 self.logger.info(f'Fixed candidate capacity for subproblems: {fixed_cap}')
 
                 for s in m_uc.S:
-                # for s in [7]:
                     self.print_log(f'Solving UC subproblem: year {y}, scenario {s}')
 
                     # Update parameters for a given scenario
-                    scenario_parameters = self.subproblem.get_scenario_parameters(m_uc, y, s)
+                    scenario_parameters = self.subproblem.get_scenario_parameters(m_uc, i, y, s, self.master_solution_dir)
                     m_uc = self.subproblem.update_parameters(m_uc, scenario_parameters)
 
-                    # Solve subproblem (MILP)
-                    m_uc, solve_status = self.subproblem.solve_model(m_uc)
-                    self.logger.info(f'Solved MILP: {solve_status}')
-
-                    # Fix binary variables
-                    m_uc = self.subproblem.fix_binary_variables(m_uc)
-
-                    # Re-solve to obtain dual variables
-                    # self.subproblem.solver_options = {'simplex.tolerances.feasibility': 0.1}
+                    # Solve subproblem (LP)
                     m_uc, solve_status = self.subproblem.solve_model(m_uc)
                     self.logger.info(f'Solved LP: {solve_status}')
 
                     # Save model output
                     self.subproblem.save_solution(m_uc, solve_status, i, y, s, self.subproblem_solution_dir)
-
-                    # Unfix binary variables
-                    m_uc = self.subproblem.unfix_binary_variables(m_uc)
-
-                    # Store model object containing solution for given year and scenario
-                    # self.subproblem_models[(i, y, s)] = copy.deepcopy(m_uc)
 
             # Check convergence
             converged = self.convergence_check(m_in, i, relative_bound_tolerance=0.01)
@@ -177,8 +158,8 @@ class BendersAlgorithmController:
             m_in = self.master.add_benders_cut(m_in, i, self.master_solution_dir, self.subproblem_solution_dir)
 
             # Log all benders cuts now associated with model
-            for index, constraint in enumerate(m_in.BENDERS_CUTS.values()):
-                self.logger.info(f'Benders cut {index}: {str(constraint.expr)}')
+            # for index, constraint in enumerate(m_in.BENDERS_CUTS.values()):
+            #     self.logger.info(f'Benders cut {index}: {str(constraint.expr)}')
 
 
 if __name__ == '__main__':

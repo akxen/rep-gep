@@ -132,11 +132,36 @@ class InvestmentPlan:
         # Weighted cost of capital - interest rate assumed in discounting + amortisation calculations
         m.WACC = Param(initialize=float(self.data.WACC))
 
-        # Candidate capacity dual variable obtained from sub-problem solution. Updated each iteration.
-        m.PSI_FIXED = Param(m.G_C, m.Y, m.S, initialize=0, mutable=True)
-
         # Lower bound for Benders auxiliary variable
         m.ALPHA_LOWER_BOUND = Param(initialize=float(-10e9))
+
+        def get_year_initial_on_state(_m, g, y):
+            """Get initial on-state for each existing generator"""
+
+            # Existing thermal units
+            if g in m.G_E_THERM:
+
+                # If existing thermal unit is not retired
+                if m.F[g, y] == 1:
+
+                    # Initial on-state set to 0 if unit no longer active
+                    return float(0)
+
+                else:
+                    # Assume slow-start units are initially on (baseload generators)
+                    if g in m.G_THERM_SLOW:
+                        return float(1)
+
+                    # Assume other existing units are initially off (quick-start generators)
+                    else:
+                        return float(0)
+
+            # Assume other units are initially off (these will be quick-start thermal units)
+            else:
+                return float(0)
+
+        # Initial on-state for a given generator (depends on retirement indicator and slow/quick start status)
+        m.U0 = Param(m.Y, m.G_THERM, rule=get_year_initial_on_state)
 
         return m
 
@@ -156,9 +181,19 @@ class InvestmentPlan:
         # Auxiliary variable - gives lower bound for subproblem solution
         m.alpha = Var()
 
+        # On-state binary variable
+        m.u = Var(m.Y, m.S, m.G_THERM, m.T, within=Binary, initialize=1)
+
+        # Startup-state binary variable
+        m.v = Var(m.Y, m.S, m.G_THERM, m.T, within=Binary, initialize=1)
+
+        # Shutdown-state binary variable
+        m.w = Var(m.Y, m.S, m.G_THERM, m.T, within=Binary, initialize=1)
+
         return m
 
-    def define_expressions(self, m):
+    @staticmethod
+    def define_expressions(m):
         """Define investment plan expressions"""
 
         def investment_cost_rule(_m, y):
@@ -220,8 +255,7 @@ class InvestmentPlan:
 
         return m
 
-    @staticmethod
-    def define_constraints(m):
+    def define_constraints(self, m):
         """Define feasible investment plan constraints"""
 
         def discrete_thermal_size_rule(_m, g, y):
@@ -296,6 +330,75 @@ class InvestmentPlan:
         # Bound on Benders decomposition lower-bound variable
         m.ALPHA_LOWER_BOUND_CONS = Constraint(expr=m.alpha >= m.ALPHA_LOWER_BOUND)
 
+        def generator_state_logic_rule(_m, y, s, g, t):
+            """
+            Determine the operating state of the generator (startup, shutdown
+            running, off)
+            """
+
+            if t == m.T.first():
+                # Must use U0 if first period (otherwise index out of range)
+                return m.u[y, s, g, t] - m.U0[y, g] == m.v[y, s, g, t] - m.w[y, s, g, t]
+
+            else:
+                # Otherwise operating state is coupled to previous period
+                return m.u[y, s, g, t] - m.u[y, s, g, t - 1] == m.v[y, s, g, t] - m.w[y, s, g, t]
+
+        # Unit operating state
+        m.GENERATOR_STATE_LOGIC = Constraint(m.Y, m.S, m.G_THERM, m.T, rule=generator_state_logic_rule)
+
+        def minimum_on_time_rule(_m, y, s, g, t):
+            """Minimum number of hours generator must be on"""
+
+            # Hours for existing units
+            if g in m.G_E_THERM:
+                hours = self.data.existing_units_dict[('PARAMETERS', 'MIN_ON_TIME')][g]
+
+            # Hours for candidate units
+            elif g in m.G_C_THERM:
+                hours = self.data.candidate_units_dict[('PARAMETERS', 'MIN_ON_TIME')][g]
+
+            else:
+                raise Exception(f'Min on time hours not found for generator: {g}')
+
+            # Time index used in summation
+            time_index = [k for k in range(t - int(hours) + 1, t + 1) if k >= 1]
+
+            # Constraint only defined over subset of timestamps
+            if t >= hours:
+                return sum(m.v[y, s, g, j] for j in time_index) <= m.u[y, s, g, t]
+            else:
+                return Constraint.Skip
+
+        # Minimum on time constraint
+        m.MINIMUM_ON_TIME = Constraint(m.Y, m.S, m.G_THERM, m.T, rule=minimum_on_time_rule)
+
+        def minimum_off_time_rule(_m, y, s, g, t):
+            """Minimum number of hours generator must be off"""
+
+            # Hours for existing units
+            if g in self.data.existing_units.index:
+                hours = self.data.existing_units_dict[('PARAMETERS', 'MIN_OFF_TIME')][g]
+
+            # Hours for candidate units
+            elif g in self.data.candidate_units.index:
+                hours = self.data.candidate_units_dict[('PARAMETERS', 'MIN_OFF_TIME')][g]
+
+            else:
+                raise Exception(f'Min off time hours not found for generator: {g}')
+
+            # Time index used in summation
+            time_index = [k for k in range(t - int(hours) + 1, t + 1) if k >= 1]
+
+            # Constraint only defined over subset of timestamps
+            if t >= hours:
+                return sum(m.w[y, s, g, j] for j in time_index) <= 1 - m.u[y, s, g, t]
+            else:
+                return Constraint.Skip
+
+        # Minimum off time constraint
+        m.MINIMUM_OFF_TIME = Constraint(m.Y, m.S, m.G_THERM, m.T, rule=minimum_off_time_rule)
+
         # Container for benders cuts
         m.BENDERS_CUTS = ConstraintList()
 
@@ -354,7 +457,7 @@ class InvestmentPlan:
         """Solve model instance"""
 
         # Solve model
-        self.opt.solve(m, tee=False, options=self.solver_options, keepfiles=self.keepfiles)
+        self.opt.solve(m, tee=True, options=self.solver_options, keepfiles=self.keepfiles)
 
         # Log infeasible constraints if they exist
         log_infeasible_constraints(m)
@@ -376,9 +479,29 @@ class InvestmentPlan:
         with open(os.path.join(investment_solution_dir, f'investment-results_{iteration}.pickle'), 'rb') as f:
             inv_result = pickle.load(f)
 
-        # Construct cut component
-        cut = discount * duration * sum(
-            uc_result['PSI_FIXED'][g] * (m.a[g, year] - inv_result['a'][(g, year)]) for g in m.G_C)
+        # Construct cut component for fixed capacity constraint
+        capacity_cut = sum(
+            uc_result['FIXED_CANDIDATE_CAPACITY_DUAL_VAR'][g] * (m.a[g, year] - inv_result['a'][(g, year)]) for g in
+            m.G_C)
+
+        # Construct cut component for fixed on-state constraint
+        on_state_cut = sum(
+            uc_result['FIXED_ON_STATE_DUAL_VAR'][g, t] * (m.u[year, scenario, g, t] - inv_result['U'][year][scenario][(g, t)]) for
+            g
+            in m.G_THERM for t in m.T)
+
+        # Construct cut component for fixed startup-state constraint
+        startup_state_cut = sum(
+            uc_result['FIXED_STARTUP_STATE_DUAL_VAR'][g, t] * (m.v[year, scenario, g, t] - inv_result['V'][year][scenario][(g, t)])
+            for g in m.G_THERM for t in m.T)
+
+        # Construct cut component for fixed shutdown-state constraint
+        shutdown_state_cut = sum(
+            uc_result['FIXED_SHUTDOWN_STATE_DUAL_VAR'][g, t] * (
+                        m.w[year, scenario, g, t] - inv_result['W'][year][scenario][(g, t)]) for g in m.G_THERM for t in m.T)
+
+        # Scale cut components by duration of representative day and discount factor
+        cut = discount * duration * (capacity_cut + on_state_cut + startup_state_cut + shutdown_state_cut)
 
         return cut
 
@@ -445,7 +568,15 @@ class InvestmentPlan:
         # Save investment plan
         output = {'a': m.a.get_values(),
                   'x_c': m.x_c.get_values(),
-                  'OBJECTIVE': m.OBJECTIVE.expr()}
+                  'OBJECTIVE': m.OBJECTIVE.expr(),
+                  'U0': {y: {g: m.U0[y, g] for g in m.G_THERM} for y in m.Y},
+                  'U': {y: {s: {(g, t): m.u[y, s, g, t].value for g in m.G_THERM for t in m.T} for s in m.S} for y in
+                        m.Y},
+                  'V': {y: {s: {(g, t): m.v[y, s, g, t].value for g in m.G_THERM for t in m.T} for s in m.S} for y in
+                        m.Y},
+                  'W': {y: {s: {(g, t): m.w[y, s, g, t].value for g in m.G_THERM for t in m.T} for s in m.S} for y in
+                        m.Y}
+                  }
 
         # Save investment plan results
         with open(os.path.join(investment_solution_dir, f'investment-results_{iteration}.pickle'), 'wb') as f:
@@ -458,7 +589,12 @@ class InvestmentPlan:
         # Feasible investment plan for first iteration
         plan = {'a': {(g, y): float(0) for g in m.G_C for y in m.Y},
                 'x_c': {(g, y): float(0) for g in m.G_C for y in m.Y},
-                'OBJECTIVE': -1e9}
+                'OBJECTIVE': -1e9,
+                'U0': {y: {g: m.U0[y, g] for g in m.G_THERM} for y in m.Y},
+                'U': {y: {s: {(g, t): 1 for g in m.G_THERM for t in m.T} for s in m.S} for y in m.Y},
+                'V': {y: {s: {(g, t): 0 for g in m.G_THERM for t in m.T} for s in m.S} for y in m.Y},
+                'W': {y: {s: {(g, t): 0 for g in m.G_THERM for t in m.T} for s in m.S} for y in m.Y},
+                }
 
         # Save investment plan
         with open(os.path.join(solution_dir, f'investment-results_{iteration}.pickle'), 'wb') as f:

@@ -170,5 +170,5 @@ if __name__ == '__main__':
     # op_cost = calculations.get_total_discounted_operating_scenario_cost(2, 'output/dispatch_plan')
     # op_cost_eoh = calculations.get_end_of_horizon_operating_cost(master, 2, 'output/dispatch_plan')
 
-    r1 = load_investment_results(8)
-    r2 = load_investment_results(9)
+    r1 = load_investment_results(2)
+    # r2 = load_investment_results(9)

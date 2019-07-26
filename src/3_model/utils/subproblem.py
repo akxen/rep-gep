@@ -297,13 +297,13 @@ class UnitCommitment:
         # Parameters to update each time model is run
         # -------------------------------------------------------------------------------------------------------------
         # Initial on-state rule - must be updated each time model is run
-        m.U0 = Param(m.G_THERM, within=Binary, mutable=True, initialize=1)
+        m.U0 = Param(m.G_THERM, within=NonNegativeReals, mutable=True, initialize=1)
 
         # Power output in interval prior to model start (assume = 0 for now)
         m.P0 = Param(m.G, mutable=True, within=NonNegativeReals, initialize=0)
 
         # Indicates if unit is available for given operating scenario
-        m.F_SCENARIO = Param(m.G_E, mutable=True, within=Binary, initialize=1)
+        m.F_SCENARIO = Param(m.G_E, mutable=True, within=NonNegativeReals, initialize=1)
 
         # Wind capacity factor
         m.Q_WIND = Param(m.G_E_WIND.union(m.G_C_WIND), m.T, mutable=True, within=NonNegativeReals, initialize=0)
@@ -320,6 +320,15 @@ class UnitCommitment:
         # Fixed candidate capacity - determined in investment plan subproblem
         m.CAPACITY_FIXED = Param(m.G_C, initialize=0, mutable=True)
 
+        # Fixed on-state variable
+        m.U = Param(m.G_THERM, m.T, within=NonNegativeReals, mutable=True, initialize=1)
+
+        # Fixed startup-state variable
+        m.V = Param(m.G_THERM, m.T, within=NonNegativeReals, mutable=True, initialize=0)
+
+        # Fixed shutdown-state variable
+        m.W = Param(m.G_THERM, m.T, within=NonNegativeReals, mutable=True, initialize=0)
+
         return m
 
     @staticmethod
@@ -333,13 +342,13 @@ class UnitCommitment:
         m.r_up_violation = Var(m.R, m.T, within=NonNegativeReals, initialize=0)
 
         # Startup state variable
-        m.v = Var(m.G_THERM, m.T, within=Binary, initialize=0)
+        m.v = Var(m.G_THERM, m.T, within=NonNegativeReals, initialize=0)
 
         # On-state variable
-        m.u = Var(m.G_THERM, m.T, within=Binary, initialize=1)
+        m.u = Var(m.G_THERM, m.T, within=NonNegativeReals, initialize=1)
 
         # Shutdown state variable
-        m.w = Var(m.G_THERM, m.T, within=Binary, initialize=0)
+        m.w = Var(m.G_THERM, m.T, within=NonNegativeReals, initialize=0)
 
         # Power output above minimum dispatchable level
         m.p = Var(m.G_THERM, m.T, within=NonNegativeReals, initialize=0)
@@ -371,8 +380,11 @@ class UnitCommitment:
         # Powerflow between NEM zones
         m.p_flow = Var(m.L, m.T, initialize=0)
 
-        # Lost-load
-        m.p_V = Var(m.Z, m.T, within=NonNegativeReals, initialize=0)
+        # Lost-load (up)
+        m.p_V_up = Var(m.Z, m.T, within=NonNegativeReals, initialize=0)
+
+        # Load-load (down)
+        m.p_V_down = Var(m.Z, m.T, within=NonNegativeReals, initialize=0)
 
         # Baseline - fix policy parameter
         m.baseline = Var(initialize=0)
@@ -381,10 +393,6 @@ class UnitCommitment:
         # Permit price - fix policy parameter
         m.permit_price = Var(initialize=0)
         m.permit_price.fix()
-
-        # Dummy variables to ensure to prevent infeasible power output constraints
-        # m.dummy_1 = Var(m.G_THERM, m.T, within=NonNegativeReals, initialize=0)
-        # m.dummy_2 = Var(m.G_THERM, m.T, within=NonNegativeReals, initialize=0)
 
         return m
 
@@ -415,7 +423,7 @@ class UnitCommitment:
         # Energy output
         m.e = Expression(m.G, m.T, rule=energy_output_rule)
 
-        def lost_load_energy_rule(_m, z, t):
+        def lost_load_energy_up_rule(_m, z, t):
             """
             Amount of lost-load energy.
 
@@ -423,14 +431,31 @@ class UnitCommitment:
             """
 
             if t != m.T.first():
-                return (m.p_V[z, t] + m.p_V[z, t - 1]) / 2
+                return (m.p_V_up[z, t] + m.p_V_up[z, t - 1]) / 2
 
             else:
                 # Assume no lost energy in interval preceding model start
-                return m.p_V[z, t] / 2
+                return m.p_V_up[z, t] / 2
 
         # Lost-load energy
-        m.e_V = Expression(m.Z, m.T, rule=lost_load_energy_rule)
+        m.e_V_up = Expression(m.Z, m.T, rule=lost_load_energy_up_rule)
+
+        def lost_load_energy_down_rule(_m, z, t):
+            """
+            Amount of lost-load energy.
+
+            Note: Assumes lost-load energy in interval prior to model start (t=0) is zero.
+            """
+
+            if t != m.T.first():
+                return (m.p_V_down[z, t] + m.p_V_down[z, t - 1]) / 2
+
+            else:
+                # Assume no lost energy in interval preceding model start
+                return m.p_V_down[z, t] / 2
+
+        # Lost-load energy
+        m.e_V_down = Expression(m.Z, m.T, rule=lost_load_energy_down_rule)
 
         def scenario_emissions_rule(_m):
             """Total emissions for a given scenario"""
@@ -534,7 +559,7 @@ class UnitCommitment:
         def lost_load_value_rule(_m):
             """Vale of lost load"""
 
-            return sum(m.C_L * m.e_V[z, t] for z in m.Z for t in m.T)
+            return sum(m.C_L * (m.e_V_up[z, t] + m.e_V_down[z, t]) for z in m.Z for t in m.T)
 
         # Value of lost load
         m.OP_L = Expression(rule=lost_load_value_rule)
@@ -546,14 +571,6 @@ class UnitCommitment:
 
         # Value of reserve violation penalty - assumed penalty factor is same as that for lost load
         m.OP_R = Expression(rule=reserve_violation_penalty_rule)
-
-        # def power_output_within_limits_penalty_rule(_m):
-        #     """Penalty for constraint power output constraint violation (ensures feasibility)"""
-        #
-        #     return sum(m.C_L * (m.dummy_1[g, t] + m.dummy_2[g, t]) for g in m.G_C_THERM for t in m.T)
-        #
-        # # Power output within limits penalty
-        # m.OP_P = Expression(rule=power_output_within_limits_penalty_rule)
 
         # Total operating cost for a given scenario
         m.SCEN = Expression(expr=m.OP_T + m.OP_H + m.OP_W + m.OP_S + m.OP_Q + m.OP_L + m.OP_R)
@@ -579,75 +596,6 @@ class UnitCommitment:
 
         # Upward power reserve rule for each NEM region
         m.RESERVE_UP_CONS = Constraint(m.R, m.T, rule=reserve_up_rule)
-
-        def generator_state_logic_rule(_m, g, t):
-            """
-            Determine the operating state of the generator (startup, shutdown
-            running, off)
-            """
-
-            if t == m.T.first():
-                # Must use U0 if first period (otherwise index out of range)
-                return m.u[g, t] - m.U0[g] == m.v[g, t] - m.w[g, t]
-
-            else:
-                # Otherwise operating state is coupled to previous period
-                return m.u[g, t] - m.u[g, t - 1] == m.v[g, t] - m.w[g, t]
-
-        # Unit operating state
-        m.GENERATOR_STATE_LOGIC = Constraint(m.G_THERM, m.T, rule=generator_state_logic_rule)
-
-        def minimum_on_time_rule(_m, g, t):
-            """Minimum number of hours generator must be on"""
-
-            # Hours for existing units
-            if g in m.G_E_THERM:
-                hours = self.data.existing_units_dict[('PARAMETERS', 'MIN_ON_TIME')][g]
-
-            # Hours for candidate units
-            elif g in m.G_C_THERM:
-                hours = self.data.candidate_units_dict[('PARAMETERS', 'MIN_ON_TIME')][g]
-
-            else:
-                raise Exception(f'Min on time hours not found for generator: {g}')
-
-            # Time index used in summation
-            time_index = [k for k in range(t - int(hours) + 1, t + 1) if k >= 1]
-
-            # Constraint only defined over subset of timestamps
-            if t >= hours:
-                return sum(m.v[g, j] for j in time_index) <= m.u[g, t]
-            else:
-                return Constraint.Skip
-
-        # Minimum on time constraint
-        m.MINIMUM_ON_TIME = Constraint(m.G_THERM, m.T, rule=minimum_on_time_rule)
-
-        def minimum_off_time_rule(_m, g, t):
-            """Minimum number of hours generator must be off"""
-
-            # Hours for existing units
-            if g in self.data.existing_units.index:
-                hours = self.data.existing_units_dict[('PARAMETERS', 'MIN_OFF_TIME')][g]
-
-            # Hours for candidate units
-            elif g in self.data.candidate_units.index:
-                hours = self.data.candidate_units_dict[('PARAMETERS', 'MIN_OFF_TIME')][g]
-
-            else:
-                raise Exception(f'Min off time hours not found for generator: {g}')
-
-            # Time index used in summation
-            time_index = [k for k in range(t - int(hours) + 1, t + 1) if k >= 1]
-
-            # Constraint only defined over subset of timestamps
-            if t >= hours:
-                return sum(m.w[g, j] for j in time_index) <= 1 - m.u[g, t]
-            else:
-                return Constraint.Skip
-
-        # Minimum off time constraint
-        m.MINIMUM_OFF_TIME = Constraint(m.G_THERM, m.T, rule=minimum_off_time_rule)
 
         def ramp_rate_up_rule(_m, g, t):
             """Ramp-rate up constraint - normal operation"""
@@ -692,11 +640,11 @@ class UnitCommitment:
                     rhs_2 = (m.P_MAX[g] - m.RR_SD[g]) * m.w[g, t + 1]
                     rhs_3 = (m.RR_SU[g] - m.P_MIN[g]) * m.v[g, t + 1]
 
-                    return lhs <= rhs_1 - rhs_2 + rhs_3  # + m.dummy_1[g, t] - m.dummy_1[g, t]
+                    return lhs <= rhs_1 - rhs_2 + rhs_3
 
                 # If the last period - startup and shutdown state variables assumed = 0
                 else:
-                    return lhs <= rhs_1  # + m.dummy_1[g, t] - m.dummy_1[g, t]
+                    return lhs <= rhs_1
 
             # Candidate thermal units - must take into account variable capacity
             elif g in m.G_C_THERM:
@@ -706,11 +654,11 @@ class UnitCommitment:
                     rhs_2 = m.z[g, t] - (m.RR_SD[g] * m.w[g, t + 1])
                     rhs_3 = (m.RR_SU[g] * m.v[g, t + 1]) - (m.P_MIN_PROP[g] * m.y[g, t + 1])
 
-                    return lhs <= rhs_1 - rhs_2 + rhs_3  # + m.dummy_1[g, t] - m.dummy_1[g, t]
+                    return lhs <= rhs_1 - rhs_2 + rhs_3
 
                 # If the last period - startup and shutdown state variables assumed = 0
                 else:
-                    return lhs <= rhs_1  # + m.dummy_1[g, t] - m.dummy_1[g, t]
+                    return lhs <= rhs_1
 
             else:
                 raise Exception(f'Unknown generator: {g}')
@@ -953,7 +901,7 @@ class UnitCommitment:
             return (sum(m.p_total[g, t] for g in generators) - m.DEMAND[z, t]
                     - sum(m.INCIDENCE_MATRIX[l, z] * m.p_flow[l, t] for l in m.L)
                     + sum(m.p_out[g, t] - m.p_in[g, t] for g in storage_units)
-                    + m.p_V[z, t]
+                    + m.p_V_up[z, t] - m.p_V_down[z, t]
                     == 0)
 
         # Power balance constraint for each zone and time period
@@ -1059,6 +1007,30 @@ class UnitCommitment:
         # Fix capacity in subproblem to that value determined in investment plan subproblem
         m.FIXED_SUBPROBLEM_CAPACITY = Constraint(m.G_C, rule=investment_capacity_coupling_rule)
 
+        def on_state_coupling_rule(_m, g, t):
+            """Fix quasi-binary variable to result obtained from master problem"""
+
+            return m.u[g, t] - m.U[g, t] == 0
+
+        # Fix on-state variable value determined in investment plan
+        m.FIXED_ON_STATE = Constraint(m.G_THERM, m.T, rule=on_state_coupling_rule)
+
+        def startup_state_coupling_rule(_m, g, t):
+            """Fix quasi-binary variable to result obtained from master problem"""
+
+            return m.v[g, t] - m.V[g, t] == 0
+
+        # Fix on-state variable value determined in investment plan
+        m.FIXED_STARTUP_STATE = Constraint(m.G_THERM, m.T, rule=startup_state_coupling_rule)
+
+        def shutdown_state_coupling_rule(_m, g, t):
+            """Fix quasi-binary variable to result obtained from master problem"""
+
+            return m.w[g, t] - m.W[g, t] == 0
+
+        # Fix on-state variable value determined in investment plan
+        m.FIXED_SHUTDOWN_STATE = Constraint(m.G_THERM, m.T, rule=shutdown_state_coupling_rule)
+
         return m
 
     @staticmethod
@@ -1117,44 +1089,22 @@ class UnitCommitment:
         return retirement_indicator
 
     @staticmethod
-    def _get_year_initial_on_state(m, year):
+    def _get_year_initial_on_state(m, iteration, year, master_solution_dir):
         """Get initial on-state for each existing generator"""
 
-        # Container for initial on-state values
-        initial_on_state = {}
+        with open(os.path.join(master_solution_dir, f'investment-results_{iteration}.pickle'), 'rb') as f:
+            results = pickle.load(f)
 
-        # All thermal units (existing + candidate)
-        for g in m.G_THERM:
-
-            # Existing thermal units
-            if g in m.G_E_THERM:
-
-                # If existing thermal unit is not retired
-                if m.F[g, year] == 1:
-
-                    # Initial on-state set to 0 if unit no longer active
-                    initial_on_state[g] = float(0)
-
-                else:
-                    # Assume slow-start units are initially on (baseload generators)
-                    if g in m.G_THERM_SLOW:
-                        initial_on_state[g] = float(1)
-
-                    # Assume other existing units are initially off (quick-start generators)
-                    else:
-                        initial_on_state[g] = float(0)
-
-            # Assume other units are initially off (these will be quick-start thermal units)
-            else:
-                initial_on_state[g] = float(0)
+        # Initial on-state variables used in master problem
+        initial_on_state = {g: results['U0'][year][g] for g in m.G_THERM}
 
         return initial_on_state
 
-    def _get_year_initial_power_output(self, m, year):
+    def _get_year_initial_power_output(self, m, iteration, year, master_solution_dir):
         """Power output in interval preceding first interval"""
 
         # Get initial on-state values
-        initial_on_state = self._get_year_initial_on_state(m, year)
+        initial_on_state = self._get_year_initial_on_state(m, iteration, year, master_solution_dir)
 
         # Container for initial power output values
         initial_power_output = {}
@@ -1263,10 +1213,10 @@ class UnitCommitment:
         retirement_indicator = self._get_year_retirement_indicator(m, year)
 
         # Initial on-state for thermal generators
-        initial_on_state = self._get_year_initial_on_state(m, year)
+        initial_on_state = self._get_year_initial_on_state(m, iteration, year, master_solution_dir)
 
         # Initial power output in interval preceding first model time interval
-        initial_power_output = self._get_year_initial_power_output(m, year)
+        initial_power_output = self._get_year_initial_power_output(m, iteration, year, master_solution_dir)
 
         # Marginal costs applying to given year
         marginal_costs = self._get_year_marginal_costs(m, year)
@@ -1459,7 +1409,34 @@ class UnitCommitment:
 
         return days
 
-    def get_scenario_parameters(self, m, year, scenario):
+    @staticmethod
+    def _get_scenario_fixed_on_state(iteration, year, scenario, master_solution_dir):
+        """Get fixed on-state variables for a given scenario, determined in the master problem"""
+
+        with open(os.path.join(master_solution_dir, f'investment-results_{iteration}.pickle'), 'rb') as f:
+            results = pickle.load(f)
+
+        return results['U'][year][scenario]
+
+    @staticmethod
+    def _get_scenario_fixed_startup_state(iteration, year, scenario, master_solution_dir):
+        """Get fixed startup-state variables for a given scenario, determined in the master problem"""
+
+        with open(os.path.join(master_solution_dir, f'investment-results_{iteration}.pickle'), 'rb') as f:
+            results = pickle.load(f)
+
+        return results['V'][year][scenario]
+
+    @staticmethod
+    def _get_scenario_fixed_shutdown_state(iteration, year, scenario, master_solution_dir):
+        """Get fixed shutdown-state variables for a given scenario, determined in the master problem"""
+
+        with open(os.path.join(master_solution_dir, f'investment-results_{iteration}.pickle'), 'rb') as f:
+            results = pickle.load(f)
+
+        return results['W'][year][scenario]
+
+    def get_scenario_parameters(self, m, iteration, year, scenario, master_solution_dir):
         """Get parameters relating to a given operating scenario"""
 
         # Scenario demand
@@ -1474,8 +1451,18 @@ class UnitCommitment:
         # Wind capacity factors for scenario
         wind = self._get_wind_capacity_factors(m, year, scenario)
 
+        # Fixed values for binary variables obtained from master problem
+        fixed_on_state = self._get_scenario_fixed_on_state(iteration, year, iteration, master_solution_dir)
+
+        # Fixed values for binary variables obtained from master problem
+        fixed_startup_state = self._get_scenario_fixed_startup_state(iteration, year, scenario, master_solution_dir)
+
+        # Fixed values for binary variables obtained from master problem
+        fixed_shutdown_state = self._get_scenario_fixed_shutdown_state(iteration, year, scenario, master_solution_dir)
+
         # All scenario parameters
-        parameters = {'DEMAND': demand, 'P_H': hydro, 'Q_SOLAR': solar, 'Q_WIND': wind}
+        parameters = {'DEMAND': demand, 'P_H': hydro, 'Q_SOLAR': solar, 'Q_WIND': wind,
+                      'U': fixed_on_state, 'V': fixed_startup_state, 'W': fixed_shutdown_state}
 
         return parameters
 
@@ -1488,8 +1475,8 @@ class UnitCommitment:
             validation_data = pickle.load(f)
 
         # Set all wind and solar output = 0 for validation case
-        wind = {(g, t): float(0) for g in model.G_C_WIND.union(model.G_E_WIND) for t in m.T}
-        solar = {(g, t): float(0) for g in model.G_C_SOLAR.union(model.G_E_SOLAR) for t in m.T}
+        wind = {(g, t): float(0) for g in m.G_C_WIND.union(m.G_E_WIND) for t in m.T}
+        solar = {(g, t): float(0) for g in m.G_C_SOLAR.union(m.G_E_SOLAR) for t in m.T}
 
         # All scenario parameters
         parameters = {'DEMAND': validation_data['DEMAND'], 'P_H': validation_data['P_H'],
@@ -1522,7 +1509,7 @@ class UnitCommitment:
         """Solve model"""
 
         # Solve model
-        solve_status = self.opt.solve(m, tee=False, options=self.solver_options, keepfiles=self.keepfiles)
+        solve_status = self.opt.solve(m, tee=True, options=self.solver_options, keepfiles=self.keepfiles)
 
         # Log infeasible constraints if they exist
         log_infeasible_constraints(m)
@@ -1539,10 +1526,10 @@ class UnitCommitment:
                 m.v[g, t].fix(round(m.v[g, t].value, 4))
                 m.w[g, t].fix(round(m.w[g, t].value, 4))
 
-                if g in m.G_C_THERM:
-                    m.x[g, t].fix(round(m.x[g, t].value, 4))
-                    m.y[g, t].fix(round(m.y[g, t].value, 4))
-                    m.z[g, t].fix(round(m.z[g, t].value, 4))
+                # if g in m.G_C_THERM:
+                #     m.x[g, t].fix(round(m.x[g, t].value, 4))
+                #     m.y[g, t].fix(round(m.y[g, t].value, 4))
+                #     m.z[g, t].fix(round(m.z[g, t].value, 4))
 
         return m
 
@@ -1556,10 +1543,10 @@ class UnitCommitment:
                 m.v[g, t].unfix()
                 m.w[g, t].unfix()
 
-                if g in m.G_C_THERM:
-                    m.x[g, t].unfix()
-                    m.y[g, t].unfix()
-                    m.z[g, t].unfix()
+                # if g in m.G_C_THERM:
+                #     m.x[g, t].unfix()
+                #     m.y[g, t].unfix()
+                #     m.z[g, t].unfix()
 
         return m
 
@@ -1570,6 +1557,15 @@ class UnitCommitment:
         # Dual variable associated with fixed capacity constraint
         fixed_capacity_dual_var = {g: m.dual[m.FIXED_SUBPROBLEM_CAPACITY[g]] for g in m.G_C}
 
+        # Dual variables associated with fixed on-state constraints
+        fixed_on_state_dual_var = {(g, t): m.dual[m.FIXED_ON_STATE[g, t]] for g in m.G_THERM for t in m.T}
+
+        # Dual variables associated with fixed startup-state constraints
+        fixed_startup_state_dual_var = {(g, t): m.dual[m.FIXED_STARTUP_STATE[g, t]] for g in m.G_THERM for t in m.T}
+
+        # Dual variables associated with fixed shutdown-state constraints
+        fixed_shutdown_state_dual_var = {(g, t): m.dual[m.FIXED_SHUTDOWN_STATE[g, t]] for g in m.G_THERM for t in m.T}
+
         # Energy output from selected generator (test if output as expected)
         energy = {g: {t: m.e[g, t].expr() for t in m.T} for g in m.G}
 
@@ -1578,9 +1574,13 @@ class UnitCommitment:
 
         # Results to be used in investment planning problem
         results = {'SCENARIO_EMISSIONS': m.SCENARIO_EMISSIONS.expr(), 'SCENARIO_DEMAND': m.SCENARIO_DEMAND.expr(),
-                   'PSI_FIXED': fixed_capacity_dual_var, 'CANDIDATE_CAPACITY_FIXED': m.b.get_values(),
+                   'CANDIDATE_CAPACITY_FIXED': m.b.get_values(),
                    'OBJECTIVE': m.OBJECTIVE.expr(),
-                   'ENERGY': energy, 'PRICES': prices, 'SOLVE_STATUS': solve_status}
+                   'ENERGY': energy, 'PRICES': prices, 'SOLVE_STATUS': solve_status,
+                   'FIXED_CANDIDATE_CAPACITY_DUAL_VAR': fixed_capacity_dual_var,
+                   'FIXED_ON_STATE_DUAL_VAR': fixed_on_state_dual_var,
+                   'FIXED_STARTUP_STATE_DUAL_VAR': fixed_startup_state_dual_var,
+                   'FIXED_SHUTDOWN_STATE_DUAL_VAR': fixed_shutdown_state_dual_var}
 
         # Filename
         filename = f'uc-results_{iteration}_{year}_{scenario}.pickle'
@@ -1591,48 +1591,48 @@ class UnitCommitment:
         return results
 
 
-if __name__ == '__main__':
-    # Parameters obtained from investment plan subproblem - updated once per model iteration
-    master_solution_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'investment_plan')
-
-    # Directory containing validation parameter data
-    validation_data_directory = r'C:\Users\eee\Desktop\git\research\FYP-review\NOTEBOOKS\model'
-
-    # Initialise object used to construct model
-    uc = UnitCommitment()
-
-    # Construct model object
-    model = uc.construct_model()
-
-    # Validation data
-    # year_parameters = uc.get_validation_year_parameters(model, validation_data_directory)
-    # scenario_parameters = uc.get_validation_scenario_parameters(model, validation_data_directory)
-
-    # Define scenario
-    year, scenario = 2020, 1
-
-    # Iteration count
-    iteration = 1
-
-    # Parameters depending on a given year and scenario
-    year_parameters = uc.get_year_parameters(model, year, iteration, master_solution_directory, use_default=True)
-    scenario_parameters = uc.get_scenario_parameters(model, year, scenario)
-
-    # Update model parameters
-    model = uc.update_parameters(model, year_parameters)
-
-    # Update scenario parameters
-    model = uc.update_parameters(model, scenario_parameters)
-
-    # Solve model
-    model = uc.solve_model(model)
-
-    # Fix all binary variables
-    model = uc.fix_binary_variables(model)
-
-    # Re-solve to obtain dual variables
-    model = uc.solve_model(model)
-
-    # Plot prices in NCEN (used as basis of comparison)
-    plt.plot([model.dual[model.POWER_BALANCE['NCEN', t]] for t in model.T])
-    plt.show()
+# if __name__ == '__main__':
+#     # Parameters obtained from investment plan subproblem - updated once per model iteration
+#     master_solution_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'investment_plan')
+#
+#     # Directory containing validation parameter data
+#     validation_data_directory = r'C:\Users\eee\Desktop\git\research\FYP-review\NOTEBOOKS\model'
+#
+#     # Initialise object used to construct model
+#     uc = UnitCommitment()
+#
+#     # Construct model object
+#     model = uc.construct_model()
+#
+#     # Validation data
+#     # year_parameters = uc.get_validation_year_parameters(model, validation_data_directory)
+#     # scenario_parameters = uc.get_validation_scenario_parameters(model, validation_data_directory)
+#
+#     # Define scenario
+#     year, scenario = 2020, 1
+#
+#     # Iteration count
+#     iteration = 1
+#
+#     # Parameters depending on a given year and scenario
+#     year_parameters = uc.get_year_parameters(model, year, iteration, master_solution_directory, use_default=True)
+#     scenario_parameters = uc.get_scenario_parameters(model, year, scenario)
+#
+#     # Update model parameters
+#     model = uc.update_parameters(model, year_parameters)
+#
+#     # Update scenario parameters
+#     model = uc.update_parameters(model, scenario_parameters)
+#
+#     # Solve model
+#     model = uc.solve_model(model)
+#
+#     # Fix all binary variables
+#     model = uc.fix_binary_variables(model)
+#
+#     # Re-solve to obtain dual variables
+#     model = uc.solve_model(model)
+#
+#     # Plot prices in NCEN (used as basis of comparison)
+#     plt.plot([model.dual[model.POWER_BALANCE['NCEN', t]] for t in model.T])
+#     plt.show()
