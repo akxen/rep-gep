@@ -172,9 +172,9 @@
 
 % Investment problem - inequality constraint dual variables
 \newcommand{\dNonNegativeCandidateCapacity}[1][\iGenerator,\iYear]{\mu_{#1}^{1}}
-\newcommand{\dSolarBuildLimit}[1][\iZone,\iYear]{\mu_{#1}^{3}}
-\newcommand{\dWindBuildLimit}[1][\iZone,\iYear]{\mu_{#1}^{4}}
-\newcommand{\dStorageBuildLimit}[1][\iZone,\iYear]{\mu_{#1}^{5}}
+\newcommand{\dSolarBuildLimit}[1][\iZone,\iYear]{\mu_{#1}^{2}}
+\newcommand{\dWindBuildLimit}[1][\iZone,\iYear]{\mu_{#1}^{3}}
+\newcommand{\dStorageBuildLimit}[1][\iZone,\iYear]{\mu_{#1}^{4}}
 
 % Investment problem - equality constraint dual variables
 \newcommand{\dTotalInstallCapacity}[1][\iGenerator,\iYear]{\nu_{#1}^{1}}
@@ -360,7 +360,7 @@
 		$\cCapacityFactorWind$ & Capacity factor for wind units [--]\\
 		$\cCapacityFactorSolar$ & Capacity factor for solar units [--]\\
 		$\cBuildLimitWind$ & Build limit for wind units in zone $\iZone$ [MW]\\
-		$\cBuildLimitSolar$ & Build limit for wind units in zone $\iZone$ [MW]\\
+		$\cBuildLimitSolar$ & Build limit for solar units in zone $\iZone$ [MW]\\
 		$\cBuildLimitStorage$ & Build limit for storage units in zone $\iZone$ [MW]\\
 		$\cIncidenceMatrix$ & Network incidence matrix [--]\\
 		$\cPowerFlowMin$ & Minimum powerflow over link $\iLink$ [MW]\\
@@ -743,8 +743,31 @@ Each primal variable within the Lagrangian is factored out to identify a set of 
 \newcommand{\sumIntervals}{\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals}}
 
 %x_c
+Investment decision:
+\begin{equation}
+	\sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sGeneratorsCandidate} \vInstalledCapacity \left(\frac{\cDiscountRate}{\cInterestRate} \cAmortisationRate \cCandidateInvestmentCost - \dNonNegativeCandidateCapacity + \sum\limits_{\iYearAlias \geq \iYear} -\dTotalInstallCapacity[\iGenerator,\iYearAlias] \right)
+\end{equation}
 
 %a
+Total installed capacity - candidate thermal generators:
+\begin{equation}
+\sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sGeneratorsCandidateThermal} \vInstalledCapacityTotal \left(\dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \dMaxPowerOutputCandidateThermal \right) + \sum\limits_{\iGenerator \in \sGeneratorsCandidateThermal} \vInstalledCapacityTotal \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCostGenerator
+\end{equation}
+
+Total installed capacity - candidate solar generators:
+\begin{equation}
+	\sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \vInstalledCapacityTotal \left(\dSolarBuildLimit + \dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorSolar \dMaxPowerOutputSolarCandidate \right) + \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \vInstalledCapacityTotal \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCostGenerator
+\end{equation}
+
+Total installed capacity - candidate wind generators:
+\begin{equation}
+\sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \vInstalledCapacityTotal \left( \dWindBuildLimit + \dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorWind \dMaxPowerOutputWindCandidate \right) + \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \vInstalledCapacityTotal \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCostGenerator
+\end{equation}
+
+Total installed capacity - candidate storage generators:
+\begin{equation}
+\sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sStorageCandidate} \vInstalledCapacityTotal \left(\dStorageBuildLimit + \dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \dMaxDischargingRateCandidate \right) + \sum\limits_{\iGenerator \in \sStorageCandidate} \vInstalledCapacityTotal \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCostGenerator
+\end{equation}
 
 %p
 Existing thermal generator power output:
@@ -870,9 +893,53 @@ Load shedding (power):
 %e_V
 Load shedding (energy):
 \begin{equation}
-	\sumIntervals \sum\limits_{\iZone \in \sZones} \vLostLoadEnergy \left( \right)
+	\sumIntervals \sum\limits_{\iZone \in \sZones} \vLostLoadEnergy \left(\cDiscountRate \cScenarioDuration \cLostLoadCost + \dLostLoadEnergy \right) + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \vLostLoadEnergy[\iZone,\iYearTerminal,\iScenario,\iInterval] \left( \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cScenarioDuration[\iYearTerminal,\iScenario] \cLostLoadCost + \dLostLoadEnergy[\iZone,\iYearTerminal,\iScenario,\iInterval] \right)
 \end{equation}
 
 %p_L
+Powerflow:
+\begin{equation}
+	\sumIntervals \sum\limits_{\iLink \in \sLinks} \vPowerFlow \left(-\dMinPowerFlow + \dMaxPowerFlow - \cIncidenceMatrix[g(\iLink), \iLink] \dPowerBalance[g(\iLink),\iYear,\iScenario,\iInterval] - \cIncidenceMatrix[h(\iLink), \iLink] \dPowerBalance[h(\iLink),\iYear,\iScenario,\iInterval]\right)
+\end{equation}
+
+%Dual objective
+Dual objective:
+
+\begin{align}
+\begin{split}
+\textrm{OBJ}_{d} =  & \sum\limits_{\iYear \in \sYears} \sum\limits_{\iZone \in \sZones} \left[- \dSolarBuildLimit \cBuildLimitSolar - \dWindBuildLimit \cBuildLimitWind - \dStorageBuildLimit \cBuildLimitStorage\right]\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGenerators \setminus \sStorage} \dMinPowerOutput \cPowerOutputMin\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsExistingThermal} - \dMaxPowerOutputExistingThermal \cPowerOutputMax \left(1 - \cRetirementIndicator\right)\\
+%& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsCandidateThermal} \dMaxPowerOutputCandidateThermal \left(\vPower - \vInstalledCapacityTotal\right)\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsExistingWind} - \dMaxPowerOutputWindExisting \cCapacityFactorWind \cPowerOutputMax[\iGenerator]\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} - \dMaxPowerOutputWindCandidate \cCapacityFactorWind \vInstalledCapacityTotal\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsExistingSolar} - \dMaxPowerOutputSolarExisting \cCapacityFactorSolar \cPowerOutputMax[\iGenerator]\\
+%& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} - \dMaxPowerOutputSolarCandidate \left(\vPower - \cCapacityFactorSolar \vInstalledCapacityTotal\right)\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsHydro} - \dMaxPowerOutputHydro \cPowerOutputHydro\\
+%& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sStorage} \dNonNegativeCharging \left(-\vPowerIn\right)\\
+%& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sStorage} \dNonNegativeDischarging \left(-\vPowerOut\right)\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sStorageExisting} - \dMaxChargingRateExisting \cPowerChargingMax\\
+%& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sStorageCandidate} \dMaxChargingRateCandidate \left(\vPowerIn - \vInstalledCapacityTotal\right)\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sStorageExisting} - \dMaxDischargingRateExisting \cPowerDischargingMax\\
+%& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sStorageCandidate} \dMaxDischargingRateCandidate \left(\vPowerOut - \vInstalledCapacityTotal\right)\\
+%& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sStorage} \dNonNegativeStorageEnergy \left(- \vStorageUnitEnergy\right)\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sStorageExisting} - \dMaxStorageEnergyExisting \cStorageUnitEnergyMax\\
+%& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sStorageCandidate} \dMaxStorageEnergyCandidate \left(\vStorageUnitEnergy - \vInstalledCapacityTotal\right)\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iGenerator \in \sStorage} \dMinStorageEnergyIntervalEnd \cStorageUnitEnergyIntervalEndMin\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iGenerator \in \sStorage} - \dMaxStorageEnergyIntervalEnd \cStorageUnitEnergyIntervalEndMax\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGenerators \setminus \sStorage} - \dRampRateUp \cRampRateUp\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGenerators \setminus \sStorage} - \dRampRateDown \cRampRateDown\\
+%& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iZone \in \sZones} \dNonNegativeLostLoad \left(- \vLostLoadPower\right)\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iLink \in \sLinks} \dMinPowerFlow \cPowerFlowMin\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iLink \in \sLinks} - \dMaxPowerFlow \cPowerFlowMax\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iZone \in \sZones} - \dPowerBalance \cDemand\\
+\end{split}
+\end{align}
+
+\subsection{Constraints}
+The expressions presented in the preceding section can be used to formulate a set of constraints that ensure the dual problem is not unbounded:
+
+
+
 
 \end{document}
