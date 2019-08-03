@@ -26,7 +26,7 @@ class ConstructDataset:
         self.df_zones_map = pd.read_csv(os.path.join(data_dir, 'maps', 'zones.csv'), index_col=0)
 
         # Map between wind bubbles, zones and regions
-        self.df_bubble_map = pd.read_csv(os.path.join(data_dir, 'maps', 'bubbles.csv'), index_col=0)
+        self.df_bubble_map = pd.read_csv(os.path.join(data_dir, 'maps', 'wind_bubbles.csv'), index_col=0)
 
         # Map between thermal unit types, fuel categories, and unit categories
         self.df_thermal_map = pd.read_csv(os.path.join(data_dir, 'maps', 'thermal_unit_types.csv'), index_col=0)
