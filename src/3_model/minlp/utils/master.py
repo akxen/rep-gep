@@ -279,7 +279,7 @@ class InvestmentPlan:
         # Wind build limit constraint for each NEM zone
         m.WIND_BUILD_LIMIT_CONS = Constraint(m.Z, m.Y, rule=wind_build_limits_cons_rule)
 
-        def wind_build_limits_cons_rule(_m, z, y):
+        def storage_build_limits_cons_rule(_m, z, y):
             """Enforce storage build limits in each NEM zone"""
 
             # Storage generators belonging to zone 'z'
@@ -291,7 +291,7 @@ class InvestmentPlan:
                 return Constraint.Skip
 
         # Storage build limit constraint for each NEM zone
-        m.STORAGE_BUILD_LIMIT_CONS = Constraint(m.Z, m.Y, rule=wind_build_limits_cons_rule)
+        m.STORAGE_BUILD_LIMIT_CONS = Constraint(m.Z, m.Y, rule=storage_build_limits_cons_rule)
 
         # Bound on Benders decomposition lower-bound variable
         m.ALPHA_LOWER_BOUND_CONS = Constraint(expr=m.alpha >= m.ALPHA_LOWER_BOUND)

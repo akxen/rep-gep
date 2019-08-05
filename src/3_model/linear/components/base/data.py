@@ -9,14 +9,16 @@ import pandas as pd
 @dataclass
 class ModelData:
     # Directory containing raw data files
-    raw_data_dir: str = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir, 'data')
+    raw_data_dir: str = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
+                                     os.path.pardir, os.path.pardir, 'data')
 
     # Directory containing core data files
-    data_dir: str = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, '1_collect_data', 'output')
+    data_dir: str = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
+                                 os.path.pardir, '1_collect_data', 'output')
 
     # Directory containing input solar, wind, hydro, and demand traces
-    input_traces_dir: str = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, '2_input_traces',
-                                         'output')
+    input_traces_dir: str = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
+                                         os.path.pardir, '2_input_traces', 'output')
 
     def __post_init__(self):
         # Input traces
