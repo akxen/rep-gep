@@ -481,4 +481,3 @@ if __name__ == '__main__':
 
     model = ModelData(raw_data_directory, data_directory, input_traces_directory)
 
-    # a = model.input_traces.loc[2016, 'DEMAND'].to_dict(orient='index')
