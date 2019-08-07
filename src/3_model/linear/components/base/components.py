@@ -277,7 +277,9 @@ class CommonComponents:
             return float(100)
 
         # Max charging power for existing storage units
-        m.P_IN = Param(m.G_E_STORAGE, rule=max_power_in_existing_storage_rule)
+        m.P_IN_MAX = Param(m.G_E_STORAGE, rule=max_power_in_existing_storage_rule)
+
+
 
         def max_power_out_existing_storage_rule(_m, g):
             """Max discharging power for existing storage units"""
@@ -286,7 +288,7 @@ class CommonComponents:
             return float(100)
 
         # Max discharging power for existing storage units
-        m.P_OUT = Param(m.G_E_STORAGE, rule=max_power_out_existing_storage_rule)
+        m.P_OUT_MAX = Param(m.G_E_STORAGE, rule=max_power_out_existing_storage_rule)
 
         def max_energy_storage_rule(_m, g):
             """Max energy level for existing storage units"""
@@ -451,14 +453,23 @@ class CommonComponents:
         # Zone demand
         m.DEMAND = Param(m.Z, m.Y, m.S, m.T, rule=demand_rule)
 
-        def initial_power_storage_rule(_m, g, y, s):
+        def initial_charging_power_rule(_m, g, y, s):
+            """Initial charging power for storage units in interval prior to model start"""
+
+            # Assume power in preceding interval = 0 MW
+            return float(0)
+
+        # Max charging power for existing storage units
+        m.P_IN_0 = Param(m.G_STORAGE, m.Y, m.S, rule=initial_charging_power_rule)
+
+        def initial_discharging_power_rule(_m, g, y, s):
             """Power output in interval prior to model start"""
 
             # Assume = 0 MW
             return float(0)
 
         # Power output in interval preceding model start
-        m.P_OUT_0 = Param(m.G_STORAGE, m.Y, m.S, rule=initial_power_storage_rule)
+        m.P_OUT_0 = Param(m.G_STORAGE, m.Y, m.S, rule=initial_discharging_power_rule)
 
         def initial_power_lost_load_rule(_m, z, y, s):
             """Load lost power in interval prior to model start"""

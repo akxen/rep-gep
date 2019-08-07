@@ -331,7 +331,7 @@ class Primal:
         def max_power_in_existing_storage_rule(_m, g, y, s, t):
             """Max charging power for existing storage units"""
 
-            return m.p_in[g, y, s, t] - (m.P_IN[g] * (1 - m.F[g, y])) <= 0
+            return m.p_in[g, y, s, t] - (m.P_IN_MAX[g] * (1 - m.F[g, y])) <= 0
 
         # Max charging power for existing storage units
         m.MAX_POWER_IN_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T,
@@ -349,7 +349,7 @@ class Primal:
         def max_power_out_existing_storage_rule(_m, g, y, s, t):
             """Max discharging power for existing storage units"""
 
-            return m.p_out[g, y, s, t] - (m.P_OUT[g] * (1 - m.F[g, y])) <= 0
+            return m.p_out[g, y, s, t] - (m.P_OUT_MAX[g] * (1 - m.F[g, y])) <= 0
 
         # Max discharging power for existing storage units
         m.MAX_POWER_OUT_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T,
@@ -430,7 +430,29 @@ class Primal:
                 return m.p[g, y, s, t] - m.p[g, y, s, t - 1] - m.RR_UP[g] <= 0
 
         # Ramp-rate up constraint
-        m.RAMP_UP = Constraint(m.G, m.Y, m.S, m.T, rule=ramp_up_rule)
+        m.RAMP_UP = Constraint(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, rule=ramp_up_rule)
+
+        def ramp_up_charging_rule(_m, g, y, s, t):
+            """Ramp-rate up for storage charging power"""
+
+            if t == m.T.first():
+                return m.p_in[g, y, s, t] - m.P_IN_0[g, y, s] - m.RR_UP[g] <= 0
+            else:
+                return m.p_in[g, y, s, t] - m.p_in[g, y, s, t - 1] - m.RR_UP[g] <= 0
+
+        # Ramp-rate up charging
+        m.RAMP_UP_CHARGING = Constraint(m.G_STORAGE, m.Y, m.S, m.T, rule=ramp_up_charging_rule)
+
+        def ramp_up_discharging_rule(_m, g, y, s, t):
+            """Ramp-rate up for storage discharging power"""
+
+            if t == m.T.first():
+                return m.p_out[g, y, s, t] - m.P_OUT_0[g, y, s] - m.RR_UP[g] <= 0
+            else:
+                return m.p_out[g, y, s, t] - m.p_out[g, y, s, t - 1] - m.RR_UP[g] <= 0
+
+        # Ramp-rate up charging
+        m.RAMP_UP_DISCHARGING = Constraint(m.G_STORAGE, m.Y, m.S, m.T, rule=ramp_up_discharging_rule)
 
         def ramp_down_rule(_m, g, y, s, t):
             """Ramp down constraint"""
@@ -441,7 +463,29 @@ class Primal:
                 return - m.p[g, y, s, t] + m.p[g, y, s, t - 1] - m.RR_DOWN[g] <= 0
 
         # Ramp-rate down constraint
-        m.RAMP_DOWN = Constraint(m.G, m.Y, m.S, m.T, rule=ramp_down_rule)
+        m.RAMP_DOWN = Constraint(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, rule=ramp_down_rule)
+
+        def ramp_down_charging_rule(_m, g, y, s, t):
+            """Ramp-rate down for storage charging power"""
+
+            if t == m.T.first():
+                return - m.p_in[g, y, s, t] + m.P_IN_0[g, y, s] - m.RR_DOWN[g] <= 0
+            else:
+                return - m.p_in[g, y, s, t] + m.p_in[g, y, s, t - 1] - m.RR_DOWN[g] <= 0
+
+        # Ramp-rate down constraint
+        m.RAMP_DOWN_CHARGING = Constraint(m.G_STORAGE, m.Y, m.S, m.T, rule=ramp_down_charging_rule)
+
+        def ramp_down_discharging_rule(_m, g, y, s, t):
+            """Ramp-rate down for storage charging power"""
+
+            if t == m.T.first():
+                return - m.p_out[g, y, s, t] + m.P_OUT_0[g, y, s] - m.RR_DOWN[g] <= 0
+            else:
+                return - m.p_out[g, y, s, t] + m.p_out[g, y, s, t - 1] - m.RR_DOWN[g] <= 0
+
+        # Ramp-rate down constraint
+        m.RAMP_DOWN_DISCHARGING = Constraint(m.G_STORAGE, m.Y, m.S, m.T, rule=ramp_down_discharging_rule)
 
         def non_negative_lost_load_rule(_m, z, y, s, t):
             """Non-negative lost load"""
@@ -749,10 +793,10 @@ class Dual:
             t_6 = sum(- m.sigma_8[g, y, s, t] * m.P_H[g, y, s, t] * (1 - m.F[g, y]) for g in m.G_E_HYDRO for y in m.Y for s in m.S for t in m.T)
 
             # Max charging power - existing storage
-            t_7 = sum(- m.sigma_11[g, y, s, t] * m.P_IN[g] * (1 - m.F[g, y]) for g in m.G_E_STORAGE for y in m.Y for s in m.S for t in m.T)
+            t_7 = sum(- m.sigma_11[g, y, s, t] * m.P_IN_MAX[g] * (1 - m.F[g, y]) for g in m.G_E_STORAGE for y in m.Y for s in m.S for t in m.T)
 
             # Max discharging power - existing storage
-            t_8 = sum(- m.sigma_13[g, y, s, t] * m.P_OUT[g] * (1 - m.F[g, y]) for g in m.G_E_STORAGE for y in m.Y for s in m.S for t in m.T)
+            t_8 = sum(- m.sigma_13[g, y, s, t] * m.P_OUT_MAX[g] * (1 - m.F[g, y]) for g in m.G_E_STORAGE for y in m.Y for s in m.S for t in m.T)
 
             # Max energy - existing storage units
             t_9 = sum(- m.sigma_16[g, y, s, t] * m.Q_MAX[g] for g in m.G_E_STORAGE for y in m.Y for s in m.S for t in m.T)
