@@ -8,8 +8,6 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'base'))
 from pyomo.environ import *
 from pyomo.util.infeasible import log_infeasible_constraints
 
-from suspect import detect_special_structure
-
 from base.data import ModelData
 from base.components import CommonComponents
 
@@ -58,10 +56,10 @@ class Primal:
         # Lost load energy
         m.e_V = Var(m.Z, m.Y, m.S, m.T, initialize=0)
 
-        # Emissions intensity baseline [tCO2/MWh]
+        # Fix emissions intensity baseline [tCO2/MWh]
         m.baseline.fix(0)
 
-        # Permit price [$/tCO2]
+        # Fix permit price [$/tCO2]
         m.permit_price.fix(0)
 
         return m
@@ -94,9 +92,8 @@ class Primal:
         def thermal_operating_costs_rule(_m, y, s):
             """Cost to operating thermal units for a given scenario"""
 
-            return sum(
-                (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])) * m.e[g, y, s, t] for g in
-                m.G_THERM for t in m.T)
+            return sum((m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])) * m.e[g, y, s, t]
+                       for g in m.G_THERM for t in m.T)
 
         # Operating costs for a given scenario - thermal units
         m.OP_T = Expression(m.Y, m.S, rule=thermal_operating_costs_rule)
@@ -116,8 +113,8 @@ class Primal:
             existing = sum(m.C_MC[g, y] * m.e[g, y, s, t] for g in m.G_E_WIND for t in m.T)
 
             # Cost for candidate wind units
-            candidate = sum(
-                (m.C_MC[g, y] - (m.baseline[y] * m.permit_price[y])) * m.e[g, y, s, t] for g in m.G_C_WIND for t in m.T)
+            candidate = sum((m.C_MC[g, y] - (m.baseline[y] * m.permit_price[y])) * m.e[g, y, s, t]
+                            for g in m.G_C_WIND for t in m.T)
 
             return existing + candidate
 
@@ -131,9 +128,8 @@ class Primal:
             existing = sum(m.C_MC[g, y] * m.e[g, y, s, t] for g in m.G_E_SOLAR for t in m.T)
 
             # Cost for candidate solar units
-            candidate = sum(
-                (m.C_MC[g, y] - (m.baseline[y] * m.permit_price[y])) * m.e[g, y, s, t] for g in m.G_C_SOLAR for t in
-                m.T)
+            candidate = sum((m.C_MC[g, y] - (m.baseline[y] * m.permit_price[y])) * m.e[g, y, s, t]
+                            for g in m.G_C_SOLAR for t in m.T)
 
             return existing + candidate
 
@@ -164,21 +160,27 @@ class Primal:
         # Total cost for a given operating scenario
         m.SCEN = Expression(m.Y, m.S, rule=scenario_cost_rule)
 
+        def year_cost_rule(_m, y):
+            """Total cost for a given year (not discounted)"""
+
+            return sum(m.RHO[y, s] * m.SCEN[y, s] for s in m.S)
+
+        # Total cost for a given year
+        m.OP = Expression(m.Y, rule=year_cost_rule)
+
         def end_of_horizon_cost_rule(_m):
             """Operating cost beyond model horizon"""
 
-            return (m.DELTA[m.Y.last()] / m.INTEREST_RATE) * (
-                        sum(m.SCEN[m.Y.last(), s] * m.RHO[m.Y.last(), s] for s in m.S) + m.FOM[m.Y.last()])
+            return (m.DELTA[m.Y.last()] / m.INTEREST_RATE) * (m.OP[m.Y.last()] + m.FOM[m.Y.last()])
 
         # End of horizon cost
         m.EOH = Expression(rule=end_of_horizon_cost_rule)
 
         # Total present value
         def total_present_value_rule(_m):
-            """Total present value - investment + operating costs"""
+            """Total present value - investment + operating costs + end of horizon cost"""
 
-            return sum(
-                m.DELTA[y] * (m.INV[y] + m.FOM[y] + sum(m.RHO[y, s] * m.SCEN[y, s] for s in m.S)) for y in m.Y) + m.EOH
+            return sum(m.DELTA[y] * (m.INV[y] + m.FOM[y] + m.OP[y]) for y in m.Y) + m.EOH
 
         # Total present value
         m.TPV = Expression(rule=total_present_value_rule)
@@ -199,7 +201,7 @@ class Primal:
         def cumulative_capacity_rule(_m, g, y):
             """Total installed capacity for each year of model horizon"""
 
-            return m.a[g, y] - sum(m.x_c[g, year] for year in m.Y if year <= y) == 0
+            return m.a[g, y] - sum(m.x_c[g, j] for j in m.Y if j <= y) == 0
 
         # Cumulative capacity rule
         m.CUMULATIVE_CAPACITY = Constraint(m.G_C, m.Y, rule=cumulative_capacity_rule)
@@ -273,7 +275,7 @@ class Primal:
         def max_power_existing_wind_rule(_m, g, y, s, t):
             """Max power from existing wind generators"""
 
-            return m.p[g, y, s, t] - (m.Q_W[g, y, s, t] * m.P_MAX[g]) <= 0
+            return m.p[g, y, s, t] - (m.Q_W[g, y, s, t] * m.P_MAX[g] * (1 - m.F[g, y])) <= 0
 
         # Max power from existing wind generators
         m.MAX_POWER_EXISTING_WIND = Constraint(m.G_E_WIND, m.Y, m.S, m.T, rule=max_power_existing_wind_rule)
@@ -289,7 +291,7 @@ class Primal:
         def max_power_existing_solar_rule(_m, g, y, s, t):
             """Max power from existing solar generators"""
 
-            return m.p[g, y, s, t] - (m.Q_S[g, y, s, t] * m.P_MAX[g]) <= 0
+            return m.p[g, y, s, t] - (m.Q_S[g, y, s, t] * m.P_MAX[g] * (1 - m.F[g, y])) <= 0
 
         # Max power from existing solar generators
         m.MAX_POWER_EXISTING_SOLAR = Constraint(m.G_E_SOLAR, m.Y, m.S, m.T, rule=max_power_existing_solar_rule)
@@ -305,7 +307,7 @@ class Primal:
         def max_power_hydro_rule(_m, g, y, s, t):
             """Max power from hydro units"""
 
-            return m.p[g, y, s, t] - m.P_H[g, y, s, t] <= 0
+            return m.p[g, y, s, t] - (m.P_H[g, y, s, t] * (1 - m.F[g, y])) <= 0
 
         # Max power from existing hydro units
         m.MAX_POWER_EXISTING_HYDRO = Constraint(m.G_E_HYDRO, m.Y, m.S, m.T, rule=max_power_hydro_rule)
@@ -329,7 +331,7 @@ class Primal:
         def max_power_in_existing_storage_rule(_m, g, y, s, t):
             """Max charging power for existing storage units"""
 
-            return m.p_in[g, y, s, t] - m.P_IN[g] <= 0
+            return m.p_in[g, y, s, t] - (m.P_IN[g] * (1 - m.F[g, y])) <= 0
 
         # Max charging power for existing storage units
         m.MAX_POWER_IN_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T,
@@ -347,7 +349,7 @@ class Primal:
         def max_power_out_existing_storage_rule(_m, g, y, s, t):
             """Max discharging power for existing storage units"""
 
-            return m.p_out[g, y, s, t] - m.P_OUT[g] <= 0
+            return m.p_out[g, y, s, t] - (m.P_OUT[g] * (1 - m.F[g, y])) <= 0
 
         # Max discharging power for existing storage units
         m.MAX_POWER_OUT_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T,
@@ -407,12 +409,14 @@ class Primal:
             """Energy transition rule for storage units"""
 
             if t == m.T.first():
-                return - m.q[g, y, s, t] + m.Q0[g, y, s] + (m.ETA[g] * m.p_in[g, y, s, t]) - (
-                            (1 / m.ETA[g]) * m.p_out[g, y, s, t]) == 0
+                return (- m.q[g, y, s, t] + m.Q0[g, y, s] + (m.ETA[g] * m.p_in[g, y, s, t])
+                        - ((1 / m.ETA[g]) * m.p_out[g, y, s, t])
+                        == 0)
 
             else:
-                return - m.q[g, y, s, t] + m.q[g, y, s, t - 1] + (m.ETA[g] * m.p_in[g, y, s, t]) - (
-                            (1 / m.ETA[g]) * m.p_out[g, y, s, t]) == 0
+                return (- m.q[g, y, s, t] + m.q[g, y, s, t - 1] + (m.ETA[g] * m.p_in[g, y, s, t])
+                        - ((1 / m.ETA[g]) * m.p_out[g, y, s, t])
+                        == 0)
 
         # Energy transition rule for storage units
         m.ENERGY_TRANSITION_STORAGE = Constraint(m.G_STORAGE, m.Y, m.S, m.T, rule=storage_energy_transition_rule)
@@ -426,7 +430,7 @@ class Primal:
                 return m.p[g, y, s, t] - m.p[g, y, s, t - 1] - m.RR_UP[g] <= 0
 
         # Ramp-rate up constraint
-        m.RAMP_UP = Constraint(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, rule=ramp_up_rule)
+        m.RAMP_UP = Constraint(m.G, m.Y, m.S, m.T, rule=ramp_up_rule)
 
         def ramp_down_rule(_m, g, y, s, t):
             """Ramp down constraint"""
@@ -437,7 +441,7 @@ class Primal:
                 return - m.p[g, y, s, t] + m.p[g, y, s, t - 1] - m.RR_DOWN[g] <= 0
 
         # Ramp-rate down constraint
-        m.RAMP_DOWN = Constraint(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, rule=ramp_down_rule)
+        m.RAMP_DOWN = Constraint(m.G, m.Y, m.S, m.T, rule=ramp_down_rule)
 
         def non_negative_lost_load_rule(_m, z, y, s, t):
             """Non-negative lost load"""
@@ -553,7 +557,7 @@ class Primal:
         m = self.define_expressions(m)
 
         # Primal problem constraints
-        # m = self.define_constraints(m)
+        m = self.define_constraints(m)
 
         # Primal problem objective
         m = self.define_objective(m)
@@ -576,6 +580,11 @@ class Dual:
     def __init__(self):
         self.data = ModelData()
         self.components = CommonComponents()
+
+        # Solver options
+        self.keepfiles = False
+        self.solver_options = {}  # 'MIPGap': 0.0005
+        self.opt = SolverFactory('cplex', solver_io='mps')
 
     def k(self, m, g):
         """Mapping generator to the NEM zone to which it belongs"""
@@ -614,85 +623,85 @@ class Dual:
         """Define dual problem variables"""
 
         # Non-negative candidate capacity
-        m.mu_1 = Var(m.G_C, m.Y, initialize=0)
+        m.mu_1 = Var(m.G_C, m.Y, within=NonNegativeReals, initialize=0)
 
         # Solar build limits
-        m.mu_2 = Var(m.Z, m.Y, initialize=0)
+        m.mu_2 = Var(m.Z, m.Y, within=NonNegativeReals, initialize=0)
 
         # Wind build limits
-        m.mu_3 = Var(m.Z, m.Y, initialize=0)
+        m.mu_3 = Var(m.Z, m.Y, within=NonNegativeReals, initialize=0)
 
         # Storage build limits
-        m.mu_4 = Var(m.Z, m.Y, initialize=0)
+        m.mu_4 = Var(m.Z, m.Y, within=NonNegativeReals, initialize=0)
 
         # Cumulative candidate capacity
         m.nu_1 = Var(m.G_C, m.Y, initialize=0)
 
         # Min power output (all generators excluding storage units)
-        m.sigma_1 = Var(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T)
+        m.sigma_1 = Var(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Max power output - existing thermal
-        m.sigma_2 = Var(m.G_E_THERM, m.Y, m.S, m.T)
+        m.sigma_2 = Var(m.G_E_THERM, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Max power output - candidate thermal
-        m.sigma_3 = Var(m.G_C_THERM, m.Y, m.S, m.T, initialize=0)
+        m.sigma_3 = Var(m.G_C_THERM, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Max power output - existing wind
-        m.sigma_4 = Var(m.G_E_WIND, m.Y, m.S, m.T, initialize=0)
+        m.sigma_4 = Var(m.G_E_WIND, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Max power output - candidate wind
-        m.sigma_5 = Var(m.G_C_WIND, m.Y, m.S, m.T, initialize=0)
+        m.sigma_5 = Var(m.G_C_WIND, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Max power output - existing solar
-        m.sigma_6 = Var(m.G_E_SOLAR, m.Y, m.S, m.T, initialize=0)
+        m.sigma_6 = Var(m.G_E_SOLAR, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Max power output - candidate solar
-        m.sigma_7 = Var(m.G_C_SOLAR, m.Y, m.S, m.T, initialize=0)
+        m.sigma_7 = Var(m.G_C_SOLAR, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Max power output - hydro
-        m.sigma_8 = Var(m.G_E_HYDRO, m.Y, m.S, m.T, initialize=0)
+        m.sigma_8 = Var(m.G_E_HYDRO, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Min charging power - storage units
-        m.sigma_9 = Var(m.G_STORAGE, m.Y, m.S, m.T, initialize=0)
+        m.sigma_9 = Var(m.G_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Min discharging power - storage_units
-        m.sigma_10 = Var(m.G_STORAGE, m.Y, m.S, m.T, initialize=0)
+        m.sigma_10 = Var(m.G_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Max power output - existing storage
-        m.sigma_11 = Var(m.G_E_STORAGE, m.Y, m.S, m.T, initialize=0)
+        m.sigma_11 = Var(m.G_E_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Max power output - candidate storage
-        m.sigma_12 = Var(m.G_C_STORAGE, m.Y, m.S, m.T, initialize=0)
+        m.sigma_12 = Var(m.G_C_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Max power output - candidate storage
-        m.sigma_14 = Var(m.G_C_STORAGE, m.Y, m.S, m.T, initialize=0)
+        m.sigma_14 = Var(m.G_C_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Min energy - storage units
-        m.sigma_15 = Var(m.G_STORAGE, m.Y, m.S, m.T, initialize=0)
+        m.sigma_15 = Var(m.G_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Max energy - candidate storage
-        m.sigma_17 = Var(m.G_C_STORAGE, m.Y, m.S, m.T, initialize=0)
+        m.sigma_17 = Var(m.G_C_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Min energy - interval end
-        m.sigma_18 = Var(m.G_STORAGE, m.Y, m.S, initialize=0)
+        m.sigma_18 = Var(m.G_STORAGE, m.Y, m.S, within=NonNegativeReals, initialize=0)
 
         # Max energy - interval end
-        m.sigma_19 = Var(m.G_STORAGE, m.Y, m.S, initialize=0)
+        m.sigma_19 = Var(m.G_STORAGE, m.Y, m.S, within=NonNegativeReals, initialize=0)
 
         # Ramp-rate up (all generators excluding storage)
-        m.sigma_20 = Var(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, initialize=0)
+        m.sigma_20 = Var(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Ramp-rate down (all generators excluding storage)
-        m.sigma_21 = Var(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, initialize=0)
+        m.sigma_21 = Var(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Non-negative lost load power
-        m.sigma_22 = Var(m.Z, m.Y, m.S, m.T, initialize=0)
+        m.sigma_22 = Var(m.Z, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Min powerflow
-        m.sigma_23 = Var(m.L, m.Y, m.S, m.T, initialize=0)
+        m.sigma_23 = Var(m.L, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Max powerflow
-        m.sigma_24 = Var(m.L, m.Y, m.S, m.T, initialize=0)
+        m.sigma_24 = Var(m.L, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Storage energy transition
         m.zeta_1 = Var(m.G_STORAGE, m.Y, m.S, m.T, initialize=0)
@@ -717,6 +726,81 @@ class Dual:
 
     def define_expressions(self, m):
         """Define dual problem expressions"""
+
+        def dual_objective_expression_rule(_m):
+            """Expression for dual objective function"""
+
+            # Build limits
+            t_1 = sum(- (m.mu_2[z, y] * m.SOLAR_BUILD_LIMITS[z]) - (m.mu_3[z, y] * m.WIND_BUILD_LIMITS[z]) - (m.mu_4[z, y] * m.STORAGE_BUILD_LIMITS[z]) for z in m.Z for y in m.Y)
+
+            # Min power output
+            t_2 = sum(m.sigma_1[g, y, s, t] * m.P_MIN[g] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S for t in m.T)
+
+            # Max power - existing generators
+            t_3 = sum(- m.sigma_2[g, y, s, t] * m.P_MAX[g] * (1 - m.F[g, y]) for g in m.G_E_THERM for y in m.Y for s in m.S for t in m.T)
+
+            # Max power - existing wind
+            t_4 = sum(- m.sigma_4[g, y, s, t] * m.Q_W[g, y, s, t] * m.P_MAX[g] * (1 - m.F[g, y]) for g in m.G_E_WIND for y in m.Y for s in m.S for t in m.T)
+
+            # Max power - existing solar
+            t_5 = sum(- m.sigma_6[g, y, s, t] * m.Q_S[g, y, s, t] * m.P_MAX[g] * (1 - m.F[g, y]) for g in m.G_E_SOLAR for y in m.Y for s in m.S for t in m.T)
+
+            # Max power - existing hydro
+            t_6 = sum(- m.sigma_8[g, y, s, t] * m.P_H[g, y, s, t] * (1 - m.F[g, y]) for g in m.G_E_HYDRO for y in m.Y for s in m.S for t in m.T)
+
+            # Max charging power - existing storage
+            t_7 = sum(- m.sigma_11[g, y, s, t] * m.P_IN[g] * (1 - m.F[g, y]) for g in m.G_E_STORAGE for y in m.Y for s in m.S for t in m.T)
+
+            # Max discharging power - existing storage
+            t_8 = sum(- m.sigma_13[g, y, s, t] * m.P_OUT[g] * (1 - m.F[g, y]) for g in m.G_E_STORAGE for y in m.Y for s in m.S for t in m.T)
+
+            # Max energy - existing storage units
+            t_9 = sum(- m.sigma_16[g, y, s, t] * m.Q_MAX[g] for g in m.G_E_STORAGE for y in m.Y for s in m.S for t in m.T)
+
+            # Min energy - interval end
+            t_10 = sum(m.sigma_18[g, y, s] * m.Q_END_MIN[g] for g in m.G_E_STORAGE for y in m.Y for s in m.S)
+
+            # Max energy - interval end
+            t_11 = sum(- m.sigma_19[g, y, s] * m.Q_END_MAX[g] for g in m.G_E_STORAGE for y in m.Y for s in m.S)
+
+            # Ramp-up constraint
+            t_12 = sum(- m.sigma_20[g, y, s, t] * m.RR_UP[g] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S for t in m.T)
+
+            # Initial power output
+            t_13 = sum(- m.sigma_20[g, y, s, m.T.last()] * m.P0[g, y, s] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S)
+
+            # Ramp-down constraint
+            t_14 = sum(- m.sigma_21[g, y, s, t] * m.RR_DOWN[g] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S for t in m.T)
+
+            # Initial power output
+            t_15 = sum(m.sigma_21[g, y, s, m.T.last()] * m.P0[g, y, s] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S)
+
+            # Min powerflow
+            t_16 = sum(m.sigma_23[l, y, s, t] * m.POWERFLOW_MIN[l] for l in m.L for y in m.Y for s in m.S for t in m.T)
+
+            # Max powerflow
+            t_17 = sum(- m.sigma_24[l, y, s, t] * m.POWERFLOW_MAX[l] for l in m.L for y in m.Y for s in m.S for t in m.T)
+
+            # Demand
+            t_18 = sum(m.lamb[z, y, s, t] * m.DEMAND[z, y, s, t] for z in m.Z for y in m.Y for s in m.S for t in m.T)
+
+            # Initial storage unit energy
+            t_19 = sum(m.zeta_1[g, y, s, m.T.first()] * m.Q0[g, y, s] for g in m.G_STORAGE for y in m.Y for s in m.S)
+
+            # Initial generator power output
+            t_20 = sum(- m.zeta_2[g, y, s, m.T.first()] * (m.P0[g, y, s] / 2) for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S)
+
+            # Initial storage unit power output
+            t_21 = sum(- m.zeta_3[g, y, s, m.T.first()] * (m.P_OUT_0[g, y, s] / 2) for g in m.G_STORAGE for y in m.Y for s in m.S)
+
+            # Initial lost-load power
+            t_22 = sum(- m.zeta_4[z, y, s, m.T.first()] * (m.P_V0[z, y, s] / 2) for z in m.Z for y in m.Y for s in m.S)
+
+            return t_1 + t_2 + t_3 + t_4 + t_5 + t_6 + t_7 + t_8 + t_9 + t_10 + t_11 + t_12 + t_13 + t_14 + t_15 + t_16 + t_17 + t_18 + t_19 + t_20 + t_21 + t_22
+
+        # Dual objective expression
+        m.DUAL_OBJECTIVE_EXPRESSION = Expression(rule=dual_objective_expression_rule)
+
         return m
 
     def define_constraints(self, m):
@@ -1117,14 +1201,8 @@ class Dual:
     def define_objective(self, m):
         """Define dual problem objective"""
 
-        # Build limits
-        t_1 = sum(- (m.mu_2[z, y] * m.SOLAR_BUILD_LIMITS[z]) - (m.mu_3[z, y] * m.WIND_BUILD_LIMITS[z]) - (m.mu_4[z, y] * m.STORAGE_BUILD_LIMITS[z]) for z in m.Z for y in m.Y)
-
-        # Min power output
-        t_2 = sum(m.sigma_1[g, y, s, t] * m.P_MIN[g] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S for t in m.T)
-
-        # Max power output - existing units
-        # TODO: Fix retirement indicator - check that it's in the expected locations
+        # Dual objective function
+        m.OBJECTIVE = Objective(expr=m.DUAL_OBJECTIVE_EXPRESSION, sense=maximize)
 
         return m
 
@@ -1153,12 +1231,25 @@ class Dual:
 
         return m
 
+    def solve_model(self, m):
+        """Solve model"""
+
+        # Solve model
+        solve_status = self.opt.solve(m, tee=True, options=self.solver_options, keepfiles=self.keepfiles)
+
+        # Log infeasible constraints if they exist
+        log_infeasible_constraints(m)
+
+        return m, solve_status
+
 
 if __name__ == '__main__':
     primal = Primal()
     model = primal.construct_model()
-    # model, status = primal.solve_model(model)
+    model, status = primal.solve_model(model)
 
     # dual = Dual()
     # model = dual.construct_model()
+    #
+    # model, status = dual.solve_model(model)
 

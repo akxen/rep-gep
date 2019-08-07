@@ -84,10 +84,10 @@ class CommonComponents:
         m.G = m.G_E.union(m.G_C)
 
         # All years in model horizon
-        m.Y = RangeSet(2016, 2016)
+        m.Y = RangeSet(2016, 2018)
 
         # Operating scenarios for each year
-        m.S = RangeSet(1, 1)
+        m.S = RangeSet(1, 10)
 
         # Operating scenario hour
         m.T = RangeSet(1, 24, ordered=True)
@@ -361,11 +361,15 @@ class CommonComponents:
         def ramp_rate_up_rule(_m, g):
             """Ramp-rate up (MW/h) - when running"""
 
-            if g in m.G_E:
+            if g in m.G_STORAGE:
+                # Default ramp-rate for storage units (arbitrarily large)
+                ramp_up = 9000
+
+            elif g in m.G_E.difference(m.G_STORAGE):
                 # Ramp-rate up for existing generators
                 ramp_up = self.data.existing_units.loc[g, ('PARAMETERS', 'RR_UP')]
 
-            elif g in m.G_C:
+            elif g in m.G_C.difference(m.G_STORAGE):
                 # Ramp-rate up for candidate generators
                 ramp_up = self.data.candidate_units.loc[g, ('PARAMETERS', 'RR_UP')]
 
@@ -375,16 +379,20 @@ class CommonComponents:
             return float(ramp_up)
 
         # Ramp-rate up (normal operation)
-        m.RR_UP = Param(m.G.difference(m.G_STORAGE), rule=ramp_rate_up_rule)
+        m.RR_UP = Param(m.G, rule=ramp_rate_up_rule)
 
         def ramp_rate_down_rule(_m, g):
             """Ramp-rate down (MW/h) - when running"""
 
-            if g in m.G_E:
+            if g in m.G_STORAGE:
+                # Default ramp-rate for storage units (arbitrarily large)
+                ramp_down = 9000
+
+            elif g in m.G_E.difference(m.G_STORAGE):
                 # Ramp-rate down for existing generators
                 ramp_down = self.data.existing_units.loc[g, ('PARAMETERS', 'RR_DOWN')]
 
-            elif g in m.G_C:
+            elif g in m.G_C.difference(m.G_STORAGE):
                 # Ramp-rate down for candidate generators
                 ramp_down = self.data.candidate_units.loc[g, ('PARAMETERS', 'RR_DOWN')]
 
@@ -394,7 +402,7 @@ class CommonComponents:
             return float(ramp_down)
 
         # Ramp-rate down (normal operation)
-        m.RR_DOWN = Param(m.G.difference(m.G_STORAGE), rule=ramp_rate_down_rule)
+        m.RR_DOWN = Param(m.G, rule=ramp_rate_down_rule)
 
         def powerflow_min_rule(_m, l):
             """Minimum powerflow over network link"""
