@@ -792,15 +792,15 @@ Where:
 		& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iGenerator \in \sStorage} \dMaxStorageEnergyIntervalEnd \left(\vStorageUnitEnergy[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] - \cStorageUnitEnergyIntervalEndMax\right)\\
 		& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals \setminus \{\iIntervalStart\}} \sum\limits_{\iGenerator \in \sGenerators \setminus \sStorage} \dRampRateUp \left(\vPower - \vPower[\iGenerator,\iYear,\iScenario,\iInterval-1] - \cRampRateUp\right)\\
 		& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iGenerator \in \sGenerators \setminus \sStorage} \dRampRateUp[\iGenerator,\iYear,\iScenario,\iIntervalStart] \left(\vPower[\iGenerator,\iYear,\iScenario,\iIntervalStart] - \cPowerInitial - \cRampRateUp\right)\\
-		& +  \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals \setminus \{\iIntervalTerminal\}} \sum\limits_{\iGenerator \in \sStorage} \dRampRateUpStorageCharging \left(\vPowerIn - \vPowerIn[\iGenerator,\iYear,\iScenario,\iInterval-1] - \cRampRateUp\right) \\
+		& +  \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals \setminus \{\iIntervalStart\}} \sum\limits_{\iGenerator \in \sStorage} \dRampRateUpStorageCharging \left(\vPowerIn - \vPowerIn[\iGenerator,\iYear,\iScenario,\iInterval-1] - \cRampRateUp\right) \\
 		& +  \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iGenerator \in \sStorage} \dRampRateUpStorageCharging[\iGenerator,\iYear,\iScenario,\iIntervalStart] \left(\vPowerIn[\iGenerator,\iYear,\iScenario,\iIntervalStart] - \cPowerInInitial - \cRampRateUp\right) \\
-		& +  \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals \setminus \{\iIntervalTerminal\}} \sum\limits_{\iGenerator \in \sStorage} \dRampRateUpStorageDischarging \left(\vPowerOut - \vPowerOut[\iGenerator,\iYear,\iScenario,\iInterval-1] - \cRampRateUp\right) \\
-		& +  \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iGenerator \in \sStorage} \dRampRateUpStorageDischarging[\iGenerator,\iYear,\iScenario,\iIntervalStart] \left(\vPowerOut - \cPowerOutInitial - \cRampRateUp\right) \\
+		& +  \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals \setminus \{\iIntervalStart\}} \sum\limits_{\iGenerator \in \sStorage} \dRampRateUpStorageDischarging \left(\vPowerOut - \vPowerOut[\iGenerator,\iYear,\iScenario,\iInterval-1] - \cRampRateUp\right) \\
+		& +  \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iGenerator \in \sStorage} \dRampRateUpStorageDischarging[\iGenerator,\iYear,\iScenario,\iIntervalStart] \left(\vPowerOut[\iGenerator,\iYear,\iScenario,\iIntervalStart] - \cPowerOutInitial - \cRampRateUp\right) \\
 		& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals \setminus \{\iIntervalStart\}} \sum\limits_{\iGenerator \in \sGenerators \setminus \sStorage} \dRampRateDown \left(- \vPower + \vPower[\iGenerator,\iYear,\iScenario,\iInterval-1] - \cRampRateDown\right)\\
 		& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iGenerator \in \sGenerators \setminus \sStorage} \dRampRateDown[\iGenerator,\iYear,\iScenario,\iIntervalStart] \left(- \vPower[\iGenerator,\iYear,\iScenario,\iIntervalStart] + \cPowerInitial - \cRampRateDown\right)\\
-		& +  \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals \setminus \{\iIntervalTerminal\}} \sum\limits_{\iGenerator \in \sStorage} \dRampRateDownStorageCharging \left(- \vPowerIn + \vPowerIn[\iGenerator,\iYear,\iScenario,\iInterval-1] - \cRampRateDown\right) \\
+		& +  \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals \setminus \{\iIntervalStart\}} \sum\limits_{\iGenerator \in \sStorage} \dRampRateDownStorageCharging \left(- \vPowerIn + \vPowerIn[\iGenerator,\iYear,\iScenario,\iInterval-1] - \cRampRateDown\right) \\
 		& +  \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iGenerator \in \sStorage} \dRampRateDownStorageCharging[\iGenerator,\iYear,\iScenario,\iIntervalStart] \left(- \vPowerIn[\iGenerator,\iYear,\iScenario,\iIntervalStart] + \cPowerInInitial - \cRampRateDown\right) \\
-		& +  \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals \setminus \{\iIntervalTerminal\}} \sum\limits_{\iGenerator \in \sStorage} \dRampRateDownStorageDischarging \left(- \vPowerOut + \vPowerOut[\iGenerator,\iYear,\iScenario,\iInterval-1] - \cRampRateDown\right) \\
+		& +  \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals \setminus \{\iIntervalStart\}} \sum\limits_{\iGenerator \in \sStorage} \dRampRateDownStorageDischarging \left(- \vPowerOut + \vPowerOut[\iGenerator,\iYear,\iScenario,\iInterval-1] - \cRampRateDown\right) \\
 		& +  \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iGenerator \in \sStorage} \dRampRateDownStorageDischarging[\iGenerator,\iYear,\iScenario,\iIntervalStart] \left(- \vPowerOut[\iGenerator,\iYear,\iScenario,\iIntervalStart] + \cPowerOutInitial - \cRampRateDown\right) \\
 		& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iZone \in \sZones} \dNonNegativeLostLoad \left(- \vLostLoadPower\right)\\
 		& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iLink \in \sLinks} \dMinPowerFlow \left(\cPowerFlowMin - \vPowerFlow\right)\\
@@ -853,17 +853,17 @@ Total installed capacity - candidate thermal generators:
 
 Total installed capacity - candidate solar generators:
 \begin{equation}
-	\sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \vInstalledCapacityTotal \left(\dSolarBuildLimit + \dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorSolar \dMaxPowerOutputSolarCandidate \right) + \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \vInstalledCapacityTotal[\iGenerator,\iYearTerminal] \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCostGenerator
+	\sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \vInstalledCapacityTotal \left(\dSolarBuildLimit[k(\iGenerator),\iYear] + \dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorSolar \dMaxPowerOutputSolarCandidate \right) + \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \vInstalledCapacityTotal[\iGenerator,\iYearTerminal] \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCostGenerator
 \end{equation}
 
 Total installed capacity - candidate wind generators:
 \begin{equation}
-\sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \vInstalledCapacityTotal \left( \dWindBuildLimit + \dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorWind \dMaxPowerOutputWindCandidate \right) + \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \vInstalledCapacityTotal[\iGenerator,\iYearTerminal] \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCostGenerator
+\sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \vInstalledCapacityTotal \left(\dWindBuildLimit[k(\iGenerator),\iYear] + \dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorWind \dMaxPowerOutputWindCandidate \right) + \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \vInstalledCapacityTotal[\iGenerator,\iYearTerminal] \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCostGenerator
 \end{equation}
 
 Total installed capacity - candidate storage generators:
 \begin{equation}
-\sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sStorageCandidate} \vInstalledCapacityTotal \left(\dStorageBuildLimit + \dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \dMaxDischargingRateCandidate \right) + \sum\limits_{\iGenerator \in \sStorageCandidate} \vInstalledCapacityTotal[\iGenerator,\iYearTerminal] \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCostGenerator
+\sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sStorageCandidate} \vInstalledCapacityTotal \left(\dStorageBuildLimit[k(\iGenerator),\iYear] + \dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \dMaxDischargingRateCandidate \right) + \sum\limits_{\iGenerator \in \sStorageCandidate} \vInstalledCapacityTotal[\iGenerator,\iYearTerminal] \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCostGenerator
 \end{equation}
 
 %p
@@ -968,7 +968,7 @@ Existing wind generator energy output:
 
 Candidate wind generator energy output:
 \begin{equation}
-	\sumIntervals \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \vEnergy \left(\cDiscountRate\cScenarioDuration \left[\cMarginalCost + \left(\cEmissionsIntensity - \vBaseline\right)\vPermitPrice \right] + \dGeneratorEnergyOutput \right) + \sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \vEnergy[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \left[ \frac{\cDiscountRate[\iYearTerminal] \cScenarioDuration[\iYearTerminal,\iScenario]}{\cInterestRate} \left[\cMarginalCost + \left(\cEmissionsIntensity - \vBaseline[\iYearTerminal] \right)\vPermitPrice[\iYearTerminal] \right] \right]
+	\sumIntervals \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \vEnergy \left(\cDiscountRate\cScenarioDuration \left[\cMarginalCost - \vBaseline\vPermitPrice \right] + \dGeneratorEnergyOutput \right) + \sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \vEnergy[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \left[ \frac{\cDiscountRate[\iYearTerminal] \cScenarioDuration[\iYearTerminal,\iScenario]}{\cInterestRate} \left[\cMarginalCost - \vBaseline[\iYearTerminal] \vPermitPrice[\iYearTerminal] \right] \right]
 \end{equation}
 
 Existing solar generator energy output:
@@ -978,7 +978,7 @@ Existing solar generator energy output:
 
 Candidate solar generator energy output:
 \begin{equation}
-	\sumIntervals \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \vEnergy \left(\cDiscountRate\cScenarioDuration \left[\cMarginalCost + \left(\cEmissionsIntensity - \vBaseline\right)\vPermitPrice \right] + \dGeneratorEnergyOutput \right) + \sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \vEnergy[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \left[ \frac{\cDiscountRate[\iYearTerminal] \cScenarioDuration[\iYearTerminal,\iScenario]}{\cInterestRate} \left[\cMarginalCost + \left(\cEmissionsIntensity - \vBaseline[\iYearTerminal] \right)\vPermitPrice[\iYearTerminal] \right] \right]
+	\sumIntervals \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \vEnergy \left(\cDiscountRate\cScenarioDuration \left[\cMarginalCost - \vBaseline\vPermitPrice \right] + \dGeneratorEnergyOutput \right) + \sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \vEnergy[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \left[ \frac{\cDiscountRate[\iYearTerminal] \cScenarioDuration[\iYearTerminal,\iScenario]}{\cInterestRate} \left[\cMarginalCost - \vBaseline[\iYearTerminal] \vPermitPrice[\iYearTerminal] \right] \right]
 \end{equation}
 
 Existing storage unit energy output:
@@ -993,7 +993,7 @@ Candidate storage unit energy output:
 
 Existing hydro generator energy output:
 \begin{equation}
-	\sumIntervals \sum\limits_{\iGenerator \in \sGeneratorsHydro} \vEnergy \left(\cDiscountRate\cScenarioDuration \cMarginalCost + \dStorageEnergyOutput \right) + \sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsHydro} \vEnergy[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \left[ \frac{\cDiscountRate[\iYearTerminal] \cScenarioDuration[\iYearTerminal,\iScenario]}{\cInterestRate} \cMarginalCost \right]
+	\sumIntervals \sum\limits_{\iGenerator \in \sGeneratorsHydro} \vEnergy \left(\cDiscountRate\cScenarioDuration \cMarginalCost + \dGeneratorEnergyOutput \right) + \sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsHydro} \vEnergy[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \left[ \frac{\cDiscountRate[\iYearTerminal] \cScenarioDuration[\iYearTerminal,\iScenario]}{\cInterestRate} \cMarginalCost \right]
 \end{equation}
 
 %p_V
@@ -1046,16 +1046,16 @@ Dual objective:
 & + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iGenerator \in \sStorage} - \dRampRateUpStorageCharging[\iGenerator,\iYear,\iScenario,\iIntervalStart] \cPowerInInitial\\
 %
 & + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sStorage} - \dRampRateUpStorageDischarging \cRampRateUp\\
-& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iGenerator \in \sStorage} - \dRampRateUpStorageDischarging \cPowerOutInitial\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iGenerator \in \sStorage} - \dRampRateUpStorageDischarging[\iGenerator,\iYear,\iScenario,\iIntervalStart] \cPowerOutInitial\\
 & + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGenerators \setminus \sStorage} - \dRampRateDown \cRampRateDown\\
 %& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iZone \in \sZones} \dNonNegativeLostLoad \left(- \vLostLoadPower\right)\\
 & + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iGenerator \in \sGenerators \setminus \sStorage} \dRampRateDown[\iGenerator,\iYear,\iScenario,\iIntervalStart] \cPowerInitial\\
 %
 & + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sStorage} - \dRampRateDownStorageCharging \cRampRateDown\\
-& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iGenerator \in \sStorage} \dRampRateDownStorageCharging[\iGenerator,\iYear,\iScenario,\iIntervalStart] \left( \cPowerInInitial - \cRampRateDown \right)\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iGenerator \in \sStorage} \dRampRateDownStorageCharging[\iGenerator,\iYear,\iScenario,\iIntervalStart] \cPowerInInitial\\
 %
 & + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sStorage} - \dRampRateDownStorageDischarging \cRampRateDown\\
-& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iGenerator \in \sStorage} \dRampRateDownStorageDischarging[\iGenerator,\iYear,\iScenario,\iIntervalStart] \left( \cPowerOutInitial - \cRampRateDown \right)\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iGenerator \in \sStorage} \dRampRateDownStorageDischarging[\iGenerator,\iYear,\iScenario,\iIntervalStart] \cPowerOutInitial \\
 %
 & + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iLink \in \sLinks} \dMinPowerFlow \cPowerFlowMin\\
 & + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iLink \in \sLinks} - \dMaxPowerFlow \cPowerFlowMax\\
@@ -1065,7 +1065,7 @@ Dual objective:
 & + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iGenerator \in \sStorage} - \dStorageEnergyOutput[\iGenerator, \iYear,\iScenario,\iIntervalStart] \frac{\cPowerOutInitial}{2}\\
 & + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iZone \in \sZones} - \dLostLoadEnergy[\iZone, \iYear,\iScenario,\iIntervalStart] \frac{\cLostLoadPowerInitial}{2}\\
 & + \sum\limits_{\iYear \in \sYears} \cDiscountRate \sum\limits_{\iGenerator \in \sGeneratorsExisting} \cFixedOperationsMaintenanceCostGenerator \cPowerOutputMax[\iGenerator] \left(1 - \cRetirementIndicator\right)\\
-& + \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \sum\limits_{\iGenerator \in \sGeneratorsExisting} \cFixedOperationsMaintenanceCostGenerator \cPowerOutputMax[\iGenerator] \left(1 - \cRetirementIndicator\right)\\
+& + \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \sum\limits_{\iGenerator \in \sGeneratorsExisting} \cFixedOperationsMaintenanceCostGenerator \cPowerOutputMax[\iGenerator] \left(1 - \cRetirementIndicator[\iGenerator,\iYearTerminal]\right)\\
 \end{align}
 
 \subsection{Constraints}
@@ -1197,29 +1197,36 @@ Existing storage unit charging power:
 - \dNonNegativeCharging[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] + \dMaxChargingRateExisting[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] + \dPowerBalance[k(\iGenerator),\iYear,\iScenario,\iIntervalTerminal] + \cStorageUnitEfficiencyCharging \dStorageEnergyTransition[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] + \dRampRateUpStorageCharging[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] - \dRampRateDownStorageCharging[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] = 0 \quad \iYear \in \sYears \quad \iScenario \in \sScenarios \quad \iGenerator \in \sStorageExisting
 \end{equation}
 
-
 Candidate storage unit charging power:
 \begin{equation}
-- \dNonNegativeCharging + \dMaxChargingRateCandidate + \dPowerBalance[k(\iGenerator),\iYear,\iScenario,\iInterval] + \cStorageUnitEfficiencyCharging\dStorageEnergyTransition + \dRampRateUpStorageCharging - \dRampRateUpStorageCharging[\iGenerator,\iYear,\iScenario,\iInterval+1] - \dRampRateDownStorageCharging + \dRampRateDownStorageCharging[\iGenerator,\iYear,\iScenario,\iInterval+1] = 0 \quad \iYear \in \sYears \quad \iScenario \in \sScenarios \quad \iInterval \in \sIntervals \quad \iGenerator \in \sStorageCandidate
+- \dNonNegativeCharging + \dMaxChargingRateCandidate + \dPowerBalance[k(\iGenerator),\iYear,\iScenario,\iInterval] + \cStorageUnitEfficiencyCharging\dStorageEnergyTransition + \dRampRateUpStorageCharging - \dRampRateUpStorageCharging[\iGenerator,\iYear,\iScenario,\iInterval+1] - \dRampRateDownStorageCharging + \dRampRateDownStorageCharging[\iGenerator,\iYear,\iScenario,\iInterval+1] = 0 \quad \iYear \in \sYears \quad \iScenario \in \sScenarios \quad \iInterval \in \sIntervals \setminus \{\iIntervalTerminal\} \quad \iGenerator \in \sStorageCandidate
+\end{equation}
+
+\begin{equation}
+- \dNonNegativeCharging[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] + \dMaxChargingRateCandidate[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] + \dPowerBalance[k(\iGenerator),\iYear,\iScenario,\iIntervalTerminal] + \cStorageUnitEfficiencyCharging \dStorageEnergyTransition[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] + \dRampRateUpStorageCharging[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] - \dRampRateDownStorageCharging[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] = 0 \quad \iYear \in \sYears \quad \iScenario \in \sScenarios \quad \iGenerator \in \sStorageCandidate
 \end{equation}
 
 %p_out
 Existing storage unit discharging power:
-\begin{equation}
-- \dNonNegativeDischarging + \dMaxDischargingRateExisting - \dPowerBalance[k(\iGenerator),\iYear,\iScenario,\iInterval] - \frac{1}{\cStorageUnitEfficiencyDischarging} \dStorageEnergyTransition - \frac{\dStorageEnergyOutput + \dStorageEnergyOutput[\iGenerator,\iYear,\iScenario,\iInterval+1]}{2} = 0 \quad \iYear \in \sYears \quad \iScenario \in \sScenarios \quad \iInterval \in \sIntervals \setminus \{\iIntervalTerminal\} \quad \iGenerator \in \sStorageExisting
-\end{equation}
+\begin{align}
+- \dNonNegativeDischarging + \dMaxDischargingRateExisting - \dPowerBalance[k(\iGenerator),\iYear,\iScenario,\iInterval] - \frac{1}{\cStorageUnitEfficiencyDischarging} \dStorageEnergyTransition  -  \frac{\dStorageEnergyOutput + \dStorageEnergyOutput[\iGenerator,\iYear,\iScenario,\iInterval+1]}{2} + & \dRampRateUpStorageDischarging - \dRampRateUpStorageDischarging[\iGenerator,\iYear,\iScenario,\iInterval+1]
+- \dRampRateDownStorageDischarging + \dRampRateDownStorageDischarging[\iGenerator,\iYear,\iScenario,\iInterval + 1] = 0 \nonumber\\ 
+&\quad \iYear \in \sYears \quad \iScenario \in \sScenarios \quad \iInterval \in \sIntervals \setminus \{\iIntervalTerminal\} \quad \iGenerator \in \sStorageExisting
+\end{align}
 
 \begin{equation}
-- \dNonNegativeDischarging[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] + \dMaxDischargingRateExisting[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] - \dPowerBalance[k(\iGenerator),\iYear,\iScenario,\iIntervalTerminal] - \frac{1}{\cStorageUnitEfficiencyDischarging} \dStorageEnergyTransition[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] - \frac{\dStorageEnergyOutput[\iGenerator,\iYear,\iScenario,\iIntervalTerminal]}{2} = 0 \quad \iYear \in \sYears \quad \iScenario \in \sScenarios \quad \iGenerator \in \sStorageExisting
+- \dNonNegativeDischarging[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] + \dMaxDischargingRateExisting[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] - \dPowerBalance[k(\iGenerator),\iYear,\iScenario,\iIntervalTerminal] - \frac{1}{\cStorageUnitEfficiencyDischarging} \dStorageEnergyTransition[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] - \frac{\dStorageEnergyOutput[\iGenerator,\iYear,\iScenario,\iIntervalTerminal]}{2} + \dRampRateUpStorageDischarging[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] - \dRampRateDownStorageDischarging[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] = 0 \quad \iYear \in \sYears \quad \iScenario \in \sScenarios \quad \iGenerator \in \sStorageExisting
 \end{equation}
 
 Candidate storage unit discharging power:
-\begin{equation}
-- \dNonNegativeDischarging + \dMaxDischargingRateCandidate - \dPowerBalance[k(\iGenerator),\iYear,\iScenario,\iInterval] - \frac{1}{\cStorageUnitEfficiencyDischarging} \dStorageEnergyTransition - \frac{\dStorageEnergyOutput + \dStorageEnergyOutput[\iGenerator,\iYear,\iScenario,\iInterval+1]}{2} = 0 \quad \iYear \in \sYears \quad \iScenario \in \sScenarios \quad \iInterval \in \sIntervals \setminus \{\iIntervalTerminal\} \quad \iGenerator \in \sStorageCandidate
-\end{equation}
+\begin{align}
+- \dNonNegativeDischarging + \dMaxDischargingRateCandidate - \dPowerBalance[k(\iGenerator),\iYear,\iScenario,\iInterval] - \frac{1}{\cStorageUnitEfficiencyDischarging} \dStorageEnergyTransition - \frac{\dStorageEnergyOutput + \dStorageEnergyOutput[\iGenerator,\iYear,\iScenario,\iInterval+1]}{2} + & \dRampRateUpStorageDischarging - \dRampRateUpStorageDischarging[\iGenerator,\iYear,\iScenario,\iInterval+1]
+- \dRampRateDownStorageDischarging + \dRampRateDownStorageDischarging[\iGenerator,\iYear,\iScenario,\iInterval + 1] = 0 \nonumber\\
+& \quad \iYear \in \sYears \quad \iScenario \in \sScenarios \quad \iInterval \in \sIntervals \setminus \{\iIntervalTerminal\} \quad \iGenerator \in \sStorageCandidate
+\end{align}
 
 \begin{equation}
-- \dNonNegativeDischarging[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] + \dMaxDischargingRateCandidate[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] - \dPowerBalance[k(\iGenerator),\iYear,\iScenario,\iIntervalTerminal] - \frac{1}{\cStorageUnitEfficiencyDischarging} \dStorageEnergyTransition[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] - \frac{\dStorageEnergyOutput[\iGenerator,\iYear,\iScenario,\iIntervalTerminal]}{2} = 0 \quad \iYear \in \sYears \quad \iScenario \in \sScenarios \quad \iGenerator \in \sStorageCandidate
+- \dNonNegativeDischarging[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] + \dMaxDischargingRateCandidate[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] - \dPowerBalance[k(\iGenerator),\iYear,\iScenario,\iIntervalTerminal] - \frac{1}{\cStorageUnitEfficiencyDischarging} \dStorageEnergyTransition[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] - \frac{\dStorageEnergyOutput[\iGenerator,\iYear,\iScenario,\iIntervalTerminal]}{2} + \dRampRateUpStorageDischarging[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] - \dRampRateDownStorageDischarging[\iGenerator,\iYear,\iScenario,\iIntervalTerminal] = 0 \quad \iYear \in \sYears \quad \iScenario \in \sScenarios \quad \iGenerator \in \sStorageCandidate
 \end{equation}
 
 %q
@@ -1271,11 +1278,11 @@ Existing wind generator energy output:
 
 Candidate wind generator energy output:
 \begin{equation}
-\cDiscountRate\cScenarioDuration \left[\cMarginalCost + \left(\cEmissionsIntensity - \vBaseline\right)\vPermitPrice \right] + \dGeneratorEnergyOutput = 0 \quad \iYear \in \sYears \setminus \{\iYearTerminal\} \quad \iScenario \in \sScenarios \quad \iInterval \in \sIntervals \quad \iGenerator \in \sGeneratorsCandidateWind
+\cDiscountRate\cScenarioDuration \left[\cMarginalCost - \vBaseline\vPermitPrice \right] + \dGeneratorEnergyOutput = 0 \quad \iYear \in \sYears \setminus \{\iYearTerminal\} \quad \iScenario \in \sScenarios \quad \iInterval \in \sIntervals \quad \iGenerator \in \sGeneratorsCandidateWind
 \end{equation}
 
 \begin{equation}
-\cDiscountRate[\iYearTerminal] \cScenarioDuration[\iYearTerminal,\iScenario] \left[1 + \frac{1}{\cInterestRate}\right] \left[\cMarginalCost + \left(\cEmissionsIntensity - \vBaseline[\iYearTerminal]\right)\vPermitPrice[\iYearTerminal] \right] + \dGeneratorEnergyOutput[\iGenerator,\iYearTerminal,\iScenario,\iInterval] = 0 \quad \iScenario \in \sScenarios \quad \iInterval \in \sIntervals  \quad \iGenerator \in \sGeneratorsCandidateWind
+\cDiscountRate[\iYearTerminal] \cScenarioDuration[\iYearTerminal,\iScenario] \left[1 + \frac{1}{\cInterestRate}\right] \left[\cMarginalCost - \vBaseline[\iYearTerminal]\vPermitPrice[\iYearTerminal] \right] + \dGeneratorEnergyOutput[\iGenerator,\iYearTerminal,\iScenario,\iInterval] = 0 \quad \iScenario \in \sScenarios \quad \iInterval \in \sIntervals  \quad \iGenerator \in \sGeneratorsCandidateWind
 \end{equation}
 
 Existing solar generator energy output:
@@ -1289,11 +1296,11 @@ Existing solar generator energy output:
 
 Candidate solar generator energy output:
 \begin{equation}
-\cDiscountRate\cScenarioDuration \left[\cMarginalCost + \left(\cEmissionsIntensity - \vBaseline\right)\vPermitPrice \right] + \dGeneratorEnergyOutput = 0 \quad \iYear \in \sYears \setminus \{\iYearTerminal\} \quad \iScenario \in \sScenarios \quad \iInterval \in \sIntervals \quad \iGenerator \in \sGeneratorsCandidateSolar
+\cDiscountRate\cScenarioDuration \left[\cMarginalCost - \vBaseline\vPermitPrice \right] + \dGeneratorEnergyOutput = 0 \quad \iYear \in \sYears \setminus \{\iYearTerminal\} \quad \iScenario \in \sScenarios \quad \iInterval \in \sIntervals \quad \iGenerator \in \sGeneratorsCandidateSolar
 \end{equation}
 
 \begin{equation}
-\cDiscountRate[\iYearTerminal] \cScenarioDuration[\iYearTerminal,\iScenario] \left[1 + \frac{1}{\cInterestRate}\right] \left[\cMarginalCost[\iGenerator,\iYearTerminal] + \left(\cEmissionsIntensity - \vBaseline[\iYearTerminal]\right)\vPermitPrice[\iYearTerminal] \right] + \dGeneratorEnergyOutput[\iGenerator,\iYearTerminal,\iScenario,\iInterval] = 0 \quad \iScenario \in \sScenarios \quad \iInterval \in \sIntervals  \quad \iGenerator \in \sGeneratorsCandidateSolar
+\cDiscountRate[\iYearTerminal] \cScenarioDuration[\iYearTerminal,\iScenario] \left[1 + \frac{1}{\cInterestRate}\right] \left[\cMarginalCost[\iGenerator,\iYearTerminal]  - \vBaseline[\iYearTerminal]\vPermitPrice[\iYearTerminal] \right] + \dGeneratorEnergyOutput[\iGenerator,\iYearTerminal,\iScenario,\iInterval] = 0 \quad \iScenario \in \sScenarios \quad \iInterval \in \sIntervals  \quad \iGenerator \in \sGeneratorsCandidateSolar
 \end{equation}
 
 Existing storage unit energy output:

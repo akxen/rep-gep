@@ -528,7 +528,8 @@ class Primal:
             # Storage units within a given zone TODO: will need to update if existing storage units are included
             storage_units = [gen for gen, zone in self.data.battery_properties_dict['NEM_ZONE'].items() if zone == z]
 
-            return (m.DEMAND[z, y, s, t] - sum(m.p[g, y, s, t] for g in generators)
+            return (m.DEMAND[z, y, s, t]
+                    - sum(m.p[g, y, s, t] for g in generators)
                     + sum(m.INCIDENCE_MATRIX[l, z] * m.p_L[l, y, s, t] for l in m.L)
                     - sum(m.p_out[g, y, s, t] - m.p_in[g, y, s, t] for g in storage_units)
                     - m.p_V[z, y, s, t]
@@ -663,7 +664,8 @@ class Dual:
 
         return to_node
 
-    def define_variables(self, m):
+    @staticmethod
+    def define_variables(m):
         """Define dual problem variables"""
 
         # Non-negative candidate capacity
@@ -711,17 +713,23 @@ class Dual:
         # Min discharging power - storage_units
         m.sigma_10 = Var(m.G_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
-        # Max power output - existing storage
+        # Max charging power - existing storage
         m.sigma_11 = Var(m.G_E_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
-        # Max power output - candidate storage
+        # Max charging power - candidate storage
         m.sigma_12 = Var(m.G_C_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
-        # Max power output - candidate storage
+        # Max discharging power - existing storage
+        m.sigma_13 = Var(m.G_E_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+
+        # Max discharging power - candidate storage
         m.sigma_14 = Var(m.G_C_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Min energy - storage units
         m.sigma_15 = Var(m.G_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+
+        # Max energy - existing storage units
+        m.sigma_16 = Var(m.G_E_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Max energy - candidate storage
         m.sigma_17 = Var(m.G_C_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
@@ -735,17 +743,29 @@ class Dual:
         # Ramp-rate up (all generators excluding storage)
         m.sigma_20 = Var(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
+        # Ramp-rate up - charging power - storage
+        m.sigma_21 = Var(m.G_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+
+        # Ramp-rate up - discharging power - storage
+        m.sigma_22 = Var(m.G_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+
         # Ramp-rate down (all generators excluding storage)
-        m.sigma_21 = Var(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+        m.sigma_23 = Var(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+
+        # Ramp-rate down - charging power - storage
+        m.sigma_24 = Var(m.G_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+
+        # Ramp-rate down - discharging power - storage
+        m.sigma_25 = Var(m.G_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Non-negative lost load power
-        m.sigma_22 = Var(m.Z, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+        m.sigma_26 = Var(m.Z, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Min powerflow
-        m.sigma_23 = Var(m.L, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+        m.sigma_27 = Var(m.L, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Max powerflow
-        m.sigma_24 = Var(m.L, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+        m.sigma_28 = Var(m.L, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Storage energy transition
         m.zeta_1 = Var(m.G_STORAGE, m.Y, m.S, m.T, initialize=0)
@@ -768,7 +788,8 @@ class Dual:
 
         return m
 
-    def define_expressions(self, m):
+    @staticmethod
+    def define_expressions(m):
         """Define dual problem expressions"""
 
         def dual_objective_expression_rule(_m):
@@ -807,40 +828,72 @@ class Dual:
             # Max energy - interval end
             t_11 = sum(- m.sigma_19[g, y, s] * m.Q_END_MAX[g] for g in m.G_E_STORAGE for y in m.Y for s in m.S)
 
-            # Ramp-up constraint
+            # Ramp-up constraint - generators
             t_12 = sum(- m.sigma_20[g, y, s, t] * m.RR_UP[g] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S for t in m.T)
 
-            # Initial power output
-            t_13 = sum(- m.sigma_20[g, y, s, m.T.last()] * m.P0[g, y, s] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S)
+            # Ramp-up constraint - initial power output - generators
+            t_13 = sum(- m.sigma_20[g, y, s, m.T.first()] * m.P0[g, y, s] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S)
 
-            # Ramp-down constraint
-            t_14 = sum(- m.sigma_21[g, y, s, t] * m.RR_DOWN[g] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S for t in m.T)
+            # Ramp-up constraint - storage charging
+            t_14 = sum(- m.sigma_21[g, y, s, t] * m.RR_UP[g] for g in m.G_STORAGE for y in m.Y for s in m.S for t in m.T)
 
-            # Initial power output
-            t_15 = sum(m.sigma_21[g, y, s, m.T.last()] * m.P0[g, y, s] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S)
+            # Ramp-up constraint - initial charging power - storage
+            t_15 = sum(- m.sigma_21[g, y, s, m.T.first()] * m.P_IN_0[g, y, s] for g in m.G_STORAGE for y in m.Y for s in m.S)
+
+            # Ramp-up constraint - storage discharging
+            t_16 = sum(- m.sigma_22[g, y, s, t] * m.RR_UP[g] for g in m.G_STORAGE for y in m.Y for s in m.S for t in m.T)
+
+            # Ramp-up constraint - initial discharging power - storage
+            t_17 = sum(- m.sigma_22[g, y, s, m.T.first()] * m.P_OUT_0[g, y, s] for g in m.G_STORAGE for y in m.Y for s in m.S)
+
+            # Ramp-down constraint - generators
+            t_18 = sum(- m.sigma_23[g, y, s, t] * m.RR_DOWN[g] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S for t in m.T)
+
+            # Ramp-down constraint - initial power output - generators
+            t_19 = sum(m.sigma_23[g, y, s, m.T.first()] * m.P0[g, y, s] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S)
+
+            # Ramp-down constraint - storage charging
+            t_20 = sum(- m.sigma_24[g, y, s, t] * m.RR_DOWN[g] for g in m.G_STORAGE for y in m.Y for s in m.S for t in m.T)
+
+            # Ramp-down constraint - initial charging power - storage
+            t_21 = sum(m.sigma_24[g, y, s, m.T.first()] * m.P_IN_0[g, y, s] for g in m.G_STORAGE for y in m.Y for s in m.S)
+
+            # Ramp-down constraint - storage discharging
+            t_22 = sum(- m.sigma_25[g, y, s, t] * m.RR_DOWN[g] for g in m.G_STORAGE for y in m.Y for s in m.S for t in m.T)
+
+            # Ramp-down constraint - initial discharging power - storage
+            t_23 = sum(m.sigma_25[g, y, s, m.T.first()] * m.P_OUT_0[g, y, s] for g in m.G_STORAGE for y in m.Y for s in m.S)
 
             # Min powerflow
-            t_16 = sum(m.sigma_23[l, y, s, t] * m.POWERFLOW_MIN[l] for l in m.L for y in m.Y for s in m.S for t in m.T)
+            t_24 = sum(m.sigma_27[l, y, s, t] * m.POWERFLOW_MIN[l] for l in m.L for y in m.Y for s in m.S for t in m.T)
 
             # Max powerflow
-            t_17 = sum(- m.sigma_24[l, y, s, t] * m.POWERFLOW_MAX[l] for l in m.L for y in m.Y for s in m.S for t in m.T)
+            t_25 = sum(- m.sigma_28[l, y, s, t] * m.POWERFLOW_MAX[l] for l in m.L for y in m.Y for s in m.S for t in m.T)
 
             # Demand
-            t_18 = sum(m.lamb[z, y, s, t] * m.DEMAND[z, y, s, t] for z in m.Z for y in m.Y for s in m.S for t in m.T)
+            t_26 = sum(m.lamb[z, y, s, t] * m.DEMAND[z, y, s, t] for z in m.Z for y in m.Y for s in m.S for t in m.T)
 
             # Initial storage unit energy
-            t_19 = sum(m.zeta_1[g, y, s, m.T.first()] * m.Q0[g, y, s] for g in m.G_STORAGE for y in m.Y for s in m.S)
+            t_27 = sum(m.zeta_1[g, y, s, m.T.first()] * m.Q0[g, y, s] for g in m.G_STORAGE for y in m.Y for s in m.S)
 
             # Initial generator power output
-            t_20 = sum(- m.zeta_2[g, y, s, m.T.first()] * (m.P0[g, y, s] / 2) for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S)
+            t_28 = sum(- m.zeta_2[g, y, s, m.T.first()] * (m.P0[g, y, s] / 2) for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S)
 
             # Initial storage unit power output
-            t_21 = sum(- m.zeta_3[g, y, s, m.T.first()] * (m.P_OUT_0[g, y, s] / 2) for g in m.G_STORAGE for y in m.Y for s in m.S)
+            t_29 = sum(- m.zeta_3[g, y, s, m.T.first()] * (m.P_OUT_0[g, y, s] / 2) for g in m.G_STORAGE for y in m.Y for s in m.S)
 
             # Initial lost-load power
-            t_22 = sum(- m.zeta_4[z, y, s, m.T.first()] * (m.P_V0[z, y, s] / 2) for z in m.Z for y in m.Y for s in m.S)
+            t_30 = sum(- m.zeta_4[z, y, s, m.T.first()] * (m.P_V0[z, y, s] / 2) for z in m.Z for y in m.Y for s in m.S)
 
-            return t_1 + t_2 + t_3 + t_4 + t_5 + t_6 + t_7 + t_8 + t_9 + t_10 + t_11 + t_12 + t_13 + t_14 + t_15 + t_16 + t_17 + t_18 + t_19 + t_20 + t_21 + t_22
+            # Fixed operations and maintenance cost - existing generators
+            t_31 = sum(m.DELTA[y] * m.C_FOM[g] * m.P_MAX[g] * (1 - m.F[g, y]) for g in m.G_E for y in m.Y)
+
+            # Fixed operations and maintenance cost - existing generators - end of horizon cost
+            t_32 = (m.DELTA[m.Y.last()] / m.INTEREST_RATE) * sum(m.C_FOM[g] * m.P_MAX[g] * (1 - m.F[g, m.Y.last()]) for g in m.G_E)
+
+            return (t_1 + t_2 + t_3 + t_4 + t_5 + t_6 + t_7 + t_8 + t_9 + t_10 + t_11 + t_12 + t_13 + t_14 + t_15
+                    + t_16 + t_17 + t_18 + t_19 + t_20 + t_21 + t_22 + t_23 + t_24 + t_25 + t_26 + t_27 + t_28
+                    + t_29 + t_30 + t_31 + t_32)
 
         # Dual objective expression
         m.DUAL_OBJECTIVE_EXPRESSION = Expression(rule=dual_objective_expression_rule)
@@ -907,13 +960,13 @@ class Dual:
 
             if t != m.T.last():
                 return (- m.sigma_1[g, y, s, t] + m.sigma_2[g, y, s, t] + m.sigma_20[g, y, s, t]
-                        - m.sigma_20[g, y, s, t+1] - m.sigma_21[g, y, s, t] + m.sigma_21[g, y, s, t+1]
+                        - m.sigma_20[g, y, s, t+1] - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
                         - m.lamb[self.k(m, g), y, s, t]
                         - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
                         == 0)
             else:
                 return (- m.sigma_1[g, y, s, t] + m.sigma_2[g, y, s, t] + m.sigma_20[g, y, s, t]
-                        - m.sigma_21[g, y, s, t]
+                        - m.sigma_23[g, y, s, t]
                         - m.lamb[self.k(m, g), y, s, t]
                         - (m.zeta_2[g, y, s, t] / 2)
                         == 0)
@@ -926,13 +979,13 @@ class Dual:
 
             if t != m.T.last():
                 return (- m.sigma_1[g, y, s, t] + m.sigma_3[g, y, s, t] + m.sigma_20[g, y, s, t]
-                        - m.sigma_20[g, y, s, t+1] - m.sigma_21[g, y, s, t] + m.sigma_21[g, y, s, t+1]
+                        - m.sigma_20[g, y, s, t+1] - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
                         - m.lamb[self.k(m, g), y, s, t]
                         - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
                         == 0)
             else:
                 return (- m.sigma_1[g, y, s, t] + m.sigma_3[g, y, s, t] + m.sigma_20[g, y, s, t]
-                        - m.sigma_21[g, y, s, t]
+                        - m.sigma_23[g, y, s, t]
                         - m.lamb[self.k(m, g), y, s, t]
                         - (m.zeta_2[g, y, s, t] / 2)
                         == 0)
@@ -945,13 +998,13 @@ class Dual:
 
             if t != m.T.last():
                 return (- m.sigma_1[g, y, s, t] + m.sigma_4[g, y, s, t] + m.sigma_20[g, y, s, t]
-                        - m.sigma_20[g, y, s, t+1] - m.sigma_21[g, y, s, t] + m.sigma_21[g, y, s, t+1]
+                        - m.sigma_20[g, y, s, t+1] - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
                         - m.lamb[self.k(m, g), y, s, t]
                         - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
                         == 0)
             else:
                 return (- m.sigma_1[g, y, s, t] + m.sigma_4[g, y, s, t] + m.sigma_20[g, y, s, t]
-                        - m.sigma_21[g, y, s, t]
+                        - m.sigma_23[g, y, s, t]
                         - m.lamb[self.k(m, g), y, s, t]
                         - (m.zeta_2[g, y, s, t] / 2)
                         == 0)
@@ -964,13 +1017,13 @@ class Dual:
 
             if t != m.T.last():
                 return (- m.sigma_1[g, y, s, t] + m.sigma_5[g, y, s, t] + m.sigma_20[g, y, s, t]
-                        - m.sigma_20[g, y, s, t+1] - m.sigma_21[g, y, s, t] + m.sigma_21[g, y, s, t+1]
+                        - m.sigma_20[g, y, s, t+1] - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
                         - m.lamb[self.k(m, g), y, s, t]
                         - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
                         == 0)
             else:
                 return (- m.sigma_1[g, y, s, t] + m.sigma_5[g, y, s, t] + m.sigma_20[g, y, s, t]
-                        - m.sigma_21[g, y, s, t]
+                        - m.sigma_23[g, y, s, t]
                         - m.lamb[self.k(m, g), y, s, t]
                         - (m.zeta_2[g, y, s, t] / 2)
                         == 0)
@@ -983,14 +1036,14 @@ class Dual:
 
             if t != m.T.last():
                 return (- m.sigma_1[g, y, s, t] + m.sigma_6[g, y, s, t] + m.sigma_20[g, y, s, t]
-                        - m.sigma_20[g, y, s, t+1] - m.sigma_21[g, y, s, t] + m.sigma_21[g, y, s, t+1]
+                        - m.sigma_20[g, y, s, t+1] - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
                         - m.lamb[self.k(m, g), y, s, t]
                         - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
                         == 0)
 
             else:
                 return (- m.sigma_1[g, y, s, t] + m.sigma_6[g, y, s, t] + m.sigma_20[g, y, s, t]
-                        - m.sigma_21[g, y, s, t]
+                        - m.sigma_23[g, y, s, t]
                         - m.lamb[self.k(m, g), y, s, t]
                         - (m.zeta_2[g, y, s, t] / 2)
                         == 0)
@@ -1003,14 +1056,14 @@ class Dual:
 
             if t != m.T.last():
                 return (- m.sigma_1[g, y, s, t] + m.sigma_7[g, y, s, t] + m.sigma_20[g, y, s, t]
-                        - m.sigma_20[g, y, s, t+1] - m.sigma_21[g, y, s, t] + m.sigma_21[g, y, s, t+1]
+                        - m.sigma_20[g, y, s, t+1] - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
                         - m.lamb[self.k(m, g), y, s, t]
                         - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
                         == 0)
 
             else:
                 return (- m.sigma_1[g, y, s, t] + m.sigma_7[g, y, s, t] + m.sigma_20[g, y, s, t]
-                        - m.sigma_21[g, y, s, t]
+                        - m.sigma_23[g, y, s, t]
                         - m.lamb[self.k(m, g), y, s, t]
                         - (m.zeta_2[g, y, s, t] / 2)
                         == 0)
@@ -1023,13 +1076,13 @@ class Dual:
 
             if t != m.T.last():
                 return (- m.sigma_1[g, y, s, t] + m.sigma_8[g, y, s, t] + m.sigma_20[g, y, s, t]
-                        - m.sigma_20[g, y, s, t+1] - m.sigma_21[g, y, s, t] + m.sigma_21[g, y, s, t+1]
+                        - m.sigma_20[g, y, s, t+1] - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
                         - m.lamb[self.k(m, g), y, s, t]
                         - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
                         == 0)
             else:
                 return (- m.sigma_1[g, y, s, t] + m.sigma_8[g, y, s, t] + m.sigma_20[g, y, s, t]
-                        - m.sigma_21[g, y, s, t]
+                        - m.sigma_23[g, y, s, t]
                         - m.lamb[self.k(m, g), y, s, t]
                         - (m.zeta_2[g, y, s, t] / 2)
                         == 0)
@@ -1040,7 +1093,19 @@ class Dual:
         def charging_power_existing_storage_rule(_m, g, y, s, t):
             """Charging power for existing storage units"""
 
-            return - m.sigma_9[g, y, s, t] + m.sigma_11[g, y, s, t] + m.lamb[self.k(m, g), y, s, t] + (m.ETA[g] * m.zeta_1[g, y, s, t]) == 0
+            if t != m.T.last():
+                return (- m.sigma_9[g, y, s, t] + m.sigma_11[g, y, s, t] + m.lamb[self.k(m, g), y, s, t]
+                        + (m.ETA[g] * m.zeta_1[g, y, s, t])
+                        + m.sigma_21[g, y, s, t] - m.sigma_21[g, y, s, t + 1]
+                        - m.sigma_24[g, y, s, t] + m.sigma_24[g, y, s, t + 1]
+                        == 0)
+
+            else:
+                return (- m.sigma_9[g, y, s, t] + m.sigma_11[g, y, s, t] + m.lamb[self.k(m, g), y, s, t]
+                        + (m.ETA[g] * m.zeta_1[g, y, s, t])
+                        + m.sigma_21[g, y, s, t]
+                        - m.sigma_24[g, y, s, t]
+                        == 0)
 
         # Existing storage unit charging power
         m.CHARGING_POWER_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T, rule=charging_power_existing_storage_rule)
@@ -1048,7 +1113,19 @@ class Dual:
         def charging_power_candidate_storage_rule(_m, g, y, s, t):
             """Charging power for candidate storage units"""
 
-            return - m.sigma_9[g, y, s, t] + m.sigma_12[g, y, s, t] + m.lamb[self.k(m, g), y, s, t] + (m.ETA[g] * m.zeta_1[g, y, s, t]) == 0
+            if t != m.T.last():
+                return (- m.sigma_9[g, y, s, t] + m.sigma_12[g, y, s, t] + m.lamb[self.k(m, g), y, s, t]
+                        + (m.ETA[g] * m.zeta_1[g, y, s, t])
+                        + m.sigma_21[g, y, s, t] - m.sigma_21[g, y, s, t + 1]
+                        - m.sigma_24[g, y, s, t] + m.sigma_24[g, y, s, t + 1]
+                        == 0)
+
+            else:
+                return (- m.sigma_9[g, y, s, t] + m.sigma_12[g, y, s, t] + m.lamb[self.k(m, g), y, s, t]
+                        + (m.ETA[g] * m.zeta_1[g, y, s, t])
+                        + m.sigma_21[g, y, s, t]
+                        - m.sigma_24[g, y, s, t]
+                        == 0)
 
         # Existing storage unit charging power
         m.CHARGING_POWER_CANDIDATE_STORAGE = Constraint(m.G_C_STORAGE, m.Y, m.S, m.T, rule=charging_power_candidate_storage_rule)
@@ -1060,11 +1137,15 @@ class Dual:
                 return (- m.sigma_10[g, y, s, t] + m.sigma_13[g, y, s, t] - m.lamb[self.k(m, g), y, s, t]
                         - ((1 / m.ETA[g]) * m.zeta_1[g, y, s, t])
                         - ((m.zeta_3[g, y, s, t] + m.zeta_3[g, y, s, t+1]) / 2)
+                        + m.sigma_22[g, y, s, t] - m.sigma_22[g, y, s, t + 1]
+                        - m.sigma_25[g, y, s, t] + m.sigma_25[g, y, s, t + 1]
                         == 0)
             else:
                 return (- m.sigma_10[g, y, s, t] + m.sigma_13[g, y, s, t] - m.lamb[self.k(m, g), y, s, t]
                         - ((1 / m.ETA[g]) * m.zeta_1[g, y, s, t])
                         - (m.zeta_3[g, y, s, t] / 2)
+                        + m.sigma_22[g, y, s, t]
+                        - m.sigma_25[g, y, s, t]
                         == 0)
 
         # Existing storage unit discharging power
@@ -1076,12 +1157,16 @@ class Dual:
             if t != m.T.last():
                 return (- m.sigma_10[g, y, s, t] + m.sigma_14[g, y, s, t] - m.lamb[self.k(m, g), y, s, t]
                         - ((1 / m.ETA[g]) * m.zeta_1[g, y, s, t])
-                        - ((m.zeta_3[g, y, s, t] + m.zeta_3[g, y, s, t+1]) / 2)
+                        - ((m.zeta_3[g, y, s, t] + m.zeta_3[g, y, s, t + 1]) / 2)
+                        + m.sigma_22[g, y, s, t] - m.sigma_22[g, y, s, t + 1]
+                        - m.sigma_25[g, y, s, t] + m.sigma_25[g, y, s, t + 1]
                         == 0)
             else:
                 return (- m.sigma_10[g, y, s, t] + m.sigma_14[g, y, s, t] - m.lamb[self.k(m, g), y, s, t]
                         - ((1 / m.ETA[g]) * m.zeta_1[g, y, s, t])
                         - (m.zeta_3[g, y, s, t] / 2)
+                        + m.sigma_22[g, y, s, t]
+                        - m.sigma_25[g, y, s, t]
                         == 0)
 
         # Candidate storage unit discharging power
@@ -1091,7 +1176,7 @@ class Dual:
             """Storage unit energy"""
 
             if t != m.T.last():
-                return - m.sigma_15[g, y, s, t] + m.sigma_16[g, y, s, t] - m.zeta_1[g, y, s, t] + m.zeta_1[g, y, s, t+1] == 0
+                return - m.sigma_15[g, y, s, t] + m.sigma_16[g, y, s, t] - m.zeta_1[g, y, s, t] + m.zeta_1[g, y, s, t + 1] == 0
 
             else:
                 return - m.sigma_15[g, y, s, t] + m.sigma_16[g, y, s, t] - m.zeta_1[g, y, s, t] - m.sigma_18[g, y, s] + m.sigma_19[g, y, s] == 0
@@ -1103,7 +1188,7 @@ class Dual:
             """Storage unit energy"""
 
             if t != m.T.last():
-                return - m.sigma_15[g, y, s, t] + m.sigma_17[g, y, s, t] - m.zeta_1[g, y, s, t] + m.zeta_1[g, y, s, t+1] == 0
+                return - m.sigma_15[g, y, s, t] + m.sigma_17[g, y, s, t] - m.zeta_1[g, y, s, t] + m.zeta_1[g, y, s, t + 1] == 0
 
             else:
                 return - m.sigma_15[g, y, s, t] + m.sigma_17[g, y, s, t] - m.zeta_1[g, y, s, t] - m.sigma_18[g, y, s] + m.sigma_19[g, y, s] == 0
@@ -1148,9 +1233,9 @@ class Dual:
             """Candidate wind generator energy output"""
 
             if y != m.Y.last():
-                return (m.DELTA[y] * m.RHO[y, s] * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y]))) + m.zeta_2[g, y, s, t] == 0
+                return (m.DELTA[y] * m.RHO[y, s] * (m.C_MC[g, y] - (m.baseline[y] * m.permit_price[y]))) + m.zeta_2[g, y, s, t] == 0
             else:
-                return (m.DELTA[y] * m.RHO[y, s] * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y]))) + m.zeta_2[g, y, s, t] == 0
+                return (m.DELTA[y] * m.RHO[y, s] * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] - (m.baseline[y] * m.permit_price[y]))) + m.zeta_2[g, y, s, t] == 0
 
         # Candidate wind generator energy output
         m.ENERGY_CANDIDATE_WIND = Constraint(m.G_C_WIND, m.Y, m.S, m.T, rule=energy_output_candidate_wind_rule)
@@ -1170,9 +1255,9 @@ class Dual:
             """Candidate solar generator energy output"""
 
             if y != m.Y.last():
-                return (m.DELTA[y] * m.RHO[y, s] * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y]))) + m.zeta_2[g, y, s, t] == 0
+                return (m.DELTA[y] * m.RHO[y, s] * (m.C_MC[g, y] - (m.baseline[y] * m.permit_price[y]))) + m.zeta_2[g, y, s, t] == 0
             else:
-                return (m.DELTA[y] * m.RHO[y, s] * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y]))) + m.zeta_2[g, y, s, t] == 0
+                return (m.DELTA[y] * m.RHO[y, s] * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] - (m.baseline[y] * m.permit_price[y]))) + m.zeta_2[g, y, s, t] == 0
 
         # Candidate wind generator energy output
         m.ENERGY_CANDIDATE_SOLAR = Constraint(m.G_C_SOLAR, m.Y, m.S, m.T, rule=energy_output_candidate_solar_rule)
@@ -1213,7 +1298,7 @@ class Dual:
         def load_shedding_power_rule(_m, z, y, s, t):
             """Load shedding power"""
 
-            return - m.sigma_22[z, y, s, t] - m.lamb[z, y, s, t] == 0
+            return - m.sigma_26[z, y, s, t] - m.lamb[z, y, s, t] == 0
 
         # Load shedding power
         m.LOAD_SHEDDING_POWER = Constraint(m.Z, m.Y, m.S, m.T, rule=load_shedding_power_rule)
@@ -1232,7 +1317,7 @@ class Dual:
         def powerflow_rule(_m, l, y, s, t):
             """Powerflow between adjacent NEM zones"""
 
-            return (- m.sigma_23[l, y, s, t] + m.sigma_24[l, y, s, t]
+            return (- m.sigma_27[l, y, s, t] + m.sigma_28[l, y, s, t]
                     + (m.INCIDENCE_MATRIX[l, self.g(l)] * m.lamb[self.g(l), y, s, t])
                     + (m.INCIDENCE_MATRIX[l, self.h(l)] * m.lamb[self.h(l), y, s, t])
                     == 0)
@@ -1242,7 +1327,8 @@ class Dual:
 
         return m
 
-    def define_objective(self, m):
+    @staticmethod
+    def define_objective(m):
         """Define dual problem objective"""
 
         # Dual objective function
@@ -1288,12 +1374,10 @@ class Dual:
 
 
 if __name__ == '__main__':
-    primal = Primal()
-    model = primal.construct_model()
-    model, status = primal.solve_model(model)
+    # primal = Primal()
+    # model = primal.construct_model()
+    # model, status = primal.solve_model(model)
 
-    # dual = Dual()
-    # model = dual.construct_model()
-    #
-    # model, status = dual.solve_model(model)
-
+    dual = Dual()
+    model = dual.construct_model()
+    model, status = dual.solve_model(model)
