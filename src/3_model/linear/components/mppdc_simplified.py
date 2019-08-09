@@ -171,7 +171,8 @@ class Primal:
         def end_of_horizon_cost_rule(_m):
             """Operating cost beyond model horizon"""
 
-            return (m.DELTA[m.Y.last()] / m.INTEREST_RATE) * (m.OP[m.Y.last()] + m.FOM[m.Y.last()])
+            # return (m.DELTA[m.Y.last()] / m.INTEREST_RATE) * (m.OP[m.Y.last()] + m.FOM[m.Y.last()])
+            return (m.DELTA[m.Y.last()] / m.INTEREST_RATE) * m.FOM[m.Y.last()]
 
         # End of horizon cost
         m.EOH = Expression(rule=end_of_horizon_cost_rule)
@@ -301,7 +302,7 @@ class Primal:
 
             return m.p[g, y, s, t] - (m.Q_S[g, y, s, t] * m.a[g, y]) <= 0
 
-        # Max power from candidate wind generators
+        # Max power from candidate solar generators
         m.MAX_POWER_CANDIDATE_SOLAR = Constraint(m.G_C_SOLAR, m.Y, m.S, m.T, rule=max_power_candidate_solar_rule)
 
         def max_power_hydro_rule(_m, g, y, s, t):
@@ -915,10 +916,10 @@ class Dual:
         def total_capacity_thermal_rule(_m, g, y):
             """Total thermal generator installed capacity"""
 
-            if y != m.Y.last():
-                return m.nu_1[g, y] + (m.DELTA[y] * m.C_FOM[g]) + sum(- m.sigma_3[g, y, s, t] for s in m.S for t in m.T) == 0
-            else:
-                return m.nu_1[g, y] + (m.DELTA[y] * (1 + (1 / m.INTEREST_RATE)) * m.C_FOM[g]) + sum(- m.sigma_3[g, y, s, t] for s in m.S for t in m.T) == 0
+            # if y != m.Y.last():
+            return m.nu_1[g, y] + (m.DELTA[y] * m.C_FOM[g]) + sum(- m.sigma_3[g, y, s, t] for s in m.S for t in m.T) == 0
+            # else:
+            #     return m.nu_1[g, y] + (m.DELTA[y] * (1 + (1 / m.INTEREST_RATE)) * m.C_FOM[g]) + sum(- m.sigma_3[g, y, s, t] for s in m.S for t in m.T) == 0
 
         # Total installed capacity
         m.TOTAL_THERMAL_CAPACITY = Constraint(m.G_C_THERM, m.Y, rule=total_capacity_thermal_rule)
@@ -1521,15 +1522,14 @@ def check_solution(m_p, m_d, elements):
 
     # Absolute difference
     if elements['primal_var']:
-        difference = [abs(abs(p[i].value) - abs(m_d.dual[d[i]])) for i in common_keys]
+        difference = {i: {'primal': p[i].value, 'dual': m_d.dual[d[i]], 'abs_diff': abs(abs(p[i].value) - abs(m_d.dual[d[i]]))} for i in common_keys}
     else:
-        difference = [abs(abs(m_p.dual[p[i]]) - abs(d[i].value)) for i in common_keys]
+        difference = {i: {'primal': m_p.dual[p[i]], 'dual': d[i].value, 'abs_diff': abs(abs(m_p.dual[p[i]]) - abs(d[i].value))} for i in common_keys}
 
     # Max difference over all keys
-    max_difference = max(difference)
+    max_difference = max([v['abs_diff'] for _, v in difference.items()])
 
-    print(f"""Primal element: {elements['primal']}, Dual element: {elements['dual']}, Max difference: {max_difference}, 
-    keys: {len(common_keys)}""")
+    print(f"""Primal element: {elements['primal']}, Dual element: {elements['dual']}, Max difference: {max_difference}, keys: {len(common_keys)}""")
 
     return difference, max_difference
 
@@ -1550,7 +1550,22 @@ if __name__ == '__main__':
     try:
         check = [{'primal': 'POWER_BALANCE', 'dual': 'lamb', 'primal_var': False},
                  {'primal': 'p', 'dual': 'POWER_OUTPUT_EXISTING_THERMAL', 'primal_var': True},
+                 {'primal': 'p_V', 'dual': 'LOAD_SHEDDING_POWER', 'primal_var': True},
+                 {'primal': 'NON_NEGATIVE_CAPACITY', 'dual': 'mu_1', 'primal_var': False},
+                 {'primal': 'SOLAR_BUILD_LIMIT_CONS', 'dual': 'mu_2', 'primal_var': False},
+                 {'primal': 'WIND_BUILD_LIMIT_CONS', 'dual': 'mu_3', 'primal_var': False},
+                 {'primal': 'CUMULATIVE_CAPACITY', 'dual': 'nu_1', 'primal_var': False},
+                 {'primal': 'MIN_POWER_CONS', 'dual': 'sigma_1', 'primal_var': False},
+                 {'primal': 'MAX_POWER_EXISTING_THERMAL', 'dual': 'sigma_2', 'primal_var': False},
+                 {'primal': 'MAX_POWER_CANDIDATE_THERMAL', 'dual': 'sigma_3', 'primal_var': False},
+                 {'primal': 'MAX_POWER_EXISTING_WIND', 'dual': 'sigma_4', 'primal_var': False},
+                 {'primal': 'MAX_POWER_CANDIDATE_WIND', 'dual': 'sigma_5', 'primal_var': False},
+                 {'primal': 'MAX_POWER_EXISTING_SOLAR', 'dual': 'sigma_6', 'primal_var': False},
+                 {'primal': 'MAX_POWER_CANDIDATE_SOLAR', 'dual': 'sigma_7', 'primal_var': False},
                  {'primal': 'MAX_POWER_EXISTING_HYDRO', 'dual': 'sigma_8', 'primal_var': False},
+                 {'primal': 'NON_NEGATIVE_LOST_LOAD', 'dual': 'sigma_26', 'primal_var': False},
+                 {'primal': 'MIN_FLOW', 'dual': 'sigma_27', 'primal_var': False},
+                 {'primal': 'MAX_FLOW', 'dual': 'sigma_28', 'primal_var': False},
                  ]
 
         for c in check:
@@ -1562,3 +1577,6 @@ if __name__ == '__main__':
     # diff = {i: (model_primal.dual[model_primal.POWER_BALANCE[i]], model_dual.lamb[i].value) for i in
     #      model_primal.POWER_BALANCE.keys() if i[1] == 2016 and (
     #          abs(abs(model_primal.dual[model_primal.POWER_BALANCE[i]]) - abs(model_dual.lamb[i].value))) > 0.1}
+
+    # prim_d = {i: model_primal.dual[model_primal.MIN_POWER_CONS[i]] for i in model_primal.MIN_POWER_CONS.keys() if abs(model_primal.dual[model_primal.MIN_POWER_CONS[i]]) > 0}
+    # dual_v = {i: model_dual.sigma_1[i].value for i in model_dual.sigma_1.keys()}
