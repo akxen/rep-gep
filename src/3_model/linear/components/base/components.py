@@ -1,5 +1,7 @@
 """Model components common to both subproblem and master problem"""
 
+import random
+
 from pyomo.environ import *
 
 from data import ModelData
@@ -84,10 +86,10 @@ class CommonComponents:
         m.G = m.G_E.union(m.G_C)
 
         # All years in model horizon
-        m.Y = RangeSet(2016, 2017)
+        m.Y = RangeSet(2016, 2018)
 
         # Operating scenarios for each year
-        m.S = RangeSet(1, 2)
+        m.S = RangeSet(1, 10)
 
         # Operating scenario hour
         m.T = RangeSet(1, 24, ordered=True)
@@ -554,9 +556,10 @@ class CommonComponents:
 
             assert marginal_cost >= 0, 'Cannot have negative marginal cost'
 
-            return float(marginal_cost)
+            return float(marginal_cost + random.uniform(0, 2))
 
         # Marginal costs for all generators and time periods
+        random.seed(10)
         m.C_MC = Param(m.G, m.Y, rule=marginal_cost_rule)
 
         def emissions_intensity_rule(_m, g):

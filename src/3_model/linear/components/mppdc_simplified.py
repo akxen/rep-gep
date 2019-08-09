@@ -1488,6 +1488,42 @@ class MPPDCModel:
         return m, solve_status
 
 
+def check_solution(m_p, m_d, elements):
+    """Check solution
+
+    Parameters
+    ----------
+    m_p : pyomo model
+        Primal model
+
+    m_d : pyomo model
+        Dual model
+
+    elements : dict
+        primal and dual components to check
+    """
+
+    # Components
+    p, d = m_p.__getattribute__(elements['primal']), m_d.__getattribute__(elements['dual'])
+
+    # Common keys
+    common_keys = set(p.keys()).intersection(set(d.keys()))
+
+    # Absolute difference
+    if elements['primal_var']:
+        difference = [abs(abs(p[i].value) - abs(m_d.dual[d[i]])) for i in common_keys]
+    else:
+        difference = [abs(abs(m_p.dual[p[i]]) - abs(d[i].value)) for i in common_keys]
+
+    # Max difference over all keys
+    max_difference = max(difference)
+
+    print(f"""Primal element: {elements['primal']}, Dual element: {elements['dual']}, Max difference: {max_difference}, 
+    keys: {len(common_keys)}""")
+
+    return difference, max_difference
+
+
 if __name__ == '__main__':
     primal = Primal()
     model_primal = primal.construct_model()
@@ -1500,3 +1536,13 @@ if __name__ == '__main__':
     mppdc = MPPDCModel()
     model_mppdc = mppdc.construct_model()
     model_mppdc, status_mppdc = mppdc.solve_model(model_mppdc)
+
+    try:
+        check = [{'primal': 'POWER_BALANCE', 'dual': 'lamb', 'primal_var': False},
+                 {'primal': 'p', 'dual': 'POWER_OUTPUT_EXISTING_THERMAL', 'primal_var': True}]
+
+        for c in check:
+            diff, max_diff = check_solution(model_primal, model_dual, c)
+
+    except:
+        print('Failed')
