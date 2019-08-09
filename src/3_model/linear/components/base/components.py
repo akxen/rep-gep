@@ -80,7 +80,7 @@ class CommonComponents:
         m.G_E = m.G_E_THERM.union(m.G_E_WIND).union(m.G_E_SOLAR).union(m.G_E_HYDRO)
 
         # All candidate generators
-        m.G_C = m.G_C_THERM.union(m.G_C_WIND).union(m.G_C_SOLAR).union(m.G_C_STORAGE)
+        m.G_C = m.G_C_THERM.union(m.G_C_WIND).union(m.G_C_SOLAR) # .union(m.G_C_STORAGE)
 
         # All generators
         m.G = m.G_E.union(m.G_C)
@@ -607,17 +607,24 @@ class CommonComponents:
             """
 
             if g in m.G_C_STORAGE:
-                return float(self.data.battery_build_costs_dict[y][g] * 1000) + float(random.uniform(0, 50))
+                return float(self.data.battery_build_costs_dict[y][g] * 1000) + float(random.uniform(0, 50000))
 
             else:
-                return float(self.data.candidate_units_dict[('BUILD_COST', y)][g] * 1000) + float(random.uniform(0, 50))
+                return float(self.data.candidate_units_dict[('BUILD_COST', y)][g] * 1000) + float(random.uniform(0, 50000))
 
         # Candidate unit build cost
         random.seed(10)
         m.I_C = Param(m.G_C, m.Y, rule=candidate_unit_build_costs_rule)
 
         # Lost load value [$/MWh]
-        m.C_L = Param(initialize=float(1e5))
+        def lost_load_cost_rule(_m, z):
+            """Return cost for lost-load power in each NEM zone"""
+
+            return float(1e5 + random.uniform(0, 30))
+
+        # Lost load cost for each NEM zone
+        random.seed(10)
+        m.C_L = Param(m.Z, rule=lost_load_cost_rule)
 
         def discount_rate_rule(_m, y):
             """Discount factor"""
