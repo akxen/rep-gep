@@ -527,19 +527,28 @@ Continuous capacity sizing for candidate generators:
 	- \vInstalledCapacity[\iGenerator,\iYear] \leq 0 \quad (\dNonNegativeCandidateCapacity) \quad \forall \iGenerator \in \sGeneratorsCandidate \quad \forall \iYear \in \sYears
 \end{equation}
 
-Introduce auxiliary variables to denote the total capacity installed at each point in time:
-\begin{equation}
-	\vInstalledCapacityTotal - \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias] = 0 \quad (\dTotalInstallCapacity) \quad \forall \iGenerator \in \sGeneratorsCandidate \quad \forall \iYear \in \sYears
-\end{equation}
+%Introduce auxiliary variables to denote the total capacity installed at each point in time:
+%\begin{equation}
+%	\vInstalledCapacityTotal - \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias] = 0 \quad (\dTotalInstallCapacity) \quad \forall \iGenerator \in \sGeneratorsCandidate \quad \forall \iYear \in \sYears
+%\end{equation}
 
 Build limits for different technologies in each zone:
-\begin{equation}
-	\sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar_{\iZone}} \vInstalledCapacityTotal - \cBuildLimitSolar \leq 0 \quad (\dSolarBuildLimit) \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears
-\end{equation}
 
 \begin{equation}
-	\sum\limits_{\iGenerator \in \sGeneratorsCandidateWind_{\iZone}} \vInstalledCapacityTotal - \cBuildLimitWind \leq 0 \quad (\dWindBuildLimit) \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears 
+\sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar_{\iZone}} \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias] - \cBuildLimitSolar \leq 0 \quad (\dSolarBuildLimit) \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears
 \end{equation}
+
+%\begin{equation}
+%	\sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar_{\iZone}} \vInstalledCapacityTotal - \cBuildLimitSolar \leq 0 \quad (\dSolarBuildLimit) \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears
+%\end{equation}
+
+\begin{equation}
+\sum\limits_{\iGenerator \in \sGeneratorsCandidateWind_{\iZone}} \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias] - \cBuildLimitWind \leq 0 \quad (\dWindBuildLimit) \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears 
+\end{equation}
+
+%\begin{equation}
+%	\sum\limits_{\iGenerator \in \sGeneratorsCandidateWind_{\iZone}} \vInstalledCapacityTotal - \cBuildLimitWind \leq 0 \quad (\dWindBuildLimit) \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears 
+%\end{equation}
 
 %\begin{equation}
 %	\sum\limits_{\iGenerator \in \sStorageCandidate_{\iZone}} \vInstalledCapacityTotal - \cBuildLimitStorage \leq 0  \quad (\dStorageBuildLimit) \quad \forall \iZone \in \sZones \quad \forall \iYear \in \sYears
@@ -557,7 +566,7 @@ Total thermal power output:
 \end{equation}
 
 \begin{equation}
-	\vPower - \vInstalledCapacityTotal \leq 0 \quad (\dMaxPowerOutputCandidateThermal) \quad \forall \iGenerator \in \sGeneratorsCandidateThermal \sScenarioSets
+	\vPower - \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias] \leq 0 \quad (\dMaxPowerOutputCandidateThermal) \quad \forall \iGenerator \in \sGeneratorsCandidateThermal \sScenarioSets
 \end{equation}
 
 Total power output from wind generators:
@@ -566,7 +575,7 @@ Total power output from wind generators:
 \end{equation}
 
 \begin{equation}
-	\vPower - \cCapacityFactorWind \vInstalledCapacityTotal \leq 0 \quad (\dMaxPowerOutputWindCandidate) \quad \forall \iGenerator \in \sGeneratorsCandidateWind \sScenarioSets
+	\vPower - \cCapacityFactorWind \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias] \leq 0 \quad (\dMaxPowerOutputWindCandidate) \quad \forall \iGenerator \in \sGeneratorsCandidateWind \sScenarioSets
 \end{equation}
 
 Total power output - solar units:
@@ -575,7 +584,7 @@ Total power output - solar units:
 \end{equation}
 
 \begin{equation}
-	\vPower - \cCapacityFactorSolar \vInstalledCapacityTotal \leq 0 \quad (\dMaxPowerOutputSolarCandidate) \quad \forall \iGenerator \in \sGeneratorsCandidateSolar \sScenarioSets
+	\vPower - \cCapacityFactorSolar \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias] \leq 0 \quad (\dMaxPowerOutputSolarCandidate) \quad \forall \iGenerator \in \sGeneratorsCandidateSolar \sScenarioSets
 \end{equation}
 
 Total power output - hydro units (may need to adjust notation for max hydro output):
@@ -748,7 +757,9 @@ Power balance for each zone:
 Where:
 
 \begin{alignat}{3}
-	& && g(\bm{u}, \bm{v}, \overline{\bm{x}}) = \sum\limits_{\iYear \in \sYears} \cDiscountRate  &&  \left[\frac{1}{\cInterestRate} \sum\limits_{g\in \sGeneratorsCandidate} \cAmortisationRate  \cCandidateInvestmentCost \vInstalledCapacity + \sum\limits_{\iGenerator \in \sGeneratorsCandidate} \cFixedOperationsMaintenanceCostGenerator \vInstalledCapacityTotal + \sum\limits_{\iGenerator \in \sGeneratorsExisting} \cFixedOperationsMaintenanceCostGenerator \cPowerOutputMax[\iGenerator] \left(1 - \cRetirementIndicator\right) \right. \nonumber\\ 
+	& && g(\bm{u}, \bm{v}, \overline{\bm{x}}) = \sum\limits_{\iYear \in \sYears} \cDiscountRate  &&  \left[\frac{1}{\cInterestRate} \sum\limits_{g\in \sGeneratorsCandidate} \cAmortisationRate  \cCandidateInvestmentCost \vInstalledCapacity + \sum\limits_{\iGenerator \in \sGeneratorsCandidate} \cFixedOperationsMaintenanceCostGenerator \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias] 
+%	+ \sum\limits_{\iGenerator \in \sGeneratorsExisting} \cFixedOperationsMaintenanceCostGenerator \cPowerOutputMax[\iGenerator] \left(1 - \cRetirementIndicator\right) 
+	\right. \nonumber\\ 
 	& && + \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals} && \left[\sum\limits_{\iGenerator \in \sGeneratorsThermal} \left[\cMarginalCost + (\cEmissionsIntensity - \vBaseline)\vPermitPrice\right]\vPower  + \sum\limits_{\iGenerator \in \sGeneratorsHydro}\cMarginalCost \vPower \right. \nonumber\\
 	& && && + \sum\limits_{\iGenerator \in \sGeneratorsExistingWind} \cMarginalCost \vPower + \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \left[\cMarginalCost - \vBaseline \vPermitPrice\right] \vPower \nonumber\\
 	& && && + \sum\limits_{\iGenerator \in \sGeneratorsExistingSolar} \cMarginalCost \vPower + \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \left[\cMarginalCost - \vBaseline\vPermitPrice\right] \vPower\nonumber\\
@@ -759,31 +770,31 @@ Where:
 	& && && + \sum\limits_{\iGenerator \in \sGeneratorsExistingSolar} \cMarginalCost \vPower[\iGenerator,\iYearTerminal,\iScenario,\iInterval] + \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \left[\cMarginalCost - \vBaseline[\iYearTerminal]\vPermitPrice[\iYearTerminal]\right] \vPower[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \nonumber\\
 %%	& && && + \sum\limits_{\iGenerator \in \sStorage} \cMarginalCost \vEnergy[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \nonumber\\
 	& && && \left. + \sum\limits_{\iZone \in \sZones} \cLostLoadCost \vLostLoadPower[\iZone,\iYearTerminal,\iScenario,\iInterval] \right] \nonumber\\
-	& && && \left. + \sum\limits_{\iGenerator \in \sGeneratorsCandidate} \cFixedOperationsMaintenanceCostGenerator \vInstalledCapacityTotal[\iGenerator,\iYearTerminal]\right]\\\nonumber
+	& && && \left. + \sum\limits_{\iGenerator \in \sGeneratorsCandidate} \cFixedOperationsMaintenanceCostGenerator \sum\limits_{\iYearAlias \leq \iYearTerminal} \vInstalledCapacity[\iGenerator,\iYearAlias] \right]\\\nonumber
 %	+ \sum\limits_{\iGenerator \in \sGeneratorsExisting} \cFixedOperationsMaintenanceCostGenerator \cPowerOutputMax[\iGenerator] \left(1 - \cRetirementIndicator[\iGenerator,\iYearTerminal]\right)
 \end{alignat}
 
 \begin{align}
 \begin{split}
 \bm{\mu}^{T}\bm{c}(\bm{u}) = & \sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sGeneratorsCandidate} \dNonNegativeCandidateCapacity \left(-\vInstalledCapacity\right)\\
-& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iZone \in \sZones} \dSolarBuildLimit \left(\sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar_{\iZone}} \vInstalledCapacityTotal - \cBuildLimitSolar\right)\\
-& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iZone \in \sZones} \dWindBuildLimit \left(\sum\limits_{\iGenerator \in \sGeneratorsCandidateWind_{\iZone}} \vInstalledCapacityTotal - \cBuildLimitWind\right)\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iZone \in \sZones} \dSolarBuildLimit \left(\sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar_{\iZone}} \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias]  - \cBuildLimitSolar\right)\\
+& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iZone \in \sZones} \dWindBuildLimit \left(\sum\limits_{\iGenerator \in \sGeneratorsCandidateWind_{\iZone}} \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias] - \cBuildLimitWind\right)\\
 %& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iZone \in \sZones} \dStorageBuildLimit \left(\sum\limits_{\iGenerator \in \sStorageCandidate_{\iZone}} \vInstalledCapacityTotal - \cBuildLimitStorage\right)\\
 \end{split}
 \end{align}
 
-\begin{equation}
-	\bm{\nu}^{T}\bm{d}(\bm{u}) = \sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sGeneratorsCandidate} \dTotalInstallCapacity \left(\vInstalledCapacityTotal - \sum\limits_{\iYearAlias\leq \iYear} \vInstalledCapacity\right)\\
-\end{equation}
+%\begin{equation}
+%	\bm{\nu}^{T}\bm{d}(\bm{u}) = \sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sGeneratorsCandidate} \dTotalInstallCapacity \left(\vInstalledCapacityTotal - \sum\limits_{\iYearAlias\leq \iYear} \vInstalledCapacity\right)\\
+%\end{equation}
 
 \begin{align}
 		\bm{\sigma}^{T}\bm{m}(\bm{u}, \bm{v}, \bm{\overline{x}}) = & \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGenerators \setminus \sStorage} \dMinPowerOutput \left(-\vPower + \cPowerOutputMin\right)\\
 		& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsExistingThermal} \dMaxPowerOutputExistingThermal \left(\vPower - \cPowerOutputMax \left(1 - \cRetirementIndicator\right)\right)\\
-		& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsCandidateThermal} \dMaxPowerOutputCandidateThermal \left(\vPower - \vInstalledCapacityTotal\right)\\
+		& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsCandidateThermal} \dMaxPowerOutputCandidateThermal \left(\vPower - \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias]\right)\\
 		& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsExistingWind} \dMaxPowerOutputWindExisting \left(\vPower - \cCapacityFactorWind \cPowerOutputMax[\iGenerator] \left(1 - \cRetirementIndicator\right) \right)\\
-		& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \dMaxPowerOutputWindCandidate \left(\vPower - \cCapacityFactorWind \vInstalledCapacityTotal\right)\\
+		& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \dMaxPowerOutputWindCandidate \left(\vPower - \cCapacityFactorWind \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias]\right)\\
 		& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsExistingSolar} \dMaxPowerOutputSolarExisting \left(\vPower - \cCapacityFactorSolar \cPowerOutputMax[\iGenerator] \left(1 - \cRetirementIndicator\right)\right)\\
-		& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \dMaxPowerOutputSolarCandidate \left(\vPower - \cCapacityFactorSolar \vInstalledCapacityTotal\right)\\
+		& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \dMaxPowerOutputSolarCandidate \left(\vPower - \cCapacityFactorSolar \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias]\right)\\
 		& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsHydro} \dMaxPowerOutputHydro \left(\vPower - \cPowerOutputHydro \left(1 - \cRetirementIndicator\right) \right)\\
 %		& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sStorage} \dNonNegativeCharging \left(-\vPowerIn\right)\\
 %		& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sStorage} \dNonNegativeDischarging \left(-\vPowerOut\right)\\
@@ -847,32 +858,46 @@ Each primal variable within the Lagrangian is factored out to identify a set of 
 \newcommand{\sumIntervals}{\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals}}
 
 %x_c
-Investment decision:
+Investment decision - candidate thermal:
 \begin{equation}
-	\sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sGeneratorsCandidate} \vInstalledCapacity \left(\frac{\cDiscountRate}{\cInterestRate} \cAmortisationRate \cCandidateInvestmentCost - \dNonNegativeCandidateCapacity + \sum\limits_{\iYearAlias \geq \iYear} -\dTotalInstallCapacity[\iGenerator,\iYearAlias] \right)
+	\sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sGeneratorsCandidateThermal} \vInstalledCapacity \left(\frac{\cDiscountRate}{\cInterestRate} \cAmortisationRate \cCandidateInvestmentCost + \sum\limits_{\iYearAlias \geq \iYear} \cDiscountRate[\iYearAlias] \cFixedOperationsMaintenanceCostGenerator - \dNonNegativeCandidateCapacity + \sum\limits_{\iYearAlias \geq \iYear} \sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals} - \dMaxPowerOutputCandidateThermal[\iGenerator,\iYearAlias,\iScenario,\iInterval] \right)
 \end{equation}
 
-%a
-Total installed capacity - candidate thermal generators:
-\begin{align}
-& \sum\limits_{\iYear \in \sYears \setminus \{\iYearTerminal\}} \sum\limits_{\iGenerator \in \sGeneratorsCandidateThermal} \vInstalledCapacityTotal \left(\dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \dMaxPowerOutputCandidateThermal \right) \nonumber\\
-& + \sum\limits_{\iGenerator \in \sGeneratorsCandidateThermal} \vInstalledCapacityTotal[\iGenerator, \iYearTerminal] \left(\dTotalInstallCapacity[\iGenerator,\iYearTerminal] + \cDiscountRate[\iYearTerminal] \left[1 + \frac{1}{\cInterestRate}\right] \cFixedOperationsMaintenanceCostGenerator[\iGenerator,\iYearTerminal] + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \dMaxPowerOutputCandidateThermal[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \right)\\\nonumber
-%+ \sum\limits_{\iGenerator \in \sGeneratorsCandidateThermal} \vInstalledCapacityTotal[\iGenerator,\iYearTerminal] \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCostGenerator
-\end{align}
+Investment decision - candidate wind:
+\begin{equation}
+\sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \vInstalledCapacity \left(\frac{\cDiscountRate}{\cInterestRate} \cAmortisationRate \cCandidateInvestmentCost + \sum\limits_{\iYearAlias \geq \iYear} \cDiscountRate[\iYearAlias] \cFixedOperationsMaintenanceCostGenerator - \dNonNegativeCandidateCapacity + \sum\limits_{\iYearAlias \geq \iYear} \dWindBuildLimit[k(\iGenerator),\iYearAlias] + \sum\limits_{\iYearAlias \geq \iYear} \sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorWind[\iGenerator,\iYearAlias,\iScenario,\iInterval] \dMaxPowerOutputWindCandidate[\iGenerator,\iYearAlias,\iScenario,\iInterval] \right)
+\end{equation}
 
-Total installed capacity - candidate solar generators:
-\begin{align}
-	& \sum\limits_{\iYear \in \sYears \setminus \{\iYearTerminal\}} \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \vInstalledCapacityTotal \left(\dSolarBuildLimit[k(\iGenerator),\iYear] + \dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorSolar \dMaxPowerOutputSolarCandidate \right) \nonumber\\
-	& + \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \vInstalledCapacityTotal[\iGenerator,\iYearTerminal] \left(\dSolarBuildLimit[k(\iGenerator),\iYearTerminal] + \dTotalInstallCapacity[\iGenerator,\iYearTerminal] + \cDiscountRate[\iYearTerminal] \left[1 + \frac{1}{\cInterestRate}\right] \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorSolar[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \dMaxPowerOutputSolarCandidate[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \right)\\ \nonumber
-%	+ \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \vInstalledCapacityTotal[\iGenerator,\iYearTerminal] \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCostGenerator
-\end{align}
+Investment decision - candidate solar:
+\begin{equation}
+\sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \vInstalledCapacity \left(\frac{\cDiscountRate}{\cInterestRate} \cAmortisationRate \cCandidateInvestmentCost + \sum\limits_{\iYearAlias \geq \iYear} \cDiscountRate[\iYearAlias] \cFixedOperationsMaintenanceCostGenerator - \dNonNegativeCandidateCapacity + \sum\limits_{\iYearAlias \geq \iYear} \dSolarBuildLimit[k(\iGenerator),\iYearAlias] + \sum\limits_{\iYearAlias \geq \iYear} \sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorSolar[\iGenerator,\iYearAlias,\iScenario,\iInterval] \dMaxPowerOutputSolarCandidate[\iGenerator,\iYearAlias,\iScenario,\iInterval] \right)
+\end{equation}
 
-Total installed capacity - candidate wind generators:
-\begin{align}
-& \sum\limits_{\iYear \in \sYears \setminus \{\iYearTerminal\}} \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \vInstalledCapacityTotal \left(\dWindBuildLimit[k(\iGenerator),\iYear] + \dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorWind \dMaxPowerOutputWindCandidate \right) \nonumber\\
-& + \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \vInstalledCapacityTotal[\iGenerator,\iYearTerminal] \left(\dWindBuildLimit[k(\iGenerator),\iYearTerminal] + \dTotalInstallCapacity[\iGenerator,\iYearTerminal,\iScenario,\iInterval] + \cDiscountRate[\iYearTerminal] \left[1 + \frac{1}{\cInterestRate}\right] \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorWind[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \dMaxPowerOutputWindCandidate[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \right)
-%+ \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \vInstalledCapacityTotal[\iGenerator,\iYearTerminal] \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCostGenerator
-\end{align}
+%\begin{equation}
+%\sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sGeneratorsCandidate} \vInstalledCapacity \left(\frac{\cDiscountRate}{\cInterestRate} \cAmortisationRate \cCandidateInvestmentCost - \dNonNegativeCandidateCapacity + \sum\limits_{\iYearAlias \geq \iYear} -\dTotalInstallCapacity[\iGenerator,\iYearAlias] \right)
+%\end{equation}
+
+%%a
+%Total installed capacity - candidate thermal generators:
+%\begin{align}
+%& \sum\limits_{\iYear \in \sYears \setminus \{\iYearTerminal\}} \sum\limits_{\iGenerator \in \sGeneratorsCandidateThermal} \vInstalledCapacityTotal \left(\dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \dMaxPowerOutputCandidateThermal \right) \nonumber\\
+%& + \sum\limits_{\iGenerator \in \sGeneratorsCandidateThermal} \vInstalledCapacityTotal[\iGenerator, \iYearTerminal] \left(\dTotalInstallCapacity[\iGenerator,\iYearTerminal] + \cDiscountRate[\iYearTerminal] \left[1 + \frac{1}{\cInterestRate}\right] \cFixedOperationsMaintenanceCostGenerator[\iGenerator,\iYearTerminal] + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \dMaxPowerOutputCandidateThermal[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \right)\\\nonumber
+%%+ \sum\limits_{\iGenerator \in \sGeneratorsCandidateThermal} \vInstalledCapacityTotal[\iGenerator,\iYearTerminal] \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCostGenerator
+%\end{align}
+%
+%Total installed capacity - candidate solar generators:
+%\begin{align}
+%	& \sum\limits_{\iYear \in \sYears \setminus \{\iYearTerminal\}} \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \vInstalledCapacityTotal \left(\dSolarBuildLimit[k(\iGenerator),\iYear] + \dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorSolar \dMaxPowerOutputSolarCandidate \right) \nonumber\\
+%	& + \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \vInstalledCapacityTotal[\iGenerator,\iYearTerminal] \left(\dSolarBuildLimit[k(\iGenerator),\iYearTerminal] + \dTotalInstallCapacity[\iGenerator,\iYearTerminal] + \cDiscountRate[\iYearTerminal] \left[1 + \frac{1}{\cInterestRate}\right] \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorSolar[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \dMaxPowerOutputSolarCandidate[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \right)\\ \nonumber
+%%	+ \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \vInstalledCapacityTotal[\iGenerator,\iYearTerminal] \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCostGenerator
+%\end{align}
+%
+%Total installed capacity - candidate wind generators:
+%\begin{align}
+%& \sum\limits_{\iYear \in \sYears \setminus \{\iYearTerminal\}} \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \vInstalledCapacityTotal \left(\dWindBuildLimit[k(\iGenerator),\iYear] + \dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorWind \dMaxPowerOutputWindCandidate \right) \nonumber\\
+%& + \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \vInstalledCapacityTotal[\iGenerator,\iYearTerminal] \left(\dWindBuildLimit[k(\iGenerator),\iYearTerminal] + \dTotalInstallCapacity[\iGenerator,\iYearTerminal,\iScenario,\iInterval] + \cDiscountRate[\iYearTerminal] \left[1 + \frac{1}{\cInterestRate}\right] \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorWind[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \dMaxPowerOutputWindCandidate[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \right)
+%%+ \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \vInstalledCapacityTotal[\iGenerator,\iYearTerminal] \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} \cFixedOperationsMaintenanceCostGenerator
+%\end{align}
 
 %Total installed capacity - candidate storage generators:
 %\begin{equation}
@@ -1148,38 +1173,53 @@ Dual objective:
 The expressions presented in the preceding section can be used to formulate a set of dual constraints:
 
 %x_c
-Investment decision:
+%Investment decision:
+%\begin{equation}
+%\frac{\cDiscountRate}{\cInterestRate} \cAmortisationRate \cCandidateInvestmentCost - \dNonNegativeCandidateCapacity + \sum\limits_{\iYearAlias \geq \iYear} -\dTotalInstallCapacity[\iGenerator,\iYearAlias] = 0 \quad \forall \iYear \in \sYears \quad \forall \iGenerator \in \sGeneratorsCandidate
+%\end{equation}
+
+Investment decision - candidate thermal:
 \begin{equation}
-\frac{\cDiscountRate}{\cInterestRate} \cAmortisationRate \cCandidateInvestmentCost - \dNonNegativeCandidateCapacity + \sum\limits_{\iYearAlias \geq \iYear} -\dTotalInstallCapacity[\iGenerator,\iYearAlias] = 0 \quad \forall \iYear \in \sYears \quad \forall \iGenerator \in \sGeneratorsCandidate
+\frac{\cDiscountRate}{\cInterestRate} \cAmortisationRate \cCandidateInvestmentCost + \sum\limits_{\iYearAlias \geq \iYear} \cDiscountRate[\iYearAlias] \cFixedOperationsMaintenanceCostGenerator - \dNonNegativeCandidateCapacity + \sum\limits_{\iYearAlias \geq \iYear} \sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals} - \dMaxPowerOutputCandidateThermal[\iGenerator,\iYearAlias,\iScenario,\iInterval] = 0 \quad \iYear \in \sYears \quad \iGenerator \in \sGeneratorsCandidateThermal
 \end{equation}
 
-%a
-Total installed capacity - candidate thermal generators:
+Investment decision - candidate wind:
 \begin{equation}
- \dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \dMaxPowerOutputCandidateThermal = 0 \quad \forall \iYear \in \sYears \setminus \{\iYearTerminal\} \quad \forall \iGenerator \in \sGeneratorsCandidateThermal
+\frac{\cDiscountRate}{\cInterestRate} \cAmortisationRate \cCandidateInvestmentCost + \sum\limits_{\iYearAlias \geq \iYear} \cDiscountRate[\iYearAlias] \cFixedOperationsMaintenanceCostGenerator - \dNonNegativeCandidateCapacity + \sum\limits_{\iYearAlias \geq \iYear} \dWindBuildLimit[k(\iGenerator),\iYearAlias] + \sum\limits_{\iYearAlias \geq \iYear} \sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorWind[\iGenerator,\iYearAlias,\iScenario,\iInterval] \dMaxPowerOutputWindCandidate[\iGenerator,\iYearAlias,\iScenario,\iInterval] = 0 \quad \iYear \in \sYears \quad \iGenerator \in \sGeneratorsCandidateWind
 \end{equation}
 
+Investment decision - candidate solar:
 \begin{equation}
-\dTotalInstallCapacity[\iGenerator,\iYearTerminal] + \cDiscountRate[\iYearTerminal] \left[1 + \frac{1}{\cInterestRate}\right] \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \dMaxPowerOutputCandidateThermal[\iGenerator,\iYearTerminal,\iScenario,\iInterval] = 0 \quad \forall \iGenerator \in \sGeneratorsCandidateThermal
+\frac{\cDiscountRate}{\cInterestRate} \cAmortisationRate \cCandidateInvestmentCost + \sum\limits_{\iYearAlias \geq \iYear} \cDiscountRate[\iYearAlias] \cFixedOperationsMaintenanceCostGenerator - \dNonNegativeCandidateCapacity + \sum\limits_{\iYearAlias \geq \iYear} \dSolarBuildLimit[k(\iGenerator),\iYearAlias] + \sum\limits_{\iYearAlias \geq \iYear} \sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorSolar[\iGenerator,\iYearAlias,\iScenario,\iInterval] \dMaxPowerOutputSolarCandidate[\iGenerator,\iYearAlias,\iScenario,\iInterval] = 0 \quad \iYear \in \sYears \quad \iGenerator \in \sGeneratorsCandidateSolar
 \end{equation}
 
-Total installed capacity - candidate solar generators:
-\begin{equation}
-\dSolarBuildLimit[k(\iGenerator), \iYear] + \dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorSolar \dMaxPowerOutputSolarCandidate = 0 \quad \forall \iYear \in \sYears \setminus \{\iYearTerminal\} \quad \iGenerator \in \sGeneratorsCandidateSolar
-\end{equation}
-
-\begin{equation}
-\dSolarBuildLimit[k(\iGenerator),\iYearTerminal] + \dTotalInstallCapacity[\iGenerator,\iYearTerminal] + \cDiscountRate[\iYearTerminal] \left[1 + \frac{1}{\cInterestRate}\right] \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorSolar[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \dMaxPowerOutputSolarCandidate[\iGenerator,\iYearTerminal,\iScenario,\iInterval] = 0 \quad \forall \iGenerator \in \sGeneratorsCandidateSolar
-\end{equation}
-
-Total installed capacity - candidate wind generators:
-\begin{equation}
-\dWindBuildLimit[k(\iGenerator), \iYear] + \dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorWind \dMaxPowerOutputWindCandidate = 0 \quad \forall \iYear \in \sYears \setminus \{\iYearTerminal\} \quad \forall \iGenerator \in \sGeneratorsCandidateWind
-\end{equation}
-
-\begin{equation}
-\dWindBuildLimit[k(\iGenerator),\iYearTerminal] + \dTotalInstallCapacity[\iGenerator,\iYearTerminal] + \cDiscountRate[\iYearTerminal] \left[1 + \frac{1}{\cInterestRate}\right] \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorWind[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \dMaxPowerOutputWindCandidate[\iGenerator,\iYearTerminal,\iScenario,\iInterval] = 0 \quad \forall \iGenerator \in \sGeneratorsCandidateWind
-\end{equation}
+%%a
+%Total installed capacity - candidate thermal generators:
+%\begin{equation}
+% \dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \dMaxPowerOutputCandidateThermal = 0 \quad \forall \iYear \in \sYears \setminus \{\iYearTerminal\} \quad \forall \iGenerator \in \sGeneratorsCandidateThermal
+%\end{equation}
+%
+%\begin{equation}
+%\dTotalInstallCapacity[\iGenerator,\iYearTerminal] + \cDiscountRate[\iYearTerminal] \left[1 + \frac{1}{\cInterestRate}\right] \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \dMaxPowerOutputCandidateThermal[\iGenerator,\iYearTerminal,\iScenario,\iInterval] = 0 \quad \forall \iGenerator \in \sGeneratorsCandidateThermal
+%\end{equation}
+%
+%Total installed capacity - candidate solar generators:
+%\begin{equation}
+%\dSolarBuildLimit[k(\iGenerator), \iYear] + \dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorSolar \dMaxPowerOutputSolarCandidate = 0 \quad \forall \iYear \in \sYears \setminus \{\iYearTerminal\} \quad \iGenerator \in \sGeneratorsCandidateSolar
+%\end{equation}
+%
+%\begin{equation}
+%\dSolarBuildLimit[k(\iGenerator),\iYearTerminal] + \dTotalInstallCapacity[\iGenerator,\iYearTerminal] + \cDiscountRate[\iYearTerminal] \left[1 + \frac{1}{\cInterestRate}\right] \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorSolar[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \dMaxPowerOutputSolarCandidate[\iGenerator,\iYearTerminal,\iScenario,\iInterval] = 0 \quad \forall \iGenerator \in \sGeneratorsCandidateSolar
+%\end{equation}
+%
+%Total installed capacity - candidate wind generators:
+%\begin{equation}
+%\dWindBuildLimit[k(\iGenerator), \iYear] + \dTotalInstallCapacity + \cDiscountRate \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorWind \dMaxPowerOutputWindCandidate = 0 \quad \forall \iYear \in \sYears \setminus \{\iYearTerminal\} \quad \forall \iGenerator \in \sGeneratorsCandidateWind
+%\end{equation}
+%
+%\begin{equation}
+%\dWindBuildLimit[k(\iGenerator),\iYearTerminal] + \dTotalInstallCapacity[\iGenerator,\iYearTerminal] + \cDiscountRate[\iYearTerminal] \left[1 + \frac{1}{\cInterestRate}\right] \cFixedOperationsMaintenanceCostGenerator + \sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} - \cCapacityFactorWind[\iGenerator,\iYearTerminal,\iScenario,\iInterval] \dMaxPowerOutputWindCandidate[\iGenerator,\iYearTerminal,\iScenario,\iInterval] = 0 \quad \forall \iGenerator \in \sGeneratorsCandidateWind
+%\end{equation}
 
 %Total installed capacity - candidate storage generators:
 %\begin{equation}

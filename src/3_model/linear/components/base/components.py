@@ -86,7 +86,7 @@ class CommonComponents:
         m.G = m.G_E.union(m.G_C)
 
         # All years in model horizon
-        m.Y = RangeSet(2016, 2017)
+        m.Y = RangeSet(2016, 2018)
 
         # Operating scenarios for each year
         m.S = RangeSet(1, 10)
@@ -607,12 +607,13 @@ class CommonComponents:
             """
 
             if g in m.G_C_STORAGE:
-                return float(self.data.battery_build_costs_dict[y][g] * 1000)
+                return float(self.data.battery_build_costs_dict[y][g] * 1000) + float(random.uniform(0, 50))
 
             else:
-                return float(self.data.candidate_units_dict[('BUILD_COST', y)][g] * 1000)
+                return float(self.data.candidate_units_dict[('BUILD_COST', y)][g] * 1000) + float(random.uniform(0, 50))
 
         # Candidate unit build cost
+        random.seed(10)
         m.I_C = Param(m.G_C, m.Y, rule=candidate_unit_build_costs_rule)
 
         # Lost load value [$/MWh]

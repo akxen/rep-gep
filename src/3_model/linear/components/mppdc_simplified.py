@@ -29,8 +29,8 @@ class Primal:
         # Investment capacity in each year
         m.x_c = Var(m.G_C, m.Y, initialize=0)
 
-        # Cumulative installed capacity
-        m.a = Var(m.G_C, m.Y, initialize=0)
+        # # Cumulative installed capacity
+        # m.a = Var(m.G_C, m.Y, initialize=0)
 
         # Power output
         m.p = Var(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, initialize=0)
@@ -68,6 +68,14 @@ class Primal:
     def define_expressions(m):
         """Primal problem expressions"""
 
+        def cumulative_capacity_rule(_m, g, y):
+            """Total candidate capacity available in each year"""
+
+            return sum(m.x_c[g, j] for j in m.Y if j <= y)
+
+        # Cumulative capacity available in each y ear
+        m.CUMULATIVE_CAPACITY = Expression(m.G_C, m.Y, rule=cumulative_capacity_rule)
+
         def yearly_investment_cost_rule(_m, y):
             """Yearly investment cost"""
             return (1 / m.INTEREST_RATE) * sum(m.GAMMA[g] * m.I_C[g, y] * m.x_c[g, y] for g in m.G_C)
@@ -82,7 +90,7 @@ class Primal:
             # existing = sum(m.C_FOM[g] * (m.P_MAX[g] * (1 - m.F[g, y])) for g in m.G_E)
 
             # FOM cost for candidate units
-            candidate = sum(m.C_FOM[g] * m.a[g, y] for g in m.G_C)
+            candidate = sum(m.C_FOM[g] * sum(m.x_c[g, j] for j in m.Y if j <= y) for g in m.G_C)
 
             return candidate
 
@@ -199,13 +207,13 @@ class Primal:
         # Non-negative capacity for candidate units
         m.NON_NEGATIVE_CAPACITY = Constraint(m.G_C, m.Y, rule=non_negative_capacity_rule)
 
-        def cumulative_capacity_rule(_m, g, y):
-            """Total installed capacity for each year of model horizon"""
-
-            return m.a[g, y] - sum(m.x_c[g, j] for j in m.Y if j <= y) == 0
-
-        # Cumulative capacity rule
-        m.CUMULATIVE_CAPACITY = Constraint(m.G_C, m.Y, rule=cumulative_capacity_rule)
+        # def cumulative_capacity_rule(_m, g, y):
+        #     """Total installed capacity for each year of model horizon"""
+        #
+        #     return m.a[g, y] - sum(m.x_c[g, j] for j in m.Y if j <= y) == 0
+        #
+        # # Cumulative capacity rule
+        # m.CUMULATIVE_CAPACITY = Constraint(m.G_C, m.Y, rule=cumulative_capacity_rule)
 
         def solar_build_limit_rule(_m, z, y):
             """Enforce solar build limits in each NEM zone"""
@@ -214,7 +222,7 @@ class Primal:
             gens = [g for g in m.G_C_SOLAR if g.split('-')[0] == z]
 
             if gens:
-                return sum(m.a[g, y] for g in gens) - m.SOLAR_BUILD_LIMITS[z] <= 0
+                return sum(m.x_c[g, j] for g in gens for j in m.Y if j <= y) - m.SOLAR_BUILD_LIMITS[z] <= 0
             else:
                 return Constraint.Skip
 
@@ -228,7 +236,7 @@ class Primal:
             gens = [g for g in m.G_C_WIND if g.split('-')[0] == z]
 
             if gens:
-                return sum(m.a[g, y] for g in gens) - m.WIND_BUILD_LIMITS[z] <= 0
+                return sum(m.x_c[g, j] for g in gens for j in m.Y if j <= y) - m.WIND_BUILD_LIMITS[z] <= 0
             else:
                 return Constraint.Skip
 
@@ -268,7 +276,7 @@ class Primal:
         def max_power_candidate_thermal_rule(_m, g, y, s, t):
             """Max power from existing thermal generators"""
 
-            return m.p[g, y, s, t] - m.a[g, y] <= 0
+            return m.p[g, y, s, t] - sum(m.x_c[g, j] for j in m.Y if j <= y) <= 0
 
         # Max power from candidate thermal units
         m.MAX_POWER_CANDIDATE_THERMAL = Constraint(m.G_C_THERM, m.Y, m.S, m.T, rule=max_power_candidate_thermal_rule)
@@ -284,7 +292,7 @@ class Primal:
         def max_power_candidate_wind_rule(_m, g, y, s, t):
             """Max power from candidate wind generators"""
 
-            return m.p[g, y, s, t] - (m.Q_W[g, y, s, t] * m.a[g, y]) <= 0
+            return m.p[g, y, s, t] - (m.Q_W[g, y, s, t] * sum(m.x_c[g, j] for j in m.Y if j <= y)) <= 0
 
         # Max power from candidate wind generators
         m.MAX_POWER_CANDIDATE_WIND = Constraint(m.G_C_WIND, m.Y, m.S, m.T, rule=max_power_candidate_wind_rule)
@@ -300,7 +308,7 @@ class Primal:
         def max_power_candidate_solar_rule(_m, g, y, s, t):
             """Max power from candidate solar generators"""
 
-            return m.p[g, y, s, t] - (m.Q_S[g, y, s, t] * m.a[g, y]) <= 0
+            return m.p[g, y, s, t] - (m.Q_S[g, y, s, t] * sum(m.x_c[g, j] for j in m.Y if j <= y)) <= 0
 
         # Max power from candidate solar generators
         m.MAX_POWER_CANDIDATE_SOLAR = Constraint(m.G_C_SOLAR, m.Y, m.S, m.T, rule=max_power_candidate_solar_rule)
@@ -685,7 +693,7 @@ class Dual:
         # m.mu_4 = Var(m.Z, m.Y, within=NonNegativeReals, initialize=0)
 
         # Cumulative candidate capacity
-        m.nu_1 = Var(m.G_C, m.Y, initialize=0)
+        # m.nu_1 = Var(m.G_C, m.Y, initialize=0)
 
         # Min power output (all generators excluding storage units)
         m.sigma_1 = Var(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
@@ -905,46 +913,84 @@ class Dual:
     def define_constraints(self, m):
         """Define dual problem constraints"""
 
-        def investment_decisions_rule(_m, g, y):
-            """Investment decision constraint (x_c)"""
+        # def investment_decisions_rule(_m, g, y):
+        #     """Investment decision constraint (x_c)"""
+        #
+        #     return ((m.DELTA[y] / m.INTEREST_RATE) * m.GAMMA[g] * m.I_C[g, y]) - m.mu_1[g, y] + sum(-m.nu_1[g, j] for j in m.Y if j >= y) == 0
+        #
+        # # Investment decision in each year
+        # m.INVESTMENT_DECISION = Constraint(m.G_C, m.Y, rule=investment_decisions_rule)
 
-            return ((m.DELTA[y] / m.INTEREST_RATE) * m.GAMMA[g] * m.I_C[g, y]) - m.mu_1[g, y] + sum(-m.nu_1[g, j] for j in m.Y if j >= y) == 0
+        def investment_decision_thermal_rule(_m, g, y):
+            """Investment decision constraints for candidate thermal generators (x_c)"""
 
-        # Investment decision in each year
-        m.INVESTMENT_DECISION = Constraint(m.G_C, m.Y, rule=investment_decisions_rule)
+            return (((m.DELTA[y] / m.INTEREST_RATE) * m.GAMMA[g] * m.I_C[g, y])
+                    + sum(m.DELTA[j] * m.C_FOM[g] for j in m.Y if j >= y)
+                    - m.mu_1[g, y]
+                    + sum(- m.sigma_3[g, j, s, t] for s in m.S for t in m.T for j in m.Y if j >= y)
+                    == 0)
 
-        def total_capacity_thermal_rule(_m, g, y):
-            """Total thermal generator installed capacity"""
+        # Investment decision for thermal plant
+        m.INVESTMENT_DECISION_THERMAL = Constraint(m.G_C_THERM, m.Y, rule=investment_decision_thermal_rule)
 
-            # if y != m.Y.last():
-            return m.nu_1[g, y] + (m.DELTA[y] * m.C_FOM[g]) + sum(- m.sigma_3[g, y, s, t] for s in m.S for t in m.T) == 0
-            # else:
-            #     return m.nu_1[g, y] + (m.DELTA[y] * (1 + (1 / m.INTEREST_RATE)) * m.C_FOM[g]) + sum(- m.sigma_3[g, y, s, t] for s in m.S for t in m.T) == 0
+        def investment_decision_wind_rule(_m, g, y):
+            """Investment decision constraints for candidate wind generators (x_c)"""
 
-        # Total installed capacity
-        m.TOTAL_THERMAL_CAPACITY = Constraint(m.G_C_THERM, m.Y, rule=total_capacity_thermal_rule)
+            return (((m.DELTA[y] / m.INTEREST_RATE) * m.GAMMA[g] * m.I_C[g, y])
+                    + sum(m.DELTA[j] * m.C_FOM[g] for j in m.Y if j >= y)
+                    - m.mu_1[g, y]
+                    + sum(m.mu_3[self.k(m, g), j] for j in m.Y if j >= y)
+                    + sum(- m.Q_W[g, j, s, t] * m.sigma_5[g, j, s, t] for s in m.S for t in m.T for j in m.Y if j >= y)
+                    == 0)
 
-        def total_capacity_solar_rule(_m, g, y):
-            """Total solar generator installed capacity"""
+        # Investment decision for wind plant
+        m.INVESTMENT_DECISION_WIND = Constraint(m.G_C_WIND, m.Y, rule=investment_decision_wind_rule)
 
-            # if y != m.Y.last():
-            return m.mu_2[self.k(m, g), y] + m.nu_1[g, y] + (m.DELTA[y] * m.C_FOM[g]) + sum(- m.Q_S[g, y, s, t] * m.sigma_7[g, y, s, t] for s in m.S for t in m.T) == 0
-            # else:
-            #     return m.mu_2[self.k(m, g), y] + m.nu_1[g, y] + (m.DELTA[y] * (1 + (1 / m.INTEREST_RATE)) * m.C_FOM[g]) + sum(- m.Q_S[g, y, s, t] * m.sigma_7[g, y, s, t] for s in m.S for t in m.T) == 0
+        def investment_decision_solar_rule(_m, g, y):
+            """Investment decision constraints for candidate solar generators (x_c)"""
 
-        # Total installed capacity
-        m.TOTAL_SOLAR_CAPACITY = Constraint(m.G_C_SOLAR, m.Y, rule=total_capacity_solar_rule)
+            return (((m.DELTA[y] / m.INTEREST_RATE) * m.GAMMA[g] * m.I_C[g, y])
+                    + sum(m.DELTA[j] * m.C_FOM[g] for j in m.Y if j >= y)
+                    - m.mu_1[g, y]
+                    + sum(m.mu_2[self.k(m, g), j] for j in m.Y if j >= y)
+                    + sum(- m.Q_S[g, j, s, t] * m.sigma_7[g, j, s, t] for s in m.S for t in m.T for j in m.Y if j >= y)
+                    == 0)
 
-        def total_capacity_wind_rule(_m, g, y):
-            """Total wind generator installed capacity"""
+        # Investment decision for solar plant
+        m.INVESTMENT_DECISION_SOLAR = Constraint(m.G_C_SOLAR, m.Y, rule=investment_decision_solar_rule)
 
-            # if y != m.Y.last():
-            return m.mu_3[self.k(m, g), y] + m.nu_1[g, y] + (m.DELTA[y] * m.C_FOM[g]) + sum(- m.Q_W[g, y, s, t] * m.sigma_5[g, y, s, t] for s in m.S for t in m.T) == 0
-            # else:
-            #     return m.mu_3[self.k(m, g), y] + m.nu_1[g, y] + (m.DELTA[y] * (1 + (1 / m.INTEREST_RATE)) * m.C_FOM[g]) + sum(- m.Q_W[g, y, s, t] * m.sigma_5[g, y, s, t] for s in m.S for t in m.T) == 0
-
-        # Total installed capacity
-        m.TOTAL_WIND_CAPACITY = Constraint(m.G_C_WIND, m.Y, rule=total_capacity_wind_rule)
+        # def total_capacity_thermal_rule(_m, g, y):
+        #     """Total thermal generator installed capacity"""
+        #
+        #     # if y != m.Y.last():
+        #     return m.nu_1[g, y] + (m.DELTA[y] * m.C_FOM[g]) + sum(- m.sigma_3[g, y, s, t] for s in m.S for t in m.T) == 0
+        #     # else:
+        #     #     return m.nu_1[g, y] + (m.DELTA[y] * (1 + (1 / m.INTEREST_RATE)) * m.C_FOM[g]) + sum(- m.sigma_3[g, y, s, t] for s in m.S for t in m.T) == 0
+        #
+        # # Total installed capacity
+        # m.TOTAL_THERMAL_CAPACITY = Constraint(m.G_C_THERM, m.Y, rule=total_capacity_thermal_rule)
+        #
+        # def total_capacity_solar_rule(_m, g, y):
+        #     """Total solar generator installed capacity"""
+        #
+        #     # if y != m.Y.last():
+        #     return m.mu_2[self.k(m, g), y] + m.nu_1[g, y] + (m.DELTA[y] * m.C_FOM[g]) + sum(- m.Q_S[g, y, s, t] * m.sigma_7[g, y, s, t] for s in m.S for t in m.T) == 0
+        #     # else:
+        #     #     return m.mu_2[self.k(m, g), y] + m.nu_1[g, y] + (m.DELTA[y] * (1 + (1 / m.INTEREST_RATE)) * m.C_FOM[g]) + sum(- m.Q_S[g, y, s, t] * m.sigma_7[g, y, s, t] for s in m.S for t in m.T) == 0
+        #
+        # # Total installed capacity
+        # m.TOTAL_SOLAR_CAPACITY = Constraint(m.G_C_SOLAR, m.Y, rule=total_capacity_solar_rule)
+        #
+        # def total_capacity_wind_rule(_m, g, y):
+        #     """Total wind generator installed capacity"""
+        #
+        #     # if y != m.Y.last():
+        #     return m.mu_3[self.k(m, g), y] + m.nu_1[g, y] + (m.DELTA[y] * m.C_FOM[g]) + sum(- m.Q_W[g, y, s, t] * m.sigma_5[g, y, s, t] for s in m.S for t in m.T) == 0
+        #     # else:
+        #     #     return m.mu_3[self.k(m, g), y] + m.nu_1[g, y] + (m.DELTA[y] * (1 + (1 / m.INTEREST_RATE)) * m.C_FOM[g]) + sum(- m.Q_W[g, y, s, t] * m.sigma_5[g, y, s, t] for s in m.S for t in m.T) == 0
+        #
+        # # Total installed capacity
+        # m.TOTAL_WIND_CAPACITY = Constraint(m.G_C_WIND, m.Y, rule=total_capacity_wind_rule)
 
         # def total_capacity_storage_rule(_m, g, y):
         #     """Total storage installed capacity"""
@@ -1531,7 +1577,10 @@ def check_solution(m_p, m_d, elements):
 
     print(f"""Primal element: {elements['primal']}, Dual element: {elements['dual']}, Max difference: {max_difference}, keys: {len(common_keys)}""")
 
-    return difference, max_difference
+    # Only retain elements where difference is non-negative
+    non_negative_difference = {k: v for k, v in difference.items() if v['abs_diff'] > 0.1}
+
+    return difference, max_difference, non_negative_difference
 
 
 if __name__ == '__main__':
@@ -1543,10 +1592,10 @@ if __name__ == '__main__':
     model_dual = dual.construct_model()
     model_dual, status_dual = dual.solve_model(model_dual)
 
-    mppdc = MPPDCModel()
-    model_mppdc = mppdc.construct_model()
-    model_mppdc, status_mppdc = mppdc.solve_model(model_mppdc)
-
+    # mppdc = MPPDCModel()
+    # model_mppdc = mppdc.construct_model()
+    # model_mppdc, status_mppdc = mppdc.solve_model(model_mppdc)
+    #
     try:
         check = [{'primal': 'POWER_BALANCE', 'dual': 'lamb', 'primal_var': False},
                  {'primal': 'p', 'dual': 'POWER_OUTPUT_EXISTING_THERMAL', 'primal_var': True},
@@ -1554,7 +1603,7 @@ if __name__ == '__main__':
                  {'primal': 'NON_NEGATIVE_CAPACITY', 'dual': 'mu_1', 'primal_var': False},
                  {'primal': 'SOLAR_BUILD_LIMIT_CONS', 'dual': 'mu_2', 'primal_var': False},
                  {'primal': 'WIND_BUILD_LIMIT_CONS', 'dual': 'mu_3', 'primal_var': False},
-                 {'primal': 'CUMULATIVE_CAPACITY', 'dual': 'nu_1', 'primal_var': False},
+                 # {'primal': 'CUMULATIVE_CAPACITY', 'dual': 'nu_1', 'primal_var': False},
                  {'primal': 'MIN_POWER_CONS', 'dual': 'sigma_1', 'primal_var': False},
                  {'primal': 'MAX_POWER_EXISTING_THERMAL', 'dual': 'sigma_2', 'primal_var': False},
                  {'primal': 'MAX_POWER_CANDIDATE_THERMAL', 'dual': 'sigma_3', 'primal_var': False},
@@ -1569,14 +1618,14 @@ if __name__ == '__main__':
                  ]
 
         for c in check:
-            diff, max_diff = check_solution(model_primal, model_dual, c)
+            diff, max_diff, non_negative_diff = check_solution(model_primal, model_dual, c)
 
     except:
         print('Failed')
-
-    # diff = {i: (model_primal.dual[model_primal.POWER_BALANCE[i]], model_dual.lamb[i].value) for i in
-    #      model_primal.POWER_BALANCE.keys() if i[1] == 2016 and (
-    #          abs(abs(model_primal.dual[model_primal.POWER_BALANCE[i]]) - abs(model_dual.lamb[i].value))) > 0.1}
-
+    #
+    # # diff = {i: (model_primal.dual[model_primal.POWER_BALANCE[i]], model_dual.lamb[i].value) for i in
+    # #      model_primal.POWER_BALANCE.keys() if i[1] == 2016 and (
+    # #          abs(abs(model_primal.dual[model_primal.POWER_BALANCE[i]]) - abs(model_dual.lamb[i].value))) > 0.1}
+    #
     # prim_d = {i: model_primal.dual[model_primal.MIN_POWER_CONS[i]] for i in model_primal.MIN_POWER_CONS.keys() if abs(model_primal.dual[model_primal.MIN_POWER_CONS[i]]) > 0}
     # dual_v = {i: model_dual.sigma_1[i].value for i in model_dual.sigma_1.keys()}
