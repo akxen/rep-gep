@@ -179,8 +179,8 @@ class Primal:
         def end_of_horizon_cost_rule(_m):
             """Operating cost beyond model horizon"""
 
-            # return (m.DELTA[m.Y.last()] / m.INTEREST_RATE) * (m.OP[m.Y.last()] + m.FOM[m.Y.last()])
-            return (m.DELTA[m.Y.last()] / m.INTEREST_RATE) * m.FOM[m.Y.last()]
+            return (m.DELTA[m.Y.last()] / m.INTEREST_RATE) * (m.OP[m.Y.last()] + m.FOM[m.Y.last()])
+            # return (m.DELTA[m.Y.last()] / m.INTEREST_RATE) * m.FOM[m.Y.last()]
 
         # End of horizon cost
         m.EOH = Expression(rule=end_of_horizon_cost_rule)
@@ -1009,22 +1009,22 @@ class Dual:
         def power_output_existing_thermal_rule(_m, g, y, s, t):
             """Power output from existing thermal generators"""
 
-            # if t != m.T.last():
-            return (- m.sigma_1[g, y, s, t] + m.sigma_2[g, y, s, t]
-                    # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
-                    # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
-                    - m.lamb[self.k(m, g), y, s, t]
-                    # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
-                    + ((m.DELTA[y] * m.RHO[y, s]) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
-                    == 0)
-            # else:
-            #     return (- m.sigma_1[g, y, s, t] + m.sigma_2[g, y, s, t]
-            #             # + m.sigma_20[g, y, s, t]
-            #             # - m.sigma_23[g, y, s, t]
-            #             - m.lamb[self.k(m, g), y, s, t]
-            #             # - (m.zeta_2[g, y, s, t] / 2)
-            #             + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
-            #             == 0)
+            if y != m.Y.last():
+                return (- m.sigma_1[g, y, s, t] + m.sigma_2[g, y, s, t]
+                        # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
+                        # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+                        - m.lamb[self.k(m, g), y, s, t]
+                        # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
+                        == 0)
+            else:
+                return (- m.sigma_1[g, y, s, t] + m.sigma_2[g, y, s, t]
+                        # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
+                        # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+                        - m.lamb[self.k(m, g), y, s, t]
+                        # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
+                        == 0)
 
         # Total power output from thermal generators
         m.POWER_OUTPUT_EXISTING_THERMAL = Constraint(m.G_E_THERM, m.Y, m.S, m.T, rule=power_output_existing_thermal_rule)
@@ -1032,45 +1032,44 @@ class Dual:
         def power_output_candidate_thermal_rule(_m, g, y, s, t):
             """Power output from candidate thermal generators"""
 
-            # if t != m.T.last():
-            return (- m.sigma_1[g, y, s, t] + m.sigma_3[g, y, s, t]
-                    # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
-                    # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
-                    - m.lamb[self.k(m, g), y, s, t]
-                    # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
-                    + ((m.DELTA[y] * m.RHO[y, s]) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
-                    == 0)
-            # else:
-            #     return (- m.sigma_1[g, y, s, t] + m.sigma_3[g, y, s, t]
-            #             # + m.sigma_20[g, y, s, t]
-            #             # - m.sigma_23[g, y, s, t]
-            #             - m.lamb[self.k(m, g), y, s, t]
-            #             # - (m.zeta_2[g, y, s, t] / 2)
-            #             + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
-            #             == 0)
-
+            if y != m.Y.last():
+                return (- m.sigma_1[g, y, s, t] + m.sigma_3[g, y, s, t]
+                        # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
+                        # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+                        - m.lamb[self.k(m, g), y, s, t]
+                        # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
+                        == 0)
+            else:
+                return (- m.sigma_1[g, y, s, t] + m.sigma_3[g, y, s, t]
+                        # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
+                        # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+                        - m.lamb[self.k(m, g), y, s, t]
+                        # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
+                        == 0)
         # Total power output from candidate thermal generators
         m.POWER_OUTPUT_CANDIDATE_THERMAL = Constraint(m.G_C_THERM, m.Y, m.S, m.T, rule=power_output_candidate_thermal_rule)
 
         def power_output_existing_wind_rule(_m, g, y, s, t):
             """Power output from existing wind generators"""
 
-            # if t != m.T.last():
-            return (- m.sigma_1[g, y, s, t] + m.sigma_4[g, y, s, t]
-                    # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
-                    # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
-                    - m.lamb[self.k(m, g), y, s, t]
-                    # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
-                    + (m.DELTA[y] * m.RHO[y, s] * m.C_MC[g, y])
-                    == 0)
-            # else:
-            #     return (- m.sigma_1[g, y, s, t] + m.sigma_4[g, y, s, t]
-            #             # + m.sigma_20[g, y, s, t]
-            #             # - m.sigma_23[g, y, s, t]
-            #             - m.lamb[self.k(m, g), y, s, t]
-            #             # - (m.zeta_2[g, y, s, t] / 2)
-            #             + (m.DELTA[y] * m.RHO[y, s] * (1 + (1 / m.INTEREST_RATE)) * m.C_MC[g, y])
-            #             == 0)
+            if y != m.Y.last():
+                return (- m.sigma_1[g, y, s, t] + m.sigma_4[g, y, s, t]
+                        # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
+                        # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+                        - m.lamb[self.k(m, g), y, s, t]
+                        # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+                        + (m.DELTA[y] * m.RHO[y, s] * m.C_MC[g, y])
+                        == 0)
+            else:
+                return (- m.sigma_1[g, y, s, t] + m.sigma_4[g, y, s, t]
+                        # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
+                        # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+                        - m.lamb[self.k(m, g), y, s, t]
+                        # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+                        + (m.DELTA[y] * m.RHO[y, s] * (1 + (1 / m.INTEREST_RATE)) * m.C_MC[g, y])
+                        == 0)
 
         # Total power output from existing wind generators
         m.POWER_OUTPUT_EXISTING_WIND = Constraint(m.G_E_WIND, m.Y, m.S, m.T, rule=power_output_existing_wind_rule)
@@ -1078,22 +1077,22 @@ class Dual:
         def power_output_candidate_wind_rule(_m, g, y, s, t):
             """Power output from candidate wind generators"""
 
-            # if t != m.T.last():
-            return (- m.sigma_1[g, y, s, t] + m.sigma_5[g, y, s, t]
-                    # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
-                    # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
-                    - m.lamb[self.k(m, g), y, s, t]
-                    # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
-                    + ((m.DELTA[y] * m.RHO[y, s]) * (m.C_MC[g, y] - (m.baseline[y] * m.permit_price[y])))
-                    == 0)
-            # else:
-            #     return (- m.sigma_1[g, y, s, t] + m.sigma_5[g, y, s, t]
-            #             # + m.sigma_20[g, y, s, t]
-            #             # - m.sigma_23[g, y, s, t]
-            #             - m.lamb[self.k(m, g), y, s, t]
-            #             # - (m.zeta_2[g, y, s, t] / 2)
-            #             + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] - (m.baseline[y] * m.permit_price[y])))
-            #             == 0)
+            if y != m.Y.last():
+                return (- m.sigma_1[g, y, s, t] + m.sigma_5[g, y, s, t]
+                        # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
+                        # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+                        - m.lamb[self.k(m, g), y, s, t]
+                        # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (m.C_MC[g, y] - (m.baseline[y] * m.permit_price[y])))
+                        == 0)
+            else:
+                return (- m.sigma_1[g, y, s, t] + m.sigma_5[g, y, s, t]
+                        # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
+                        # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+                        - m.lamb[self.k(m, g), y, s, t]
+                        # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] - (m.baseline[y] * m.permit_price[y])))
+                        == 0)
 
         # Total power output from candidate wind generators
         m.POWER_OUTPUT_CANDIDATE_WIND = Constraint(m.G_C_WIND, m.Y, m.S, m.T, rule=power_output_candidate_wind_rule)
@@ -1101,23 +1100,23 @@ class Dual:
         def power_output_existing_solar_rule(_m, g, y, s, t):
             """Power output from existing solar generators"""
 
-            # if t != m.T.last():
-            return (- m.sigma_1[g, y, s, t] + m.sigma_6[g, y, s, t]
-                    # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
-                    # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
-                    - m.lamb[self.k(m, g), y, s, t]
-                    # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
-                    + (m.DELTA[y] * m.RHO[y, s] * m.C_MC[g, y])
-                    == 0)
+            if y != m.Y.last():
+                return (- m.sigma_1[g, y, s, t] + m.sigma_6[g, y, s, t]
+                        # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
+                        # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+                        - m.lamb[self.k(m, g), y, s, t]
+                        # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+                        + (m.DELTA[y] * m.RHO[y, s] * m.C_MC[g, y])
+                        == 0)
 
-            # else:
-            #     return (- m.sigma_1[g, y, s, t] + m.sigma_6[g, y, s, t]
-            #             # + m.sigma_20[g, y, s, t]
-            #             # - m.sigma_23[g, y, s, t]
-            #             - m.lamb[self.k(m, g), y, s, t]
-            #             # - (m.zeta_2[g, y, s, t] / 2)
-            #             + (m.DELTA[y] * m.RHO[y, s] * (1 + (1 / m.INTEREST_RATE)) * m.C_MC[g, y])
-            #             == 0)
+            else:
+                return (- m.sigma_1[g, y, s, t] + m.sigma_6[g, y, s, t]
+                        # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
+                        # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+                        - m.lamb[self.k(m, g), y, s, t]
+                        # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+                        + (m.DELTA[y] * m.RHO[y, s] * (1 + (1 / m.INTEREST_RATE)) * m.C_MC[g, y])
+                        == 0)
 
         # Total power output from existing solar generators
         m.POWER_OUTPUT_EXISTING_SOLAR = Constraint(m.G_E_SOLAR, m.Y, m.S, m.T, rule=power_output_existing_solar_rule)
@@ -1125,23 +1124,23 @@ class Dual:
         def power_output_candidate_solar_rule(_m, g, y, s, t):
             """Power output from candidate solar generators"""
 
-            # if t != m.T.last():
-            return (- m.sigma_1[g, y, s, t] + m.sigma_7[g, y, s, t]
-                    # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
-                    # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
-                    - m.lamb[self.k(m, g), y, s, t]
-                    # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
-                    + ((m.DELTA[y] * m.RHO[y, s]) * (m.C_MC[g, y] - (m.baseline[y] * m.permit_price[y])))
-                    == 0)
+            if y != m.Y.last():
+                return (- m.sigma_1[g, y, s, t] + m.sigma_7[g, y, s, t]
+                        # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
+                        # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+                        - m.lamb[self.k(m, g), y, s, t]
+                        # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (m.C_MC[g, y] - (m.baseline[y] * m.permit_price[y])))
+                        == 0)
 
-            # else:
-                # return (- m.sigma_1[g, y, s, t] + m.sigma_7[g, y, s, t]
-                #         # + m.sigma_20[g, y, s, t]
-                #         # - m.sigma_23[g, y, s, t]
-                #         - m.lamb[self.k(m, g), y, s, t]
-                #         # - (m.zeta_2[g, y, s, t] / 2)
-                #         + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] - (m.baseline[y] * m.permit_price[y])))
-                #         == 0)
+            else:
+                return (- m.sigma_1[g, y, s, t] + m.sigma_7[g, y, s, t]
+                        # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
+                        # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+                        - m.lamb[self.k(m, g), y, s, t]
+                        # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] - (m.baseline[y] * m.permit_price[y])))
+                        == 0)
 
         # Total power output from candidate solar generators
         m.POWER_OUTPUT_CANDIDATE_SOLAR = Constraint(m.G_C_SOLAR, m.Y, m.S, m.T, rule=power_output_candidate_solar_rule)
@@ -1149,22 +1148,22 @@ class Dual:
         def power_output_hydro_rule(_m, g, y, s, t):
             """Power output from hydro generators"""
 
-            # if t != m.T.last():
-            return (- m.sigma_1[g, y, s, t] + m.sigma_8[g, y, s, t]
-                    # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
-                    # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
-                    - m.lamb[self.k(m, g), y, s, t]
-                    # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
-                    + (m.DELTA[y] * m.RHO[y, s] * m.C_MC[g, y])
-                    == 0)
-            # else:
-            #     return (- m.sigma_1[g, y, s, t] + m.sigma_8[g, y, s, t]
-            #             # + m.sigma_20[g, y, s, t]
-            #             # - m.sigma_23[g, y, s, t]
-            #             - m.lamb[self.k(m, g), y, s, t]
-            #             # - (m.zeta_2[g, y, s, t] / 2)
-            #             + (m.DELTA[y] * m.RHO[y, s] * (1 + (1 / m.INTEREST_RATE)) * m.C_MC[g, y])
-            #             == 0)
+            if y != m.Y.last():
+                return (- m.sigma_1[g, y, s, t] + m.sigma_8[g, y, s, t]
+                        # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
+                        # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+                        - m.lamb[self.k(m, g), y, s, t]
+                        # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+                        + (m.DELTA[y] * m.RHO[y, s] * m.C_MC[g, y])
+                        == 0)
+            else:
+                return (- m.sigma_1[g, y, s, t] + m.sigma_8[g, y, s, t]
+                        # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
+                        # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+                        - m.lamb[self.k(m, g), y, s, t]
+                        # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+                        + (m.DELTA[y] * m.RHO[y, s] * (1 + (1 / m.INTEREST_RATE)) * m.C_MC[g, y])
+                        == 0)
 
         # Total power output from hydro generators
         m.POWER_OUTPUT_HYDRO = Constraint(m.G_E_HYDRO, m.Y, m.S, m.T, rule=power_output_hydro_rule)
@@ -1377,10 +1376,10 @@ class Dual:
         def load_shedding_power_rule(_m, z, y, s, t):
             """Load shedding power"""
 
-            # if y != m.Y.last():
-            return - m.sigma_26[z, y, s, t] - m.lamb[z, y, s, t] + (m.DELTA[y] * m.RHO[y, s] * m.C_L[z]) == 0
-            # else:
-            #     return - m.sigma_26[z, y, s, t] - m.lamb[z, y, s, t] + (m.DELTA[y] * m.RHO[y, s] * (1 + (1 / m.INTEREST_RATE)) * m.C_L) == 0
+            if y != m.Y.last():
+                return - m.sigma_26[z, y, s, t] - m.lamb[z, y, s, t] + (m.DELTA[y] * m.RHO[y, s] * m.C_L[z]) == 0
+            else:
+                return - m.sigma_26[z, y, s, t] - m.lamb[z, y, s, t] + (m.DELTA[y] * m.RHO[y, s] * (1 + (1 / m.INTEREST_RATE)) * m.C_L[z]) == 0
 
         # Load shedding power
         m.LOAD_SHEDDING_POWER = Constraint(m.Z, m.Y, m.S, m.T, rule=load_shedding_power_rule)

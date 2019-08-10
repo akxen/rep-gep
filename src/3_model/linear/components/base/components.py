@@ -275,18 +275,17 @@ class CommonComponents:
         def max_power_in_existing_storage_rule(_m, g):
             """Max charging power for existing storage units"""
 
-            # TODO: May need to update this assumption - might not consider existing storage unit final model
+            # TODO: May need to update this assumption - might not consider existing storage unit in final model
             return float(100)
 
         # Max charging power for existing storage units
         m.P_IN_MAX = Param(m.G_E_STORAGE, rule=max_power_in_existing_storage_rule)
 
 
-
         def max_power_out_existing_storage_rule(_m, g):
             """Max discharging power for existing storage units"""
 
-            # TODO: May need to update this assumption - might not consider existing storage unit final model
+            # TODO: May need to update this assumption - might not consider existing storage unit in final model
             return float(100)
 
         # Max discharging power for existing storage units
@@ -295,7 +294,7 @@ class CommonComponents:
         def max_energy_storage_rule(_m, g):
             """Max energy level for existing storage units"""
 
-            # TODO: May need to update this assumption - might not consider existing storage unit final model
+            # TODO: May need to update this assumption - might not consider existing storage unit in final model
             return float(100)
 
         # Max energy level for existing storage units
@@ -607,10 +606,10 @@ class CommonComponents:
             """
 
             if g in m.G_C_STORAGE:
-                return float(self.data.battery_build_costs_dict[y][g] * 1000) + float(random.uniform(0, 50000))
+                return float(self.data.battery_build_costs_dict[y][g] * 1000)
 
             else:
-                return float(self.data.candidate_units_dict[('BUILD_COST', y)][g] * 1000) + float(random.uniform(0, 50000))
+                return float(self.data.candidate_units_dict[('BUILD_COST', y)][g] * 1000)
 
         # Candidate unit build cost
         random.seed(10)
