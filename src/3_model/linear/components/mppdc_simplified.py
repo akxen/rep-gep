@@ -35,14 +35,14 @@ class Primal:
         # Power output
         m.p = Var(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, initialize=0)
 
-        # # Max charging power for storage units
-        # m.p_in = Var(m.G_STORAGE, m.Y, m.S, m.T, initialize=0)
-        #
-        # # Max discharging power for storage units
-        # m.p_out = Var(m.G_STORAGE, m.Y, m.S, m.T, initialize=0)
+        # Max charging power for storage units
+        m.p_in = Var(m.G_STORAGE, m.Y, m.S, m.T, initialize=0)
 
-        # # Storage unit energy
-        # m.q = Var(m.G_STORAGE, m.Y, m.S, m.T, initialize=0)
+        # Max discharging power for storage units
+        m.p_out = Var(m.G_STORAGE, m.Y, m.S, m.T, initialize=0)
+
+        # Storage unit energy
+        m.q = Var(m.G_STORAGE, m.Y, m.S, m.T, initialize=0)
 
         # Lost load
         m.p_V = Var(m.Z, m.Y, m.S, m.T, initialize=0)
@@ -321,114 +321,114 @@ class Primal:
         # Max power from existing hydro units
         m.MAX_POWER_EXISTING_HYDRO = Constraint(m.G_E_HYDRO, m.Y, m.S, m.T, rule=max_power_hydro_rule)
 
-        # def min_power_in_storage_rule(_m, g, y, s, t):
-        #     """Min charging power for storage units"""
-        #
-        #     return - m.p_in[g, y, s, t] <= 0
-        #
-        # # Min charging power for storage units
-        # m.MIN_POWER_IN_STORAGE = Constraint(m.G_STORAGE, m.Y, m.S, m.T, rule=min_power_in_storage_rule)
+        def min_power_in_storage_rule(_m, g, y, s, t):
+            """Min charging power for storage units"""
 
-        # def min_power_out_storage_rule(_m, g, y, s, t):
-        #     """Min discharging power for storage units"""
-        #
-        #     return - m.p_out[g, y, s, t] <= 0
-        #
-        # # Min discharging power for storage units
-        # m.MIN_POWER_OUT_STORAGE = Constraint(m.G_STORAGE, m.Y, m.S, m.T, rule=min_power_out_storage_rule)
+            return - m.p_in[g, y, s, t] <= 0
 
-        # def max_power_in_existing_storage_rule(_m, g, y, s, t):
-        #     """Max charging power for existing storage units"""
-        #
-        #     return m.p_in[g, y, s, t] - (m.P_IN_MAX[g] * (1 - m.F[g, y])) <= 0
-        #
-        # # Max charging power for existing storage units
-        # m.MAX_POWER_IN_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T,
-        #                                              rule=max_power_in_existing_storage_rule)
+        # Min charging power for storage units
+        m.MIN_POWER_IN_STORAGE = Constraint(m.G_STORAGE, m.Y, m.S, m.T, rule=min_power_in_storage_rule)
 
-        # def max_power_in_candidate_storage_rule(_m, g, y, s, t):
-        #     """Max charging power for candidate storage units"""
-        #
-        #     return m.p_in[g, y, s, t] - m.a[g, y] <= 0
-        #
-        # # Max charging power for candidate storage units
-        # m.MAX_POWER_IN_CANDIDATE_STORAGE = Constraint(m.G_C_STORAGE, m.Y, m.S, m.T,
-        #                                               rule=max_power_in_candidate_storage_rule)
-        #
-        # def max_power_out_existing_storage_rule(_m, g, y, s, t):
-        #     """Max discharging power for existing storage units"""
-        #
-        #     return m.p_out[g, y, s, t] - (m.P_OUT_MAX[g] * (1 - m.F[g, y])) <= 0
-        #
-        # # Max discharging power for existing storage units
-        # m.MAX_POWER_OUT_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T,
-        #                                               rule=max_power_out_existing_storage_rule)
-        #
-        # def max_power_out_candidate_storage_rule(_m, g, y, s, t):
-        #     """Max discharging power for candidate storage units"""
-        #
-        #     return m.p_out[g, y, s, t] - m.a[g, y] <= 0
-        #
-        # # Max discharging power for candidate storage units
-        # m.MAX_POWER_OUT_CANDIDATE_STORAGE = Constraint(m.G_C_STORAGE, m.Y, m.S, m.T,
-        #                                                rule=max_power_out_candidate_storage_rule)
-        #
-        # def min_energy_storage_rule(_m, g, y, s, t):
-        #     """Min energy for storage units"""
-        #
-        #     return - m.q[g, y, s, t] <= 0
-        #
-        # # Min storage unit energy level
-        # m.MIN_ENERGY_STORAGE = Constraint(m.G_STORAGE, m.Y, m.S, m.T, rule=min_energy_storage_rule)
-        #
-        # def max_energy_existing_storage_rule(_m, g, y, s, t):
-        #     """Max energy for existing storage units"""
-        #
-        #     return m.q[g, y, s, t] - m.Q_MAX <= 0
-        #
-        # # Max energy for existing storage units
-        # m.MAX_ENERGY_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T, rule=max_energy_existing_storage_rule)
-        #
-        # def max_energy_candidate_storage_rule(_m, g, y, s, t):
-        #     """Max energy for candidate storage units"""
-        #
-        #     return m.q[g, y, s, t] - m.a[g, y] <= 0
-        #
-        # # Max energy for candidate storage units
-        # m.MAX_ENERGY_CANDIDATE_STORAGE = Constraint(m.G_C_STORAGE, m.Y, m.S, m.T,
-        #                                             rule=max_energy_candidate_storage_rule)
-        #
-        # def min_energy_interval_end_storage_rule(_m, g, y, s):
-        #     """Min energy in storage unit at end of scenario interval"""
-        #
-        #     return m.Q_END_MIN[g] - m.q[g, y, s, m.T.last()] <= 0
-        #
-        # # Min energy in storage unit at end of scenario
-        # m.MIN_ENERGY_INTERVAL_END_STORAGE = Constraint(m.G_STORAGE, m.Y, m.S, rule=min_energy_interval_end_storage_rule)
-        #
-        # def max_energy_interval_end_storage_rule(_m, g, y, s):
-        #     """Max energy in storage unit at end of scenario interval"""
-        #
-        #     return m.q[g, y, s, m.T.last()] - m.Q_END_MAX[g] <= 0
-        #
-        # # Min energy in storage unit at end of scenario
-        # m.MAX_ENERGY_INTERVAL_END_STORAGE = Constraint(m.G_STORAGE, m.Y, m.S, rule=max_energy_interval_end_storage_rule)
-        #
-        # def storage_energy_transition_rule(_m, g, y, s, t):
-        #     """Energy transition rule for storage units"""
-        #
-        #     if t == m.T.first():
-        #         return (- m.q[g, y, s, t] + m.Q0[g, y, s] + (m.ETA[g] * m.p_in[g, y, s, t])
-        #                 - ((1 / m.ETA[g]) * m.p_out[g, y, s, t])
-        #                 == 0)
-        #
-        #     else:
-        #         return (- m.q[g, y, s, t] + m.q[g, y, s, t - 1] + (m.ETA[g] * m.p_in[g, y, s, t])
-        #                 - ((1 / m.ETA[g]) * m.p_out[g, y, s, t])
-        #                 == 0)
-        #
-        # # Energy transition rule for storage units
-        # m.ENERGY_TRANSITION_STORAGE = Constraint(m.G_STORAGE, m.Y, m.S, m.T, rule=storage_energy_transition_rule)
+        def min_power_out_storage_rule(_m, g, y, s, t):
+            """Min discharging power for storage units"""
+
+            return - m.p_out[g, y, s, t] <= 0
+
+        # Min discharging power for storage units
+        m.MIN_POWER_OUT_STORAGE = Constraint(m.G_STORAGE, m.Y, m.S, m.T, rule=min_power_out_storage_rule)
+
+        def max_power_in_existing_storage_rule(_m, g, y, s, t):
+            """Max charging power for existing storage units"""
+
+            return m.p_in[g, y, s, t] - (m.P_IN_MAX[g] * (1 - m.F[g, y])) <= 0
+
+        # Max charging power for existing storage units
+        m.MAX_POWER_IN_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T,
+                                                     rule=max_power_in_existing_storage_rule)
+
+        def max_power_in_candidate_storage_rule(_m, g, y, s, t):
+            """Max charging power for candidate storage units"""
+
+            return m.p_in[g, y, s, t] - sum(m.x_c[g, j] for j in m.Y if j <= y) <= 0
+
+        # Max charging power for candidate storage units
+        m.MAX_POWER_IN_CANDIDATE_STORAGE = Constraint(m.G_C_STORAGE, m.Y, m.S, m.T,
+                                                      rule=max_power_in_candidate_storage_rule)
+
+        def max_power_out_existing_storage_rule(_m, g, y, s, t):
+            """Max discharging power for existing storage units"""
+
+            return m.p_out[g, y, s, t] - (m.P_OUT_MAX[g] * (1 - m.F[g, y])) <= 0
+
+        # Max discharging power for existing storage units
+        m.MAX_POWER_OUT_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T,
+                                                      rule=max_power_out_existing_storage_rule)
+
+        def max_power_out_candidate_storage_rule(_m, g, y, s, t):
+            """Max discharging power for candidate storage units"""
+
+            return m.p_out[g, y, s, t] - sum(m.x_c[g, j] for j in m.Y if j <= y) <= 0
+
+        # Max discharging power for candidate storage units
+        m.MAX_POWER_OUT_CANDIDATE_STORAGE = Constraint(m.G_C_STORAGE, m.Y, m.S, m.T,
+                                                       rule=max_power_out_candidate_storage_rule)
+
+        def min_energy_storage_rule(_m, g, y, s, t):
+            """Min energy for storage units"""
+
+            return - m.q[g, y, s, t] <= 0
+
+        # Min storage unit energy level
+        m.MIN_ENERGY_STORAGE = Constraint(m.G_STORAGE, m.Y, m.S, m.T, rule=min_energy_storage_rule)
+
+        def max_energy_existing_storage_rule(_m, g, y, s, t):
+            """Max energy for existing storage units"""
+
+            return m.q[g, y, s, t] - m.Q_MAX <= 0
+
+        # Max energy for existing storage units
+        m.MAX_ENERGY_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T, rule=max_energy_existing_storage_rule)
+
+        def max_energy_candidate_storage_rule(_m, g, y, s, t):
+            """Max energy for candidate storage units"""
+
+            return m.q[g, y, s, t] - sum(m.x_c[g, j] for j in m.Y if j <= y) <= 0
+
+        # Max energy for candidate storage units
+        m.MAX_ENERGY_CANDIDATE_STORAGE = Constraint(m.G_C_STORAGE, m.Y, m.S, m.T,
+                                                    rule=max_energy_candidate_storage_rule)
+
+        def min_energy_interval_end_storage_rule(_m, g, y, s):
+            """Min energy in storage unit at end of scenario interval"""
+
+            return m.Q_END_MIN[g] - m.q[g, y, s, m.T.last()] <= 0
+
+        # Min energy in storage unit at end of scenario
+        m.MIN_ENERGY_INTERVAL_END_STORAGE = Constraint(m.G_STORAGE, m.Y, m.S, rule=min_energy_interval_end_storage_rule)
+
+        def max_energy_interval_end_storage_rule(_m, g, y, s):
+            """Max energy in storage unit at end of scenario interval"""
+
+            return m.q[g, y, s, m.T.last()] - m.Q_END_MAX[g] <= 0
+
+        # Min energy in storage unit at end of scenario
+        m.MAX_ENERGY_INTERVAL_END_STORAGE = Constraint(m.G_STORAGE, m.Y, m.S, rule=max_energy_interval_end_storage_rule)
+
+        def storage_energy_transition_rule(_m, g, y, s, t):
+            """Energy transition rule for storage units"""
+
+            if t == m.T.first():
+                return (- m.q[g, y, s, t] + m.Q0[g, y, s] + (m.ETA[g] * m.p_in[g, y, s, t])
+                        - ((1 / m.ETA[g]) * m.p_out[g, y, s, t])
+                        == 0)
+
+            else:
+                return (- m.q[g, y, s, t] + m.q[g, y, s, t - 1] + (m.ETA[g] * m.p_in[g, y, s, t])
+                        - ((1 / m.ETA[g]) * m.p_out[g, y, s, t])
+                        == 0)
+
+        # Energy transition rule for storage units
+        m.ENERGY_TRANSITION_STORAGE = Constraint(m.G_STORAGE, m.Y, m.S, m.T, rule=storage_energy_transition_rule)
 
         # def ramp_up_rule(_m, g, y, s, t):
         #     """Ramp up constraint"""
@@ -719,39 +719,39 @@ class Dual:
         # Max power output - hydro
         m.sigma_8 = Var(m.G_E_HYDRO, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
-        # # Min charging power - storage units
-        # m.sigma_9 = Var(m.G_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
-        #
-        # # Min discharging power - storage_units
-        # m.sigma_10 = Var(m.G_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
-        #
-        # # Max charging power - existing storage
-        # m.sigma_11 = Var(m.G_E_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
-        #
-        # # Max charging power - candidate storage
-        # m.sigma_12 = Var(m.G_C_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
-        #
-        # # Max discharging power - existing storage
-        # m.sigma_13 = Var(m.G_E_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
-        #
-        # # Max discharging power - candidate storage
-        # m.sigma_14 = Var(m.G_C_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
-        #
-        # # Min energy - storage units
-        # m.sigma_15 = Var(m.G_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
-        #
-        # # Max energy - existing storage units
-        # m.sigma_16 = Var(m.G_E_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
-        #
-        # # Max energy - candidate storage
-        # m.sigma_17 = Var(m.G_C_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
-        #
-        # # Min energy - interval end
-        # m.sigma_18 = Var(m.G_STORAGE, m.Y, m.S, within=NonNegativeReals, initialize=0)
-        #
-        # # Max energy - interval end
-        # m.sigma_19 = Var(m.G_STORAGE, m.Y, m.S, within=NonNegativeReals, initialize=0)
-        #
+        # Min charging power - storage units
+        m.sigma_9 = Var(m.G_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+
+        # Min discharging power - storage_units
+        m.sigma_10 = Var(m.G_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+
+        # Max charging power - existing storage
+        m.sigma_11 = Var(m.G_E_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+
+        # Max charging power - candidate storage
+        m.sigma_12 = Var(m.G_C_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+
+        # Max discharging power - existing storage
+        m.sigma_13 = Var(m.G_E_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+
+        # Max discharging power - candidate storage
+        m.sigma_14 = Var(m.G_C_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+
+        # Min energy - storage units
+        m.sigma_15 = Var(m.G_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+
+        # Max energy - existing storage units
+        m.sigma_16 = Var(m.G_E_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+
+        # Max energy - candidate storage
+        m.sigma_17 = Var(m.G_C_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+
+        # Min energy - interval end
+        m.sigma_18 = Var(m.G_STORAGE, m.Y, m.S, within=NonNegativeReals, initialize=0)
+
+        # Max energy - interval end
+        m.sigma_19 = Var(m.G_STORAGE, m.Y, m.S, within=NonNegativeReals, initialize=0)
+
         # # Ramp-rate up (all generators excluding storage)
         # m.sigma_20 = Var(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
         #
@@ -780,7 +780,7 @@ class Dual:
         m.sigma_28 = Var(m.L, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
 
         # Storage energy transition
-        # m.zeta_1 = Var(m.G_STORAGE, m.Y, m.S, m.T, initialize=0)
+        m.zeta_1 = Var(m.G_STORAGE, m.Y, m.S, m.T, initialize=0)
 
         # Energy output (all generators excluding storage)
         # m.zeta_2 = Var(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, initialize=0)
@@ -825,20 +825,20 @@ class Dual:
             # Max power - existing hydro
             t_6 = sum(- m.sigma_8[g, y, s, t] * m.P_H[g, y, s, t] * (1 - m.F[g, y]) for g in m.G_E_HYDRO for y in m.Y for s in m.S for t in m.T)
 
-            # # Max charging power - existing storage
-            # t_7 = sum(- m.sigma_11[g, y, s, t] * m.P_IN_MAX[g] * (1 - m.F[g, y]) for g in m.G_E_STORAGE for y in m.Y for s in m.S for t in m.T)
+            # Max charging power - existing storage
+            t_7 = sum(- m.sigma_11[g, y, s, t] * m.P_IN_MAX[g] * (1 - m.F[g, y]) for g in m.G_E_STORAGE for y in m.Y for s in m.S for t in m.T)
 
-            # # Max discharging power - existing storage
-            # t_8 = sum(- m.sigma_13[g, y, s, t] * m.P_OUT_MAX[g] * (1 - m.F[g, y]) for g in m.G_E_STORAGE for y in m.Y for s in m.S for t in m.T)
-            #
-            # # Max energy - existing storage units
-            # t_9 = sum(- m.sigma_16[g, y, s, t] * m.Q_MAX[g] for g in m.G_E_STORAGE for y in m.Y for s in m.S for t in m.T)
+            # Max discharging power - existing storage
+            t_8 = sum(- m.sigma_13[g, y, s, t] * m.P_OUT_MAX[g] * (1 - m.F[g, y]) for g in m.G_E_STORAGE for y in m.Y for s in m.S for t in m.T)
 
-            # # Min energy - interval end
-            # t_10 = sum(m.sigma_18[g, y, s] * m.Q_END_MIN[g] for g in m.G_E_STORAGE for y in m.Y for s in m.S)
-            #
-            # # Max energy - interval end
-            # t_11 = sum(- m.sigma_19[g, y, s] * m.Q_END_MAX[g] for g in m.G_E_STORAGE for y in m.Y for s in m.S)
+            # Max energy - existing storage units
+            t_9 = sum(- m.sigma_16[g, y, s, t] * m.Q_MAX[g] for g in m.G_E_STORAGE for y in m.Y for s in m.S for t in m.T)
+
+            # Min energy - interval end
+            t_10 = sum(m.sigma_18[g, y, s] * m.Q_END_MIN[g] for g in m.G_STORAGE for y in m.Y for s in m.S)
+
+            # Max energy - interval end
+            t_11 = sum(- m.sigma_19[g, y, s] * m.Q_END_MAX[g] for g in m.G_STORAGE for y in m.Y for s in m.S)
 
             # # Ramp-up constraint - generators
             # t_12 = sum(- m.sigma_20[g, y, s, t] * m.RR_UP[g] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S for t in m.T)
@@ -885,8 +885,8 @@ class Dual:
             # Demand
             t_26 = sum(m.lamb[z, y, s, t] * m.DEMAND[z, y, s, t] for z in m.Z for y in m.Y for s in m.S for t in m.T)
 
-            # # Initial storage unit energy
-            # t_27 = sum(m.zeta_1[g, y, s, m.T.first()] * m.Q0[g, y, s] for g in m.G_STORAGE for y in m.Y for s in m.S)
+            # Initial storage unit energy
+            t_27 = sum(m.zeta_1[g, y, s, m.T.first()] * m.Q0[g, y, s] for g in m.G_STORAGE for y in m.Y for s in m.S)
 
             # Initial generator power output
             # t_28 = sum(- m.zeta_2[g, y, s, m.T.first()] * (m.P0[g, y, s] / 2) for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S)
@@ -903,7 +903,7 @@ class Dual:
             # # Fixed operations and maintenance cost - existing generators - end of horizon cost
             # t_32 = (m.DELTA[m.Y.last()] / m.INTEREST_RATE) * sum(m.C_FOM[g] * m.P_MAX[g] * (1 - m.F[g, m.Y.last()]) for g in m.G_E)
 
-            return t_2 + t_3 + t_4 + t_5 + t_6 + t_24 + t_25 + t_26
+            return t_2 + t_3 + t_4 + t_5 + t_6 + t_7 + t_8 + t_9 + t_10 + t_11 + t_24 + t_25 + t_26 + t_27
 
         # Dual objective expression
         m.DUAL_OBJECTIVE_EXPRESSION = Expression(rule=dual_objective_expression_rule)
@@ -961,6 +961,19 @@ class Dual:
 
         # Investment decision for solar plant
         m.INVESTMENT_DECISION_SOLAR = Constraint(m.G_C_SOLAR, m.Y, rule=investment_decision_solar_rule)
+
+        def investment_decision_storage_rule(_m, g, y):
+            """Investment decision constraints for candidate thermal generators (x_c)"""
+
+            return (((m.DELTA[y] / m.INTEREST_RATE) * m.GAMMA[g] * m.I_C[g, y])
+                    + sum(m.DELTA[j] * m.C_FOM[g] for j in m.Y if j >= y)
+                    - m.mu_1[g, y]
+                    + ((m.DELTA[m.Y.last()] / m.INTEREST_RATE) * m.C_FOM[g])
+                    + sum((- m.sigma_12[g, j, s, t] - m.sigma_14[g, j, s, t] - m.sigma_17[g, j, s, t]) for s in m.S for t in m.T for j in m.Y if j >= y)
+                    == 0)
+
+        # Investment decision for storage units
+        m.INVESTMENT_DECISION_STORAGE = Constraint(m.G_C_STORAGE, m.Y, rule=investment_decision_storage_rule)
 
         # def total_capacity_thermal_rule(_m, g, y):
         #     """Total thermal generator installed capacity"""
@@ -1168,111 +1181,128 @@ class Dual:
         # Total power output from hydro generators
         m.POWER_OUTPUT_HYDRO = Constraint(m.G_E_HYDRO, m.Y, m.S, m.T, rule=power_output_hydro_rule)
 
-        # def charging_power_existing_storage_rule(_m, g, y, s, t):
-        #     """Charging power for existing storage units"""
-        #
-        #     if t != m.T.last():
-        #         return (- m.sigma_9[g, y, s, t] + m.sigma_11[g, y, s, t] + m.lamb[self.k(m, g), y, s, t]
-        #                 + (m.ETA[g] * m.zeta_1[g, y, s, t])
-        #                 + m.sigma_21[g, y, s, t] - m.sigma_21[g, y, s, t + 1]
-        #                 - m.sigma_24[g, y, s, t] + m.sigma_24[g, y, s, t + 1]
-        #                 == 0)
-        #
-        #     else:
-        #         return (- m.sigma_9[g, y, s, t] + m.sigma_11[g, y, s, t] + m.lamb[self.k(m, g), y, s, t]
-        #                 + (m.ETA[g] * m.zeta_1[g, y, s, t])
-        #                 + m.sigma_21[g, y, s, t]
-        #                 - m.sigma_24[g, y, s, t]
-        #                 == 0)
-        #
-        # # Existing storage unit charging power
-        # m.CHARGING_POWER_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T, rule=charging_power_existing_storage_rule)
-        #
-        # def charging_power_candidate_storage_rule(_m, g, y, s, t):
-        #     """Charging power for candidate storage units"""
-        #
-        #     if t != m.T.last():
-        #         return (- m.sigma_9[g, y, s, t] + m.sigma_12[g, y, s, t] + m.lamb[self.k(m, g), y, s, t]
-        #                 + (m.ETA[g] * m.zeta_1[g, y, s, t])
-        #                 + m.sigma_21[g, y, s, t] - m.sigma_21[g, y, s, t + 1]
-        #                 - m.sigma_24[g, y, s, t] + m.sigma_24[g, y, s, t + 1]
-        #                 == 0)
-        #
-        #     else:
-        #         return (- m.sigma_9[g, y, s, t] + m.sigma_12[g, y, s, t] + m.lamb[self.k(m, g), y, s, t]
-        #                 + (m.ETA[g] * m.zeta_1[g, y, s, t])
-        #                 + m.sigma_21[g, y, s, t]
-        #                 - m.sigma_24[g, y, s, t]
-        #                 == 0)
-        #
-        # # Existing storage unit charging power
-        # m.CHARGING_POWER_CANDIDATE_STORAGE = Constraint(m.G_C_STORAGE, m.Y, m.S, m.T, rule=charging_power_candidate_storage_rule)
-        #
-        # def discharging_power_existing_storage_rule(_m, g, y, s, t):
-        #     """Discharging power for existing storage units"""
-        #
-        #     if t != m.T.last():
-        #         return (- m.sigma_10[g, y, s, t] + m.sigma_13[g, y, s, t] - m.lamb[self.k(m, g), y, s, t]
-        #                 - ((1 / m.ETA[g]) * m.zeta_1[g, y, s, t])
-        #                 - ((m.zeta_3[g, y, s, t] + m.zeta_3[g, y, s, t+1]) / 2)
-        #                 + m.sigma_22[g, y, s, t] - m.sigma_22[g, y, s, t + 1]
-        #                 - m.sigma_25[g, y, s, t] + m.sigma_25[g, y, s, t + 1]
-        #                 == 0)
-        #     else:
-        #         return (- m.sigma_10[g, y, s, t] + m.sigma_13[g, y, s, t] - m.lamb[self.k(m, g), y, s, t]
-        #                 - ((1 / m.ETA[g]) * m.zeta_1[g, y, s, t])
-        #                 - (m.zeta_3[g, y, s, t] / 2)
-        #                 + m.sigma_22[g, y, s, t]
-        #                 - m.sigma_25[g, y, s, t]
-        #                 == 0)
-        #
-        # # Existing storage unit discharging power
-        # m.DISCHARGING_POWER_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T, rule=discharging_power_existing_storage_rule)
-        #
-        # def discharging_power_candidate_storage_rule(_m, g, y, s, t):
-        #     """Discharging power for candidate storage units"""
-        #
-        #     if t != m.T.last():
-        #         return (- m.sigma_10[g, y, s, t] + m.sigma_14[g, y, s, t] - m.lamb[self.k(m, g), y, s, t]
-        #                 - ((1 / m.ETA[g]) * m.zeta_1[g, y, s, t])
-        #                 - ((m.zeta_3[g, y, s, t] + m.zeta_3[g, y, s, t + 1]) / 2)
-        #                 + m.sigma_22[g, y, s, t] - m.sigma_22[g, y, s, t + 1]
-        #                 - m.sigma_25[g, y, s, t] + m.sigma_25[g, y, s, t + 1]
-        #                 == 0)
-        #     else:
-        #         return (- m.sigma_10[g, y, s, t] + m.sigma_14[g, y, s, t] - m.lamb[self.k(m, g), y, s, t]
-        #                 - ((1 / m.ETA[g]) * m.zeta_1[g, y, s, t])
-        #                 - (m.zeta_3[g, y, s, t] / 2)
-        #                 + m.sigma_22[g, y, s, t]
-        #                 - m.sigma_25[g, y, s, t]
-        #                 == 0)
-        #
-        # # Candidate storage unit discharging power
-        # m.DISCHARGING_POWER_CANDIDATE_STORAGE = Constraint(m.G_C_STORAGE, m.Y, m.S, m.T, rule=discharging_power_candidate_storage_rule)
-        #
-        # def energy_existing_storage_unit(_m, g, y, s, t):
-        #     """Storage unit energy"""
-        #
-        #     if t != m.T.last():
-        #         return - m.sigma_15[g, y, s, t] + m.sigma_16[g, y, s, t] - m.zeta_1[g, y, s, t] + m.zeta_1[g, y, s, t + 1] == 0
-        #
-        #     else:
-        #         return - m.sigma_15[g, y, s, t] + m.sigma_16[g, y, s, t] - m.zeta_1[g, y, s, t] - m.sigma_18[g, y, s] + m.sigma_19[g, y, s] == 0
-        #
-        # # Existing storage unit energy
-        # m.ENERGY_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T, rule=energy_existing_storage_unit)
-        #
-        # def energy_candidate_storage_unit(_m, g, y, s, t):
-        #     """Storage unit energy"""
-        #
-        #     if t != m.T.last():
-        #         return - m.sigma_15[g, y, s, t] + m.sigma_17[g, y, s, t] - m.zeta_1[g, y, s, t] + m.zeta_1[g, y, s, t + 1] == 0
-        #
-        #     else:
-        #         return - m.sigma_15[g, y, s, t] + m.sigma_17[g, y, s, t] - m.zeta_1[g, y, s, t] - m.sigma_18[g, y, s] + m.sigma_19[g, y, s] == 0
-        #
-        # # Existing storage unit energy
-        # m.ENERGY_CANDIDATE_STORAGE = Constraint(m.G_C_STORAGE, m.Y, m.S, m.T, rule=energy_candidate_storage_unit)
+        def charging_power_existing_storage_rule(_m, g, y, s, t):
+            """Charging power for existing storage units"""
+
+            # if t != m.T.last():
+            return (- m.sigma_9[g, y, s, t] + m.sigma_11[g, y, s, t] + m.lamb[self.k(m, g), y, s, t]
+                    + (m.ETA[g] * m.zeta_1[g, y, s, t])
+                    # + m.sigma_21[g, y, s, t] - m.sigma_21[g, y, s, t + 1]
+                    # - m.sigma_24[g, y, s, t] + m.sigma_24[g, y, s, t + 1]
+                    == 0)
+            #
+            # else:
+            #     return (- m.sigma_9[g, y, s, t] + m.sigma_11[g, y, s, t] + m.lamb[self.k(m, g), y, s, t]
+            #             + (m.ETA[g] * m.zeta_1[g, y, s, t])
+            #             + m.sigma_21[g, y, s, t]
+            #             - m.sigma_24[g, y, s, t]
+            #             == 0)
+
+        # Existing storage unit charging power
+        m.CHARGING_POWER_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T, rule=charging_power_existing_storage_rule)
+
+        def charging_power_candidate_storage_rule(_m, g, y, s, t):
+            """Charging power for candidate storage units"""
+
+            # if t != m.T.last():
+            return (- m.sigma_9[g, y, s, t] + m.sigma_12[g, y, s, t] + m.lamb[self.k(m, g), y, s, t]
+                    + (m.ETA[g] * m.zeta_1[g, y, s, t])
+                    # + m.sigma_21[g, y, s, t] - m.sigma_21[g, y, s, t + 1]
+                    # - m.sigma_24[g, y, s, t] + m.sigma_24[g, y, s, t + 1]
+                    == 0)
+            #
+            # else:
+            #     return (- m.sigma_9[g, y, s, t] + m.sigma_12[g, y, s, t] + m.lamb[self.k(m, g), y, s, t]
+            #             + (m.ETA[g] * m.zeta_1[g, y, s, t])
+            #             + m.sigma_21[g, y, s, t]
+            #             - m.sigma_24[g, y, s, t]
+            #             == 0)
+
+        # Existing storage unit charging power
+        m.CHARGING_POWER_CANDIDATE_STORAGE = Constraint(m.G_C_STORAGE, m.Y, m.S, m.T, rule=charging_power_candidate_storage_rule)
+
+        def discharging_power_existing_storage_rule(_m, g, y, s, t):
+            """Discharging power for existing storage units"""
+
+            if y != m.Y.last():
+                return (- m.sigma_10[g, y, s, t] + m.sigma_13[g, y, s, t] - m.lamb[self.k(m, g), y, s, t]
+                        - ((1 / m.ETA[g]) * m.zeta_1[g, y, s, t])
+                        + (m.DELTA[y] * m.RHO[y, s] * m.C_MC[g, y])
+                        # - ((m.zeta_3[g, y, s, t] + m.zeta_3[g, y, s, t+1]) / 2)
+                        # + m.sigma_22[g, y, s, t] - m.sigma_22[g, y, s, t + 1]
+                        # - m.sigma_25[g, y, s, t] + m.sigma_25[g, y, s, t + 1]
+                        == 0)
+            else:
+                return (- m.sigma_10[g, y, s, t] + m.sigma_13[g, y, s, t] - m.lamb[self.k(m, g), y, s, t]
+                        - ((1 / m.ETA[g]) * m.zeta_1[g, y, s, t])
+                        + (m.DELTA[y] * m.RHO[y, s] * (1 + (1 / m.INTEREST_RATE)) * m.C_MC[g, y])
+                        # - ((m.zeta_3[g, y, s, t] + m.zeta_3[g, y, s, t+1]) / 2)
+                        # + m.sigma_22[g, y, s, t] - m.sigma_22[g, y, s, t + 1]
+                        # - m.sigma_25[g, y, s, t] + m.sigma_25[g, y, s, t + 1]
+                        == 0)            # else:
+            #     return (- m.sigma_10[g, y, s, t] + m.sigma_13[g, y, s, t] - m.lamb[self.k(m, g), y, s, t]
+            #             - ((1 / m.ETA[g]) * m.zeta_1[g, y, s, t])
+            #             - (m.zeta_3[g, y, s, t] / 2)
+            #             + m.sigma_22[g, y, s, t]
+            #             - m.sigma_25[g, y, s, t]
+            #             == 0)
+
+        # Existing storage unit discharging power
+        m.DISCHARGING_POWER_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T, rule=discharging_power_existing_storage_rule)
+
+        def discharging_power_candidate_storage_rule(_m, g, y, s, t):
+            """Discharging power for candidate storage units"""
+
+            if y != m.Y.last():
+                return (- m.sigma_10[g, y, s, t] + m.sigma_14[g, y, s, t] - m.lamb[self.k(m, g), y, s, t]
+                        - ((1 / m.ETA[g]) * m.zeta_1[g, y, s, t])
+                        + (m.DELTA[y] * m.RHO[y, s] * m.C_MC[g, y])
+                        # - ((m.zeta_3[g, y, s, t] + m.zeta_3[g, y, s, t + 1]) / 2)
+                        # + m.sigma_22[g, y, s, t] - m.sigma_22[g, y, s, t + 1]
+                        # - m.sigma_25[g, y, s, t] + m.sigma_25[g, y, s, t + 1]
+                        == 0)
+            else:
+                return (- m.sigma_10[g, y, s, t] + m.sigma_14[g, y, s, t] - m.lamb[self.k(m, g), y, s, t]
+                        - ((1 / m.ETA[g]) * m.zeta_1[g, y, s, t])
+                        + (m.DELTA[y] * m.RHO[y, s] * (1 + (1 / m.INTEREST_RATE)) * m.C_MC[g, y])
+                        # - ((m.zeta_3[g, y, s, t] + m.zeta_3[g, y, s, t + 1]) / 2)
+                        # + m.sigma_22[g, y, s, t] - m.sigma_22[g, y, s, t + 1]
+                        # - m.sigma_25[g, y, s, t] + m.sigma_25[g, y, s, t + 1]
+                        == 0)
+            # else:
+            #     return (- m.sigma_10[g, y, s, t] + m.sigma_14[g, y, s, t] - m.lamb[self.k(m, g), y, s, t]
+            #             - ((1 / m.ETA[g]) * m.zeta_1[g, y, s, t])
+            #             - (m.zeta_3[g, y, s, t] / 2)
+            #             + m.sigma_22[g, y, s, t]
+            #             - m.sigma_25[g, y, s, t]
+            #             == 0)
+
+        # Candidate storage unit discharging power
+        m.DISCHARGING_POWER_CANDIDATE_STORAGE = Constraint(m.G_C_STORAGE, m.Y, m.S, m.T, rule=discharging_power_candidate_storage_rule)
+
+        def energy_existing_storage_unit(_m, g, y, s, t):
+            """Storage unit energy"""
+
+            if t != m.T.last():
+                return - m.sigma_15[g, y, s, t] + m.sigma_16[g, y, s, t] - m.zeta_1[g, y, s, t] + m.zeta_1[g, y, s, t + 1] == 0
+
+            else:
+                return - m.sigma_15[g, y, s, t] + m.sigma_16[g, y, s, t] - m.zeta_1[g, y, s, t] - m.sigma_18[g, y, s] + m.sigma_19[g, y, s] == 0
+
+        # Existing storage unit energy
+        m.ENERGY_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T, rule=energy_existing_storage_unit)
+
+        def energy_candidate_storage_unit(_m, g, y, s, t):
+            """Storage unit energy"""
+
+            if t != m.T.last():
+                return - m.sigma_15[g, y, s, t] + m.sigma_17[g, y, s, t] - m.zeta_1[g, y, s, t] + m.zeta_1[g, y, s, t + 1] == 0
+
+            else:
+                return - m.sigma_15[g, y, s, t] + m.sigma_17[g, y, s, t] - m.zeta_1[g, y, s, t] - m.sigma_18[g, y, s] + m.sigma_19[g, y, s] == 0
+
+        # Existing storage unit energy
+        m.ENERGY_CANDIDATE_STORAGE = Constraint(m.G_C_STORAGE, m.Y, m.S, m.T, rule=energy_candidate_storage_unit)
 
         # def energy_output_existing_thermal_rule(_m, g, y, s, t):
         #     """Existing thermal generator energy output"""
@@ -1605,6 +1635,7 @@ if __name__ == '__main__':
                  {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_THERMAL', 'primal_var': True},
                  {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_WIND', 'primal_var': True},
                  {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_SOLAR', 'primal_var': True},
+                 {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_STORAGE', 'primal_var': True},
                  {'primal': 'NON_NEGATIVE_CAPACITY', 'dual': 'mu_1', 'primal_var': False},
                  # {'primal': 'SOLAR_BUILD_LIMIT_CONS', 'dual': 'mu_2', 'primal_var': False},
                  # {'primal': 'WIND_BUILD_LIMIT_CONS', 'dual': 'mu_3', 'primal_var': False},

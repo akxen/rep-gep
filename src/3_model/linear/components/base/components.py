@@ -80,7 +80,7 @@ class CommonComponents:
         m.G_E = m.G_E_THERM.union(m.G_E_WIND).union(m.G_E_SOLAR).union(m.G_E_HYDRO)
 
         # All candidate generators
-        m.G_C = m.G_C_THERM.union(m.G_C_WIND).union(m.G_C_SOLAR) # .union(m.G_C_STORAGE)
+        m.G_C = m.G_C_THERM.union(m.G_C_WIND).union(m.G_C_SOLAR).union(m.G_C_STORAGE)
 
         # All generators
         m.G = m.G_E.union(m.G_C)
