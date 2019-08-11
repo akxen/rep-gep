@@ -430,17 +430,17 @@ class Primal:
         # Energy transition rule for storage units
         m.ENERGY_TRANSITION_STORAGE = Constraint(m.G_STORAGE, m.Y, m.S, m.T, rule=storage_energy_transition_rule)
 
-        # def ramp_up_rule(_m, g, y, s, t):
-        #     """Ramp up constraint"""
-        #
-        #     if t == m.T.first():
-        #         return m.p[g, y, s, t] - m.P0[g, y, s] - m.RR_UP[g] <= 0
-        #     else:
-        #         return m.p[g, y, s, t] - m.p[g, y, s, t - 1] - m.RR_UP[g] <= 0
-        #
-        # # Ramp-rate up constraint
-        # m.RAMP_UP = Constraint(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, rule=ramp_up_rule)
-        #
+        def ramp_up_rule(_m, g, y, s, t):
+            """Ramp up constraint"""
+
+            if t == m.T.first():
+                return m.p[g, y, s, t] - m.P0[g, y, s] - m.RR_UP[g] <= 0
+            else:
+                return m.p[g, y, s, t] - m.p[g, y, s, t - 1] - m.RR_UP[g] <= 0
+
+        # Ramp-rate up constraint
+        m.RAMP_UP = Constraint(m.G_THERM.union(m.G_E_HYDRO), m.Y, m.S, m.T, rule=ramp_up_rule)
+
         # def ramp_up_charging_rule(_m, g, y, s, t):
         #     """Ramp-rate up for storage charging power"""
         #
@@ -463,17 +463,17 @@ class Primal:
         # # Ramp-rate up charging
         # m.RAMP_UP_DISCHARGING = Constraint(m.G_STORAGE, m.Y, m.S, m.T, rule=ramp_up_discharging_rule)
 
-        # def ramp_down_rule(_m, g, y, s, t):
-        #     """Ramp down constraint"""
-        #
-        #     if t == m.T.first():
-        #         return - m.p[g, y, s, t] + m.P0[g, y, s] - m.RR_DOWN[g] <= 0
-        #     else:
-        #         return - m.p[g, y, s, t] + m.p[g, y, s, t - 1] - m.RR_DOWN[g] <= 0
-        #
-        # # Ramp-rate down constraint
-        # m.RAMP_DOWN = Constraint(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, rule=ramp_down_rule)
-        #
+        def ramp_down_rule(_m, g, y, s, t):
+            """Ramp down constraint"""
+
+            if t == m.T.first():
+                return - m.p[g, y, s, t] + m.P0[g, y, s] - m.RR_DOWN[g] <= 0
+            else:
+                return - m.p[g, y, s, t] + m.p[g, y, s, t - 1] - m.RR_DOWN[g] <= 0
+
+        # Ramp-rate down constraint
+        m.RAMP_DOWN = Constraint(m.G_THERM.union(m.G_E_HYDRO), m.Y, m.S, m.T, rule=ramp_down_rule)
+
         # def ramp_down_charging_rule(_m, g, y, s, t):
         #     """Ramp-rate down for storage charging power"""
         #
@@ -752,18 +752,18 @@ class Dual:
         # Max energy - interval end
         m.sigma_19 = Var(m.G_STORAGE, m.Y, m.S, within=NonNegativeReals, initialize=0)
 
-        # # Ramp-rate up (all generators excluding storage)
-        # m.sigma_20 = Var(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
-        #
+        # Ramp-rate up (thermal and hydro generators)
+        m.sigma_20 = Var(m.G_THERM.union(m.G_E_HYDRO), m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+
         # # Ramp-rate up - charging power - storage
         # m.sigma_21 = Var(m.G_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
         #
         # # Ramp-rate up - discharging power - storage
         # m.sigma_22 = Var(m.G_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
-        #
-        # # Ramp-rate down (all generators excluding storage)
-        # m.sigma_23 = Var(m.G.difference(m.G_STORAGE), m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
-        #
+
+        # Ramp-rate down (thermal and hydro generators)
+        m.sigma_23 = Var(m.G_THERM.union(m.G_E_HYDRO), m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
+
         # # Ramp-rate down - charging power - storage
         # m.sigma_24 = Var(m.G_STORAGE, m.Y, m.S, m.T, within=NonNegativeReals, initialize=0)
         #
@@ -840,12 +840,12 @@ class Dual:
             # Max energy - interval end
             t_11 = sum(- m.sigma_19[g, y, s] * m.Q_END_MAX[g] for g in m.G_STORAGE for y in m.Y for s in m.S)
 
-            # # Ramp-up constraint - generators
-            # t_12 = sum(- m.sigma_20[g, y, s, t] * m.RR_UP[g] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S for t in m.T)
-            #
-            # # Ramp-up constraint - initial power output - generators
-            # t_13 = sum(- m.sigma_20[g, y, s, m.T.first()] * m.P0[g, y, s] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S)
-            #
+            # Ramp-up constraint - generators
+            t_12 = sum(- m.sigma_20[g, y, s, t] * m.RR_UP[g] for g in m.G_THERM.union(m.G_E_HYDRO) for y in m.Y for s in m.S for t in m.T)
+
+            # Ramp-up constraint - initial power output - generators
+            t_13 = sum(- m.sigma_20[g, y, s, m.T.first()] * m.P0[g, y, s] for g in m.G_THERM.union(m.G_E_HYDRO) for y in m.Y for s in m.S)
+
             # # Ramp-up constraint - storage charging
             # t_14 = sum(- m.sigma_21[g, y, s, t] * m.RR_UP[g] for g in m.G_STORAGE for y in m.Y for s in m.S for t in m.T)
 
@@ -858,12 +858,12 @@ class Dual:
             # # Ramp-up constraint - initial discharging power - storage
             # t_17 = sum(- m.sigma_22[g, y, s, m.T.first()] * m.P_OUT_0[g, y, s] for g in m.G_STORAGE for y in m.Y for s in m.S)
 
-            # # Ramp-down constraint - generators
-            # t_18 = sum(- m.sigma_23[g, y, s, t] * m.RR_DOWN[g] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S for t in m.T)
-            #
-            # # Ramp-down constraint - initial power output - generators
-            # t_19 = sum(m.sigma_23[g, y, s, m.T.first()] * m.P0[g, y, s] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S)
-            #
+            # Ramp-down constraint - generators
+            t_18 = sum(- m.sigma_23[g, y, s, t] * m.RR_DOWN[g] for g in m.G_THERM.union(m.G_E_HYDRO) for y in m.Y for s in m.S for t in m.T)
+
+            # Ramp-down constraint - initial power output - generators
+            t_19 = sum(m.sigma_23[g, y, s, m.T.first()] * m.P0[g, y, s] for g in m.G_THERM.union(m.G_E_HYDRO) for y in m.Y for s in m.S)
+
             # # Ramp-down constraint - storage charging
             # t_20 = sum(- m.sigma_24[g, y, s, t] * m.RR_DOWN[g] for g in m.G_STORAGE for y in m.Y for s in m.S for t in m.T)
 
@@ -903,7 +903,7 @@ class Dual:
             # # Fixed operations and maintenance cost - existing generators - end of horizon cost
             # t_32 = (m.DELTA[m.Y.last()] / m.INTEREST_RATE) * sum(m.C_FOM[g] * m.P_MAX[g] * (1 - m.F[g, m.Y.last()]) for g in m.G_E)
 
-            return t_2 + t_3 + t_4 + t_5 + t_6 + t_7 + t_8 + t_9 + t_10 + t_11 + t_24 + t_25 + t_26 + t_27
+            return t_2 + t_3 + t_4 + t_5 + t_6 + t_7 + t_8 + t_9 + t_10 + t_11 + t_12 + t_13 + t_18 + t_19 + t_24 + t_25 + t_26 + t_27
 
         # Dual objective expression
         m.DUAL_OBJECTIVE_EXPRESSION = Expression(rule=dual_objective_expression_rule)
@@ -1022,22 +1022,44 @@ class Dual:
         def power_output_existing_thermal_rule(_m, g, y, s, t):
             """Power output from existing thermal generators"""
 
-            if y != m.Y.last():
+            if y != m.Y.last() and t != m.T.last():
                 return (- m.sigma_1[g, y, s, t] + m.sigma_2[g, y, s, t]
-                        # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
-                        # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+                        + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t + 1]
+                        - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t + 1]
                         - m.lamb[self.k(m, g), y, s, t]
                         # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
                         + ((m.DELTA[y] * m.RHO[y, s]) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
                         == 0)
-            else:
+
+            elif y != m.Y.last() and t == m.T.last():
                 return (- m.sigma_1[g, y, s, t] + m.sigma_2[g, y, s, t]
-                        # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
-                        # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+                        + m.sigma_20[g, y, s, t]
+                        - m.sigma_23[g, y, s, t]
+                        - m.lamb[self.k(m, g), y, s, t]
+                        # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
+                        == 0)
+
+            elif y == m.Y.last() and t != m.T.last():
+                return (- m.sigma_1[g, y, s, t] + m.sigma_2[g, y, s, t]
+                        + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t + 1]
+                        - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t + 1]
                         - m.lamb[self.k(m, g), y, s, t]
                         # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
                         + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
                         == 0)
+
+            elif y == m.Y.last() and t == m.T.last():
+                return (- m.sigma_1[g, y, s, t] + m.sigma_2[g, y, s, t]
+                        + m.sigma_20[g, y, s, t]
+                        - m.sigma_23[g, y, s, t]
+                        - m.lamb[self.k(m, g), y, s, t]
+                        # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
+                        == 0)
+
+            else:
+                raise Exception(f'Unhandled case: {g, y, s, t}')
 
         # Total power output from thermal generators
         m.POWER_OUTPUT_EXISTING_THERMAL = Constraint(m.G_E_THERM, m.Y, m.S, m.T, rule=power_output_existing_thermal_rule)
@@ -1045,22 +1067,61 @@ class Dual:
         def power_output_candidate_thermal_rule(_m, g, y, s, t):
             """Power output from candidate thermal generators"""
 
-            if y != m.Y.last():
+            if y != m.Y.last() and t != m.T.last():
                 return (- m.sigma_1[g, y, s, t] + m.sigma_3[g, y, s, t]
-                        # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
-                        # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+                        + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t + 1]
+                        - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t + 1]
                         - m.lamb[self.k(m, g), y, s, t]
                         # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
                         + ((m.DELTA[y] * m.RHO[y, s]) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
                         == 0)
-            else:
+
+            elif y != m.Y.last() and t == m.T.last():
                 return (- m.sigma_1[g, y, s, t] + m.sigma_3[g, y, s, t]
-                        # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
-                        # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+                        + m.sigma_20[g, y, s, t]
+                        - m.sigma_23[g, y, s, t]
+                        - m.lamb[self.k(m, g), y, s, t]
+                        # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
+                        == 0)
+
+            elif y == m.Y.last() and t != m.T.last():
+                return (- m.sigma_1[g, y, s, t] + m.sigma_3[g, y, s, t]
+                        + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t + 1]
+                        - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t + 1]
                         - m.lamb[self.k(m, g), y, s, t]
                         # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
                         + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
                         == 0)
+
+            elif y == m.Y.last() and t == m.T.last():
+                return (- m.sigma_1[g, y, s, t] + m.sigma_3[g, y, s, t]
+                        + m.sigma_20[g, y, s, t]
+                        - m.sigma_23[g, y, s, t]
+                        - m.lamb[self.k(m, g), y, s, t]
+                        # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
+                        == 0)
+
+            else:
+                raise Exception(f'Unhandled case: {g, y, s, t}')
+
+            # if y != m.Y.last():
+            #     return (- m.sigma_1[g, y, s, t] + m.sigma_3[g, y, s, t]
+            #             # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
+            #             # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+            #             - m.lamb[self.k(m, g), y, s, t]
+            #             # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+            #             + ((m.DELTA[y] * m.RHO[y, s]) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
+            #             == 0)
+            # else:
+            #     return (- m.sigma_1[g, y, s, t] + m.sigma_3[g, y, s, t]
+            #             # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
+            #             # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+            #             - m.lamb[self.k(m, g), y, s, t]
+            #             # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+            #             + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
+            #             == 0)
         # Total power output from candidate thermal generators
         m.POWER_OUTPUT_CANDIDATE_THERMAL = Constraint(m.G_C_THERM, m.Y, m.S, m.T, rule=power_output_candidate_thermal_rule)
 
@@ -1161,22 +1222,44 @@ class Dual:
         def power_output_hydro_rule(_m, g, y, s, t):
             """Power output from hydro generators"""
 
-            if y != m.Y.last():
+            if y != m.Y.last() and t != m.T.last():
                 return (- m.sigma_1[g, y, s, t] + m.sigma_8[g, y, s, t]
-                        # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
-                        # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+                        + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t + 1]
+                        - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t + 1]
                         - m.lamb[self.k(m, g), y, s, t]
                         # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
                         + (m.DELTA[y] * m.RHO[y, s] * m.C_MC[g, y])
                         == 0)
-            else:
+
+            elif y != m.Y.last() and t == m.T.last():
                 return (- m.sigma_1[g, y, s, t] + m.sigma_8[g, y, s, t]
-                        # + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t+1]
-                        # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
+                        + m.sigma_20[g, y, s, t]
+                        - m.sigma_23[g, y, s, t]
+                        - m.lamb[self.k(m, g), y, s, t]
+                        # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+                        + (m.DELTA[y] * m.RHO[y, s] * m.C_MC[g, y])
+                        == 0)
+
+            elif y == m.Y.last() and t != m.T.last():
+                return (- m.sigma_1[g, y, s, t] + m.sigma_8[g, y, s, t]
+                        + m.sigma_20[g, y, s, t] - m.sigma_20[g, y, s, t + 1]
+                        - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t + 1]
                         - m.lamb[self.k(m, g), y, s, t]
                         # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
                         + (m.DELTA[y] * m.RHO[y, s] * (1 + (1 / m.INTEREST_RATE)) * m.C_MC[g, y])
                         == 0)
+
+            elif y == m.Y.last() and t == m.T.last():
+                return (- m.sigma_1[g, y, s, t] + m.sigma_8[g, y, s, t]
+                        + m.sigma_20[g, y, s, t]
+                        - m.sigma_23[g, y, s, t]
+                        - m.lamb[self.k(m, g), y, s, t]
+                        # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
+                        + (m.DELTA[y] * m.RHO[y, s] * (1 + (1 / m.INTEREST_RATE)) * m.C_MC[g, y])
+                        == 0)
+
+            else:
+                raise Exception(f'Unexpected case: {g, y, s, t}')
 
         # Total power output from hydro generators
         m.POWER_OUTPUT_HYDRO = Constraint(m.G_E_HYDRO, m.Y, m.S, m.T, rule=power_output_hydro_rule)
