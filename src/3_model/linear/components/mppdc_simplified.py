@@ -215,47 +215,47 @@ class Primal:
         # # Cumulative capacity rule
         # m.CUMULATIVE_CAPACITY = Constraint(m.G_C, m.Y, rule=cumulative_capacity_rule)
 
-        # def solar_build_limit_rule(_m, z, y):
-        #     """Enforce solar build limits in each NEM zone"""
-        #
-        #     # Solar generators belonging to zone 'z'
-        #     gens = [g for g in m.G_C_SOLAR if g.split('-')[0] == z]
-        #
-        #     if gens:
-        #         return - sum(m.x_c[g, j] for g in gens for j in m.Y if j <= y) + m.SOLAR_BUILD_LIMITS[z] >= 0
-        #     else:
-        #         return Constraint.Skip
-        #
-        # # Storage build limit constraint for each NEM zone
-        # m.SOLAR_BUILD_LIMIT_CONS = Constraint(m.Z, m.Y, rule=solar_build_limit_rule)
-        #
-        # def wind_build_limit_rule(_m, z, y):
-        #     """Enforce wind build limits in each NEM zone"""
-        #
-        #     # Wind generators belonging to zone 'z'
-        #     gens = [g for g in m.G_C_WIND if g.split('-')[0] == z]
-        #
-        #     if gens:
-        #         return - sum(m.x_c[g, j] for g in gens for j in m.Y if j <= y) + m.WIND_BUILD_LIMITS[z] >= 0
-        #     else:
-        #         return Constraint.Skip
-        #
-        # # Wind build limit constraint for each NEM zone
-        # m.WIND_BUILD_LIMIT_CONS = Constraint(m.Z, m.Y, rule=wind_build_limit_rule)
+        def solar_build_limit_rule(_m, z, y):
+            """Enforce solar build limits in each NEM zone"""
 
-        # def storage_build_limit_rule(_m, z, y):
-        #     """Enforce storage build limits in each NEM zone"""
-        #
-        #     # Storage generators belonging to zone 'z'
-        #     gens = [g for g in m.G_C_STORAGE if g.split('-')[0] == z]
-        #
-        #     if gens:
-        #         return sum(m.a[g, y] for g in gens) - m.STORAGE_BUILD_LIMITS[z] <= 0
-        #     else:
-        #         return Constraint.Skip
-        #
-        # # Storage build limit constraint for each NEM zone
-        # m.STORAGE_BUILD_LIMIT_CONS = Constraint(m.Z, m.Y, rule=storage_build_limit_rule)
+            # Solar generators belonging to zone 'z'
+            gens = [g for g in m.G_C_SOLAR if g.split('-')[0] == z]
+
+            if gens:
+                return sum(m.x_c[g, j] for g in gens for j in m.Y if j <= y) - m.SOLAR_BUILD_LIMITS[z] <= 0
+            else:
+                return Constraint.Skip
+
+        # Storage build limit constraint for each NEM zone
+        m.SOLAR_BUILD_LIMIT_CONS = Constraint(m.Z, m.Y, rule=solar_build_limit_rule)
+
+        def wind_build_limit_rule(_m, z, y):
+            """Enforce wind build limits in each NEM zone"""
+
+            # Wind generators belonging to zone 'z'
+            gens = [g for g in m.G_C_WIND if g.split('-')[0] == z]
+
+            if gens:
+                return sum(m.x_c[g, j] for g in gens for j in m.Y if j <= y) - m.WIND_BUILD_LIMITS[z] <= 0
+            else:
+                return Constraint.Skip
+
+        # Wind build limit constraint for each NEM zone
+        m.WIND_BUILD_LIMIT_CONS = Constraint(m.Z, m.Y, rule=wind_build_limit_rule)
+
+        def storage_build_limit_rule(_m, z, y):
+            """Enforce storage build limits in each NEM zone"""
+
+            # Storage generators belonging to zone 'z'
+            gens = [g for g in m.G_C_STORAGE if g.split('-')[0] == z]
+
+            if gens:
+                return sum(m.x_c[g, j] for g in gens for j in m.Y if j <= y) - m.STORAGE_BUILD_LIMITS[z] <= 0
+            else:
+                return Constraint.Skip
+
+        # Storage build limit constraint for each NEM zone
+        m.STORAGE_BUILD_LIMIT_CONS = Constraint(m.Z, m.Y, rule=storage_build_limit_rule)
 
         def min_power_rule(_m, g, y, s, t):
             """Minimum power output"""
@@ -683,14 +683,14 @@ class Dual:
         # Non-negative candidate capacity
         m.mu_1 = Var(m.G_C, m.Y, within=NonNegativeReals, initialize=0)
 
-        # # Solar build limits
-        # m.mu_2 = Var(m.Z, m.Y, within=NonNegativeReals, initialize=0)
-        #
-        # # Wind build limits
-        # m.mu_3 = Var(m.Z, m.Y, within=NonNegativeReals, initialize=0)
+        # Solar build limits
+        m.mu_2 = Var(m.Z, m.Y, within=NonNegativeReals, initialize=0)
+
+        # Wind build limits
+        m.mu_3 = Var(m.Z, m.Y, within=NonNegativeReals, initialize=0)
 
         # Storage build limits
-        # m.mu_4 = Var(m.Z, m.Y, within=NonNegativeReals, initialize=0)
+        m.mu_4 = Var(m.Z, m.Y, within=NonNegativeReals, initialize=0)
 
         # Cumulative candidate capacity
         # m.nu_1 = Var(m.G_C, m.Y, initialize=0)
@@ -808,7 +808,7 @@ class Dual:
             """Expression for dual objective function"""
 
             # Build limits
-            # t_1 = sum(- (m.mu_2[z, y] * m.SOLAR_BUILD_LIMITS[z]) - (m.mu_3[z, y] * m.WIND_BUILD_LIMITS[z]) for z in m.Z for y in m.Y)
+            t_1 = sum(- (m.mu_2[z, y] * m.SOLAR_BUILD_LIMITS[z]) - (m.mu_3[z, y] * m.WIND_BUILD_LIMITS[z]) - (m.mu_4[z, y] * m.STORAGE_BUILD_LIMITS[z]) for z in m.Z for y in m.Y)
 
             # Min power output
             t_2 = sum(m.sigma_1[g, y, s, t] * m.P_MIN[g] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S for t in m.T)
@@ -903,7 +903,7 @@ class Dual:
             # # Fixed operations and maintenance cost - existing generators - end of horizon cost
             # t_32 = (m.DELTA[m.Y.last()] / m.INTEREST_RATE) * sum(m.C_FOM[g] * m.P_MAX[g] * (1 - m.F[g, m.Y.last()]) for g in m.G_E)
 
-            return t_2 + t_3 + t_4 + t_5 + t_6 + t_7 + t_8 + t_9 + t_10 + t_11 + t_12 + t_13 + t_18 + t_19 + t_24 + t_25 + t_26 + t_27
+            return t_1 + t_2 + t_3 + t_4 + t_5 + t_6 + t_7 + t_8 + t_9 + t_10 + t_11 + t_12 + t_13 + t_18 + t_19 + t_24 + t_25 + t_26 + t_27
 
         # Dual objective expression
         m.DUAL_OBJECTIVE_EXPRESSION = Expression(rule=dual_objective_expression_rule)
@@ -939,6 +939,7 @@ class Dual:
 
             return (((m.DELTA[y] / m.INTEREST_RATE) * m.GAMMA[g] * m.I_C[g, y])
                     + sum(m.DELTA[j] * m.C_FOM[g] for j in m.Y if j >= y)
+                    + sum(m.mu_3[self.k(m, g), j] for j in m.Y if j >= y)
                     - m.mu_1[g, y]
                     + ((m.DELTA[m.Y.last()] / m.INTEREST_RATE) * m.C_FOM[g])
                     # + sum(m.mu_3[self.k(m, g), j] for j in m.Y if j >= y)
@@ -953,6 +954,7 @@ class Dual:
 
             return (((m.DELTA[y] / m.INTEREST_RATE) * m.GAMMA[g] * m.I_C[g, y])
                     + sum(m.DELTA[j] * m.C_FOM[g] for j in m.Y if j >= y)
+                    + sum(m.mu_2[self.k(m, g), j] for j in m.Y if j >= y)
                     - m.mu_1[g, y]
                     + ((m.DELTA[m.Y.last()] / m.INTEREST_RATE) * m.C_FOM[g])
                     # + sum(m.mu_2[self.k(m, g), j] for j in m.Y if j >= y)
@@ -967,6 +969,7 @@ class Dual:
 
             return (((m.DELTA[y] / m.INTEREST_RATE) * m.GAMMA[g] * m.I_C[g, y])
                     + sum(m.DELTA[j] * m.C_FOM[g] for j in m.Y if j >= y)
+                    + sum(m.mu_4[self.k(m, g), j] for j in m.Y if j >= y)
                     - m.mu_1[g, y]
                     + ((m.DELTA[m.Y.last()] / m.INTEREST_RATE) * m.C_FOM[g])
                     + sum((- m.sigma_12[g, j, s, t] - m.sigma_14[g, j, s, t] - m.sigma_17[g, j, s, t]) for s in m.S for t in m.T for j in m.Y if j >= y)
