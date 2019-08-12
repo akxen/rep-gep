@@ -57,10 +57,10 @@ class Primal:
         # m.e_V = Var(m.Z, m.Y, m.S, m.T, initialize=0)
 
         # Fix emissions intensity baseline [tCO2/MWh]
-        m.baseline.fix(0.8)
+        m.baseline.fix(0)
 
         # Fix permit price [$/tCO2]
-        m.permit_price.fix(50)
+        m.permit_price.fix(0)
 
         return m
 
@@ -144,13 +144,13 @@ class Primal:
         # Operating costs for a given scenario - solar units
         m.OP_S = Expression(m.Y, m.S, rule=solar_operating_costs_rule)
 
-        # def storage_operating_costs_rule(_m, y, s):
-        #     """Cost to operate storage units for a given scenario"""
-        #
-        #     return sum(m.C_MC[g, y] * m.e[g, y, s, t] for g in m.G_STORAGE for t in m.T)
-        #
-        # # Operating costs for a given scenario - storage units
-        # m.OP_Q = Expression(m.Y, m.S, rule=storage_operating_costs_rule)
+        def storage_operating_costs_rule(_m, y, s):
+            """Cost to operate storage units for a given scenario"""
+
+            return sum(m.C_MC[g, y] * m.p_out[g, y, s, t] for g in m.G_STORAGE for t in m.T)
+
+        # Operating costs for a given scenario - storage units
+        m.OP_Q = Expression(m.Y, m.S, rule=storage_operating_costs_rule)
 
         def lost_load_value_rule(_m, y, s):
             """Value of lost load in a given scenario"""
@@ -163,7 +163,7 @@ class Primal:
         def scenario_cost_rule(_m, y, s):
             """Total operating cost for a given scenario"""
 
-            return m.OP_T[y, s] + m.OP_H[y, s] + m.OP_W[y, s] + m.OP_S[y, s] + m.OP_L[y, s]
+            return m.OP_T[y, s] + m.OP_H[y, s] + m.OP_W[y, s] + m.OP_S[y, s] + m.OP_Q[y, s] + m.OP_L[y, s]
 
         # Total cost for a given operating scenario
         m.SCEN = Expression(m.Y, m.S, rule=scenario_cost_rule)
@@ -193,6 +193,68 @@ class Primal:
 
         # Total present value
         m.TPV = Expression(rule=total_present_value_rule)
+
+        def scenario_emissions_rule(_m, y, s):
+            """Total emissions for a given scenario"""
+
+            return m.RHO[y, s] * sum(m.p[g, y, s, t] * m.EMISSIONS_RATE[g] for g in m.G_THERM for t in m.T)
+
+        # Scenario emissions
+        m.SCENARIO_EMISSIONS = Expression(m.Y, m.S, rule=scenario_emissions_rule)
+
+        def year_emissions_rule(_m, y):
+            """Total emissions for a given year"""
+
+            return sum(m.SCENARIO_EMISSIONS[y, s] for s in m.S)
+
+        # Year emissions
+        m.YEAR_EMISSIONS = Expression(m.Y, rule=year_emissions_rule)
+
+        def scenario_scheme_revenue_rule(_m, y, s):
+            """Total scheme revenue for a given scenario"""
+
+            # Net revenue obtained from thermal generators
+            thermal = sum(m.p[g, y, s, t] * (m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y] for g in m.G_THERM for t in m.T)
+
+            # Net revenue obtained from candidate renewable generators (existing renewables considered ineligible)
+            renewables = sum(m.p[g, y, s, t] * (- m.baseline[y] * m.permit_price[y]) for g in m.G_C_WIND.union(m.G_C_SOLAR) for t in m.T)
+
+            return m.RHO[y, s] * (thermal + renewables)
+
+        # Scenario scheme revenue
+        m.SCENARIO_SCHEME_REVENUE = Expression(m.Y, m.S, rule=scenario_scheme_revenue_rule)
+
+        def scenario_demand_rule(_m, y, s):
+            """Total demand for a given scenario (MWh)"""
+
+            return sum(m.RHO[y, s] * m.DEMAND[z, y, s, t] for z in m.Z for t in m.T)
+
+        # Scenario demand
+        m.SCENARIO_DEMAND = Expression(m.Y, m.S, rule=scenario_demand_rule)
+
+        def year_demand_rule(_m, y):
+            """Total demand for a given year (MWh)"""
+
+            return sum(m.SCENARIO_DEMAND[y, s] for s in m.S)
+
+        # Total demand for a given year
+        m.YEAR_DEMAND = Expression(m.Y, rule=year_demand_rule)
+
+        def year_emissions_intensity_rule(_m, y):
+            """Emissions intensity for a given year"""
+
+            return m.YEAR_EMISSIONS[y] / m.YEAR_DEMAND[y]
+
+        # Emissions intensity for a given year
+        m.YEAR_EMISSIONS_INTENSITY = Expression(m.Y, rule=year_emissions_intensity_rule)
+
+        def year_scheme_revenue_rule(_m, y):
+            """Total scheme revenue for a given year"""
+
+            return sum(m.SCENARIO_SCHEME_REVENUE[y, s] for s in m.S)
+
+        # Year scheme revenue
+        m.YEAR_SCHEME_REVENUE = Expression(m.Y, rule=year_scheme_revenue_rule)
 
         return m
 
@@ -795,8 +857,8 @@ class Dual:
         m.lamb = Var(m.Z, m.Y, m.S, m.T, initialize=0)
 
         # Fix values for policy variables
-        m.baseline.fix(0.8)
-        m.permit_price.fix(50)
+        m.baseline.fix(0)
+        m.permit_price.fix(0)
 
         return m
 
@@ -907,6 +969,42 @@ class Dual:
 
         # Dual objective expression
         m.DUAL_OBJECTIVE_EXPRESSION = Expression(rule=dual_objective_expression_rule)
+
+        def scenario_average_price(_m, y, s):
+            """Average price for a given scenario"""
+
+            # Total demand
+            demand = sum(m.DEMAND[z, y, s, t] for z in m.Z for t in m.T)
+
+            if y != m.Y.last():
+                # Revenue from electricity sales (wholesale)
+                revenue = sum((m.lamb[z, y, s, t] / m.RHO[y, s]) * m.DEMAND[z, y, s, t] for z in m.Z for t in m.T)
+
+            else:
+                # Revenue from electricity sales (wholesale)
+                revenue = sum((m.lamb[z, y, s, t] / m.RHO[y, s]) * (1 / (1 + (1 / m.INTEREST_RATE))) * m.DEMAND[z, y, s, t] for z in m.Z for t in m.T)
+
+            # Average price
+            average_price = revenue / demand
+
+            return average_price
+
+        # Scenario demand weighted average wholesale price
+        m.SCENARIO_AVERAGE_PRICE = Expression(m.Y, m.S, rule=scenario_average_price)
+
+        def year_average_price(_m, y):
+            """Average price for a given year"""
+
+            # Days in year - accounting for leap-years
+            if y % 4 == 0:
+                days = 366
+            else:
+                days = 365
+
+            return sum((m.RHO[y, s] / days) * m.SCENARIO_AVERAGE_PRICE[y, s] for s in m.S)
+
+        # Year demand weighted average wholesale price
+        m.YEAR_AVERAGE_PRICE = Expression(m.Y, rule=year_average_price)
 
         return m
 
