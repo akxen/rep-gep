@@ -52,6 +52,9 @@ class ModelData:
         self.existing_wind_bubble_map = self._load_existing_wind_bubble_map()
         self.existing_wind_bubble_map_dict = self.existing_wind_bubble_map.to_dict()
 
+        # Unit retirement information
+        self.unit_retirement = self._load_unit_retirement()
+
         # NEM zones
         self.nem_zones = self._get_nem_zones()
 
@@ -207,6 +210,42 @@ class ModelData:
         df = pd.read_csv(os.path.join(self.raw_data_dir, 'maps', 'existing_wind_bubble_map.csv'), index_col='DUID')
 
         return df
+
+    def _load_unit_retirement(self):
+        """Load unit retirement information"""
+
+        # Modelled retirement
+        modelled_path = os.path.join(self.raw_data_dir, 'files',
+                                     '2016 Planning Studies - Additional Modelling Data and Assumptions summary.xlsm')
+
+        # Load information into DataFrame
+        df_1 = pd.read_excel(modelled_path, sheet_name='End of Technical Life Retiremen', skiprows=1)
+
+        # Process rows
+        df_1 = df_1.set_index('Generator')
+        df_1['year'] = df_1.apply(lambda x: x['Modelled Retirement Date'].year, axis=1)
+
+        # Convert to dictionary - keys = DUID, values = year of DUID retirement
+        modelled = df_1['year'].to_dict()
+
+        # Announced retirement
+        announced_path = os.path.join(self.raw_data_dir, 'files',
+                                      '2016 Planning Studies - Additional Modelling Data and Assumptions summary.xlsm')
+
+        # Load information into DataFrame
+        df_2 = pd.read_excel(announced_path, sheet_name='Announced Retirement', skiprows=1)
+
+        # Process rows
+        df_2 = df_2.set_index('Generators')
+        df_2['year'] = df_2.apply(lambda x: x['Date From'].year, axis=1)
+
+        # Convert to dictionary - keys = DUID, values = year of DUID retirement
+        announced = df_2['year'].to_dict()
+
+        # All unit retirement information - gives the year a given DUID will retire
+        unit_retirement = {**modelled, **announced}
+
+        return unit_retirement
 
     def _get_nem_zones(self):
         """Get tuple of unique NEM zones"""
@@ -480,4 +519,5 @@ if __name__ == '__main__':
                                           os.path.pardir, '2_input_traces', 'output')
 
     model = ModelData(raw_data_directory, data_directory, input_traces_directory)
+
 

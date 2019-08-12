@@ -252,7 +252,20 @@ class CommonComponents:
             """Indicates if unit is retired. 1=unit is retired, 0=unit operational"""
 
             # TODO: Update this assumption of all units always available
-            return float(0)
+            year = self.data.unit_retirement.get(g)
+
+            if year is not None:
+
+                # Unit is retired
+                if y >= year:
+                    return float(1)
+
+                # Unit is still operational
+                else:
+                    return float(0)
+
+            else:
+                return float(0)
 
         # Retirement indicator
         m.F = Param(m.G_E, m.Y, rule=retirement_indicator_rule)
