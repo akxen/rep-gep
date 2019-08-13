@@ -1683,11 +1683,39 @@ class MPPDCModel:
         self.opt = SolverFactory('cplex', solver_io='mps')
 
     @staticmethod
+    def define_parameters(m):
+        """Define MPPDC parameters"""
+
+        def emissions_intensity_target_rule(_m, y):
+            """Emissions intensity target for each year in model horizon"""
+
+            # TODO: Update this with desired trajectory
+            return float(0.7)
+
+        # Emissions intensity target
+        m.EMISSIONS_INTENSITY_TARGET = Param(m.Y, rule=emissions_intensity_target_rule)
+
+        return m
+
+    @staticmethod
     def define_variables(m):
         """Define MPPDC variables"""
 
         # Dummy objective function variable
         m.dummy = Var(within=NonNegativeReals, initialize=0)
+
+        # Dummy variables used to minimise difference between emissions and target
+        m.z_e1 = Var(m.Y, within=NonNegativeReals, initialize=0)
+        m.z_e2 = Var(m.Y, within=NonNegativeReals, initialize=0)
+
+        return m
+
+    @staticmethod
+    def define_expressions(m):
+        """Define MPPDC expressions"""
+
+        # Emissions target deviation
+        m.EMISSIONS_TARGET_DEVIATION = Expression(expr=sum(m.z_e1[y] + m.z_e2[y] for y in m.Y))
 
         return m
 
@@ -1703,6 +1731,22 @@ class MPPDCModel:
         # Strong duality constraint (primal objective = dual objective at optimality)
         m.STRONG_DUALITY = Constraint(rule=strong_duality_rule)
 
+        def emissions_intensity_target_deviation_1_rule(_m, y):
+            """Constraint computing absolute difference between system emissions intensity and target"""
+
+            return m.z_e1[y] >= m.YEAR_EMISSIONS_INTENSITY[y] - m.EMISSIONS_INTENSITY_TARGET[y]
+
+        # Emissions intensity deviation - 1
+        m.EMISSIONS_INTENSITY_TARGET_DEV_1 = Constraint(m.Y, rule=emissions_intensity_target_deviation_1_rule)
+
+        def emissions_intensity_target_deviation_2_rule(_m, y):
+            """Constraint computing absolute difference between system emissions intensity and target"""
+
+            return m.z_e2[y] >= m.EMISSIONS_INTENSITY_TARGET[y] - m.YEAR_EMISSIONS_INTENSITY[y]
+
+        # Emissions intensity deviation
+        m.EMISSIONS_INTENSITY_TARGET_DEV_2 = Constraint(m.Y, rule=emissions_intensity_target_deviation_2_rule)
+
         return m
 
     @staticmethod
@@ -1710,7 +1754,10 @@ class MPPDCModel:
         """MPPDC objective function"""
 
         # Dummy objective function
-        m.OBJECTIVE = Objective(expr=m.dummy, sense=minimize)
+        # m.OBJECTIVE = Objective(expr=m.dummy, sense=minimize)
+
+        # Emissions targeting objective
+        m.OBJECTIVE = Objective(expr=m.EMISSIONS_TARGET_DEVIATION, sense=minimize)
 
         return m
 
@@ -1738,8 +1785,14 @@ class MPPDCModel:
         m = self.dual.define_expressions(m)
         m = self.dual.define_constraints(m)
 
+        # MPPDC problem parameters
+        m = self.define_parameters(m)
+
         # MPPDC problem variables
         m = self.define_variables(m)
+
+        # MPPDC problem expressions
+        m = self.define_expressions(m)
 
         # MPPDC constraints
         m = self.define_constraints(m)
