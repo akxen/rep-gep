@@ -56,12 +56,6 @@ class Primal:
         # # Lost load energy
         # m.e_V = Var(m.Z, m.Y, m.S, m.T, initialize=0)
 
-        # Fix emissions intensity baseline [tCO2/MWh]
-        m.baseline.fix(0)
-
-        # Fix permit price [$/tCO2]
-        m.permit_price.fix(0)
-
         return m
 
     @staticmethod
@@ -686,6 +680,10 @@ class Primal:
     def solve_model(self, m):
         """Solve model"""
 
+        # Fix values for policy variables
+        m.baseline.fix(0)
+        m.permit_price.fix(0)
+
         # Solve model
         solve_status = self.opt.solve(m, tee=True, options=self.solver_options, keepfiles=self.keepfiles)
 
@@ -855,10 +853,6 @@ class Dual:
 
         # Power balance (locational marginal price)
         m.lamb = Var(m.Z, m.Y, m.S, m.T, initialize=0)
-
-        # Fix values for policy variables
-        m.baseline.fix(0)
-        m.permit_price.fix(0)
 
         return m
 
@@ -1662,6 +1656,10 @@ class Dual:
     def solve_model(self, m):
         """Solve model"""
 
+        # Fix values for policy variables
+        m.baseline.fix(0)
+        m.permit_price.fix(0)
+
         # Solve model
         solve_status = self.opt.solve(m, tee=True, options=self.solver_options, keepfiles=self.keepfiles)
 
@@ -1678,8 +1676,8 @@ class MPPDCModel:
         self.dual = Dual()
 
         # Solver options
-        self.keepfiles = False
-        self.solver_options = {}  # 'MIPGap': 0.0005
+        self.keepfiles = True
+        self.solver_options = {}  # 'MIPGap': 0.0005, 'optimalitytarget': 2
         self.opt = SolverFactory('cplex', solver_io='mps')
 
     @staticmethod
@@ -1694,6 +1692,12 @@ class MPPDCModel:
 
         # Emissions intensity target
         m.EMISSIONS_INTENSITY_TARGET = Param(m.Y, rule=emissions_intensity_target_rule)
+
+        # Fixed emissions intensity baseline values
+        m.FIXED_BASELINE = Param(m.Y, initialize=0, mutable=True)
+
+        # Fixed permit price values
+        m.FIXED_PERMIT_PRICE = Param(m.Y, initialize=0, mutable=True)
 
         return m
 
@@ -1746,6 +1750,22 @@ class MPPDCModel:
 
         # Emissions intensity deviation
         m.EMISSIONS_INTENSITY_TARGET_DEV_2 = Constraint(m.Y, rule=emissions_intensity_target_deviation_2_rule)
+
+        def fixed_permit_price_rule(_m, y):
+            """Fixing permit price to a given value"""
+
+            return m.permit_price[y] == m.FIXED_PERMIT_PRICE[y]
+
+        # Fixed permit price
+        m.FIXED_PERMIT_PRICE_CONS = Constraint(m.Y, rule=fixed_permit_price_rule)
+
+        def fixed_baseline_rule(_m, y):
+            """Fixing baseline to a given value"""
+
+            return m.baseline[y] == m.FIXED_BASELINE[y]
+
+        # Fixed emissions intensity baseline
+        m.FIXED_BASELINE_CONS = Constraint(m.Y, rule=fixed_baseline_rule)
 
         return m
 
@@ -1813,6 +1833,49 @@ class MPPDCModel:
 
         return m, solve_status
 
+    def execute_solution_sequence(self, m, baselines, permit_prices):
+        """
+        Solve MPPDC with policy variables fixed, then free policy variables and fix primal + dual variables
+        to obtain policy variable sensitivities
+        """
+
+        # Fix policy variables and corresponding parameters for each year in model horizon
+        for y in m.Y:
+            # Fix variables
+            m.baseline[y].fix(baselines[y])
+            m.permit_price[y].fix(permit_prices[y])
+
+            # Update parameters
+            m.FIXED_PERMIT_PRICE[y] = permit_prices[y]
+            m.FIXED_BASELINE[y] = baselines[y]
+
+        # Solve model (with policy variables fixed)
+        m, solve_status = self.solve_model(m)
+
+        # Fix all variables
+        m.fix_all_vars()
+
+        # Unfix permit price - resolve model
+        m.permit_price.unfix()
+        m, solve_status = self.solve_model(m)
+
+        # Obtain dual for permit price constraint
+        permit_price_duals = {y: m.dual[m.FIXED_PERMIT_PRICE_CONS[y]] for y in m.Y}
+
+        # Fix permit price, unfix baseline - resolve model
+        for y in m.Y:
+            m.permit_price.fix(permit_prices[y])
+
+        m.baseline.unfix()
+        m, solve_status = self.solve_model(m)
+
+        # Obtain dual for baseline constraint
+        baseline_duals = {y: m.dual[m.FIXED_BASELINE_CONS[y]] for y in m.Y}
+
+        sensitivities = {'baseline_duals': baseline_duals, 'permit_price_duals': permit_price_duals}
+
+        return sensitivities
+
 
 def check_solution(m_p, m_d, elements):
     """Check solution
@@ -1853,45 +1916,94 @@ def check_solution(m_p, m_d, elements):
 
 
 if __name__ == '__main__':
-    primal = Primal()
-    model_primal = primal.construct_model()
-    model_primal, status_primal = primal.solve_model(model_primal)
-
-    dual = Dual()
-    model_dual = dual.construct_model()
-    model_dual, status_dual = dual.solve_model(model_dual)
+    # primal = Primal()
+    # model_primal = primal.construct_model()
+    # model_primal, status_primal = primal.solve_model(model_primal)
+    #
+    # dual = Dual()
+    # model_dual = dual.construct_model()
+    # model_dual, status_dual = dual.solve_model(model_dual)
 
     mppdc = MPPDCModel()
     model_mppdc = mppdc.construct_model()
-    model_mppdc, status_mppdc = mppdc.solve_model(model_mppdc)
+    # model_mppdc, status_mppdc = mppdc.solve_model(model_mppdc)
 
-    try:
-        check = [{'primal': 'POWER_BALANCE', 'dual': 'lamb', 'primal_var': False},
-                 {'primal': 'p', 'dual': 'POWER_OUTPUT_EXISTING_THERMAL', 'primal_var': True},
-                 {'primal': 'p_V', 'dual': 'LOAD_SHEDDING_POWER', 'primal_var': True},
-                 {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_THERMAL', 'primal_var': True},
-                 {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_WIND', 'primal_var': True},
-                 {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_SOLAR', 'primal_var': True},
-                 {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_STORAGE', 'primal_var': True},
-                 {'primal': 'NON_NEGATIVE_CAPACITY', 'dual': 'mu_1', 'primal_var': False},
-                 # {'primal': 'SOLAR_BUILD_LIMIT_CONS', 'dual': 'mu_2', 'primal_var': False},
-                 # {'primal': 'WIND_BUILD_LIMIT_CONS', 'dual': 'mu_3', 'primal_var': False},
-                 # {'primal': 'CUMULATIVE_CAPACITY', 'dual': 'nu_1', 'primal_var': False},
-                 {'primal': 'MIN_POWER_CONS', 'dual': 'sigma_1', 'primal_var': False},
-                 {'primal': 'MAX_POWER_EXISTING_THERMAL', 'dual': 'sigma_2', 'primal_var': False},
-                 {'primal': 'MAX_POWER_CANDIDATE_THERMAL', 'dual': 'sigma_3', 'primal_var': False},
-                 {'primal': 'MAX_POWER_EXISTING_WIND', 'dual': 'sigma_4', 'primal_var': False},
-                 {'primal': 'MAX_POWER_CANDIDATE_WIND', 'dual': 'sigma_5', 'primal_var': False},
-                 {'primal': 'MAX_POWER_EXISTING_SOLAR', 'dual': 'sigma_6', 'primal_var': False},
-                 {'primal': 'MAX_POWER_CANDIDATE_SOLAR', 'dual': 'sigma_7', 'primal_var': False},
-                 {'primal': 'MAX_POWER_EXISTING_HYDRO', 'dual': 'sigma_8', 'primal_var': False},
-                 {'primal': 'NON_NEGATIVE_LOST_LOAD', 'dual': 'sigma_26', 'primal_var': False},
-                 {'primal': 'MIN_FLOW', 'dual': 'sigma_27', 'primal_var': False},
-                 {'primal': 'MAX_FLOW', 'dual': 'sigma_28', 'primal_var': False},
-                 ]
+    candidate_baselines = {y: 0.1 for y in model_mppdc.Y}
+    candidate_permit_prices = {y: 20 for y in model_mppdc.Y}
+    # var_sensitivities = mppdc.execute_solution_sequence(model_mppdc, candidate_baselines, candidate_permit_prices)
 
-        for c in check:
-            diff, max_diff, non_negative_diff = check_solution(model_primal, model_dual, c)
+    # try:
+    #     check = [{'primal': 'POWER_BALANCE', 'dual': 'lamb', 'primal_var': False},
+    #              {'primal': 'p', 'dual': 'POWER_OUTPUT_EXISTING_THERMAL', 'primal_var': True},
+    #              {'primal': 'p_V', 'dual': 'LOAD_SHEDDING_POWER', 'primal_var': True},
+    #              {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_THERMAL', 'primal_var': True},
+    #              {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_WIND', 'primal_var': True},
+    #              {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_SOLAR', 'primal_var': True},
+    #              {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_STORAGE', 'primal_var': True},
+    #              {'primal': 'NON_NEGATIVE_CAPACITY', 'dual': 'mu_1', 'primal_var': False},
+    #              # {'primal': 'SOLAR_BUILD_LIMIT_CONS', 'dual': 'mu_2', 'primal_var': False},
+    #              # {'primal': 'WIND_BUILD_LIMIT_CONS', 'dual': 'mu_3', 'primal_var': False},
+    #              # {'primal': 'CUMULATIVE_CAPACITY', 'dual': 'nu_1', 'primal_var': False},
+    #              {'primal': 'MIN_POWER_CONS', 'dual': 'sigma_1', 'primal_var': False},
+    #              {'primal': 'MAX_POWER_EXISTING_THERMAL', 'dual': 'sigma_2', 'primal_var': False},
+    #              {'primal': 'MAX_POWER_CANDIDATE_THERMAL', 'dual': 'sigma_3', 'primal_var': False},
+    #              {'primal': 'MAX_POWER_EXISTING_WIND', 'dual': 'sigma_4', 'primal_var': False},
+    #              {'primal': 'MAX_POWER_CANDIDATE_WIND', 'dual': 'sigma_5', 'primal_var': False},
+    #              {'primal': 'MAX_POWER_EXISTING_SOLAR', 'dual': 'sigma_6', 'primal_var': False},
+    #              {'primal': 'MAX_POWER_CANDIDATE_SOLAR', 'dual': 'sigma_7', 'primal_var': False},
+    #              {'primal': 'MAX_POWER_EXISTING_HYDRO', 'dual': 'sigma_8', 'primal_var': False},
+    #              {'primal': 'NON_NEGATIVE_LOST_LOAD', 'dual': 'sigma_26', 'primal_var': False},
+    #              {'primal': 'MIN_FLOW', 'dual': 'sigma_27', 'primal_var': False},
+    #              {'primal': 'MAX_FLOW', 'dual': 'sigma_28', 'primal_var': False},
+    #              ]
+    #
+    #     for c in check:
+    #         diff, max_diff, non_negative_diff = check_solution(model_primal, model_dual, c)
+    #
+    # except Exception as e:
+    #     print(f'Failed: {e}')
 
-    except Exception as e:
-        print(f'Failed: {e}')
+    os.environ['TMPDIR'] = os.path.abspath(os.path.dirname(__file__))
+
+    self = mppdc
+    m = model_mppdc
+    baselines = candidate_baselines
+    permit_prices = candidate_permit_prices
+
+    # Fix policy variables and corresponding parameters for each year in model horizon
+    for y in m.Y:
+        # Fix variables
+        m.baseline[y].fix(baselines[y])
+        m.permit_price[y].fix(permit_prices[y])
+
+        # Update parameters
+        m.FIXED_PERMIT_PRICE[y] = permit_prices[y]
+        m.FIXED_BASELINE[y] = baselines[y]
+
+    # Solve model (with policy variables fixed)
+    m, solve_status = self.solve_model(m)
+
+    # Fix variables
+    # m.p.fix()
+
+    # Unfix permit price - resolve model
+    m.baseline.unfix()
+
+    m, solve_status = self.solve_model(m)
+
+    # # Obtain dual for permit price constraint
+    # permit_price_duals = {y: m.dual[m.FIXED_PERMIT_PRICE_CONS[y]] for y in m.Y}
+    #
+    # # Fix permit price, unfix baseline - resolve model
+    # for y in m.Y:
+    #     m.permit_price.fix(permit_prices[y])
+    #
+    # m.baseline.unfix()
+    # m, solve_status = self.solve_model(m)
+    #
+    # # Obtain dual for baseline constraint
+    # baseline_duals = {y: m.dual[m.FIXED_BASELINE_CONS[y]] for y in m.Y}
+    #
+    # sensitivities = {'baseline_duals': baseline_duals, 'permit_price_duals': permit_price_duals}
+    #
+    # # return sensitivities

@@ -89,7 +89,7 @@ class CommonComponents:
         m.Y = RangeSet(2016, 2018)
 
         # Operating scenarios for each year
-        m.S = RangeSet(1, 10)
+        m.S = RangeSet(1, 2)
 
         # Operating scenario hour
         m.T = RangeSet(1, 24, ordered=True)
@@ -671,9 +671,9 @@ class CommonComponents:
         """Define variables common to both primal and dual models (policy variables)"""
 
         # Emissions intensity baseline [tCO2/MWh]
-        m.baseline = Var(m.Y, initialize=0)
+        m.baseline = Var(m.Y, within=NonNegativeReals, initialize=0)
 
         # Permit price [$/tCO2]
-        m.permit_price = Var(m.Y, initialize=0)
+        m.permit_price = Var(m.Y, within=NonNegativeReals, initialize=0)
 
         return m
