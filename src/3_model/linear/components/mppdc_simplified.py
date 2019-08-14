@@ -2,7 +2,9 @@
 
 import os
 import sys
+import copy
 
+# os.environ['TMPDIR'] = os.path.abspath(os.path.dirname(__file__))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'base'))
 
 from pyomo.environ import *
@@ -208,10 +210,14 @@ class Primal:
             """Total scheme revenue for a given scenario"""
 
             # Net revenue obtained from thermal generators
-            thermal = sum(m.p[g, y, s, t] * (m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y] for g in m.G_THERM for t in m.T)
+            thermal = sum(
+                m.p[g, y, s, t] * (m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y] for g in m.G_THERM for t in
+                m.T)
 
             # Net revenue obtained from candidate renewable generators (existing renewables considered ineligible)
-            renewables = sum(m.p[g, y, s, t] * (- m.baseline[y] * m.permit_price[y]) for g in m.G_C_WIND.union(m.G_C_SOLAR) for t in m.T)
+            renewables = sum(
+                m.p[g, y, s, t] * (- m.baseline[y] * m.permit_price[y]) for g in m.G_C_WIND.union(m.G_C_SOLAR) for t in
+                m.T)
 
             return m.RHO[y, s] * (thermal + renewables)
 
@@ -249,6 +255,14 @@ class Primal:
 
         # Year scheme revenue
         m.YEAR_SCHEME_REVENUE = Expression(m.Y, rule=year_scheme_revenue_rule)
+
+        def total_scheme_revenue_rule(_m):
+            """Total scheme revenue over model horizon"""
+
+            return sum(m.YEAR_SCHEME_REVENUE[y] for y in m.Y)
+
+        # Total scheme revenue
+        m.TOTAL_SCHEME_REVENUE = Expression(rule=total_scheme_revenue_rule)
 
         return m
 
@@ -864,31 +878,47 @@ class Dual:
             """Expression for dual objective function"""
 
             # Build limits
-            t_1 = sum(- (m.mu_2[z, y] * m.SOLAR_BUILD_LIMITS[z]) - (m.mu_3[z, y] * m.WIND_BUILD_LIMITS[z]) - (m.mu_4[z, y] * m.STORAGE_BUILD_LIMITS[z]) for z in m.Z for y in m.Y)
+            t_1 = sum(- (m.mu_2[z, y] * m.SOLAR_BUILD_LIMITS[z]) - (m.mu_3[z, y] * m.WIND_BUILD_LIMITS[z]) - (
+                    m.mu_4[z, y] * m.STORAGE_BUILD_LIMITS[z]) for z in m.Z for y in m.Y)
 
             # Min power output
-            t_2 = sum(m.sigma_1[g, y, s, t] * m.P_MIN[g] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S for t in m.T)
+            t_2 = sum(
+                m.sigma_1[g, y, s, t] * m.P_MIN[g] for g in m.G.difference(m.G_STORAGE) for y in m.Y for s in m.S for t
+                in m.T)
 
             # Max power - existing generators
-            t_3 = sum(- m.sigma_2[g, y, s, t] * m.P_MAX[g] * (1 - m.F[g, y]) for g in m.G_E_THERM for y in m.Y for s in m.S for t in m.T)
+            t_3 = sum(
+                - m.sigma_2[g, y, s, t] * m.P_MAX[g] * (1 - m.F[g, y]) for g in m.G_E_THERM for y in m.Y for s in m.S
+                for t in m.T)
 
             # Max power - existing wind
-            t_4 = sum(- m.sigma_4[g, y, s, t] * m.Q_W[g, y, s, t] * m.P_MAX[g] * (1 - m.F[g, y]) for g in m.G_E_WIND for y in m.Y for s in m.S for t in m.T)
+            t_4 = sum(
+                - m.sigma_4[g, y, s, t] * m.Q_W[g, y, s, t] * m.P_MAX[g] * (1 - m.F[g, y]) for g in m.G_E_WIND for y in
+                m.Y for s in m.S for t in m.T)
 
             # Max power - existing solar
-            t_5 = sum(- m.sigma_6[g, y, s, t] * m.Q_S[g, y, s, t] * m.P_MAX[g] * (1 - m.F[g, y]) for g in m.G_E_SOLAR for y in m.Y for s in m.S for t in m.T)
+            t_5 = sum(
+                - m.sigma_6[g, y, s, t] * m.Q_S[g, y, s, t] * m.P_MAX[g] * (1 - m.F[g, y]) for g in m.G_E_SOLAR for y in
+                m.Y for s in m.S for t in m.T)
 
             # Max power - existing hydro
-            t_6 = sum(- m.sigma_8[g, y, s, t] * m.P_H[g, y, s, t] * (1 - m.F[g, y]) for g in m.G_E_HYDRO for y in m.Y for s in m.S for t in m.T)
+            t_6 = sum(
+                - m.sigma_8[g, y, s, t] * m.P_H[g, y, s, t] * (1 - m.F[g, y]) for g in m.G_E_HYDRO for y in m.Y for s in
+                m.S for t in m.T)
 
             # Max charging power - existing storage
-            t_7 = sum(- m.sigma_11[g, y, s, t] * m.P_IN_MAX[g] * (1 - m.F[g, y]) for g in m.G_E_STORAGE for y in m.Y for s in m.S for t in m.T)
+            t_7 = sum(
+                - m.sigma_11[g, y, s, t] * m.P_IN_MAX[g] * (1 - m.F[g, y]) for g in m.G_E_STORAGE for y in m.Y for s in
+                m.S for t in m.T)
 
             # Max discharging power - existing storage
-            t_8 = sum(- m.sigma_13[g, y, s, t] * m.P_OUT_MAX[g] * (1 - m.F[g, y]) for g in m.G_E_STORAGE for y in m.Y for s in m.S for t in m.T)
+            t_8 = sum(
+                - m.sigma_13[g, y, s, t] * m.P_OUT_MAX[g] * (1 - m.F[g, y]) for g in m.G_E_STORAGE for y in m.Y for s in
+                m.S for t in m.T)
 
             # Max energy - existing storage units
-            t_9 = sum(- m.sigma_16[g, y, s, t] * m.Q_MAX[g] for g in m.G_E_STORAGE for y in m.Y for s in m.S for t in m.T)
+            t_9 = sum(
+                - m.sigma_16[g, y, s, t] * m.Q_MAX[g] for g in m.G_E_STORAGE for y in m.Y for s in m.S for t in m.T)
 
             # Min energy - interval end
             t_10 = sum(m.sigma_18[g, y, s] * m.Q_END_MIN[g] for g in m.G_STORAGE for y in m.Y for s in m.S)
@@ -897,10 +927,14 @@ class Dual:
             t_11 = sum(- m.sigma_19[g, y, s] * m.Q_END_MAX[g] for g in m.G_STORAGE for y in m.Y for s in m.S)
 
             # Ramp-up constraint - generators
-            t_12 = sum(- m.sigma_20[g, y, s, t] * m.RR_UP[g] for g in m.G_THERM.union(m.G_E_HYDRO) for y in m.Y for s in m.S for t in m.T)
+            t_12 = sum(
+                - m.sigma_20[g, y, s, t] * m.RR_UP[g] for g in m.G_THERM.union(m.G_E_HYDRO) for y in m.Y for s in m.S
+                for t in m.T)
 
             # Ramp-up constraint - initial power output - generators
-            t_13 = sum(- m.sigma_20[g, y, s, m.T.first()] * m.P0[g, y, s] for g in m.G_THERM.union(m.G_E_HYDRO) for y in m.Y for s in m.S)
+            t_13 = sum(
+                - m.sigma_20[g, y, s, m.T.first()] * m.P0[g, y, s] for g in m.G_THERM.union(m.G_E_HYDRO) for y in m.Y
+                for s in m.S)
 
             # # Ramp-up constraint - storage charging
             # t_14 = sum(- m.sigma_21[g, y, s, t] * m.RR_UP[g] for g in m.G_STORAGE for y in m.Y for s in m.S for t in m.T)
@@ -915,10 +949,14 @@ class Dual:
             # t_17 = sum(- m.sigma_22[g, y, s, m.T.first()] * m.P_OUT_0[g, y, s] for g in m.G_STORAGE for y in m.Y for s in m.S)
 
             # Ramp-down constraint - generators
-            t_18 = sum(- m.sigma_23[g, y, s, t] * m.RR_DOWN[g] for g in m.G_THERM.union(m.G_E_HYDRO) for y in m.Y for s in m.S for t in m.T)
+            t_18 = sum(
+                - m.sigma_23[g, y, s, t] * m.RR_DOWN[g] for g in m.G_THERM.union(m.G_E_HYDRO) for y in m.Y for s in m.S
+                for t in m.T)
 
             # Ramp-down constraint - initial power output - generators
-            t_19 = sum(m.sigma_23[g, y, s, m.T.first()] * m.P0[g, y, s] for g in m.G_THERM.union(m.G_E_HYDRO) for y in m.Y for s in m.S)
+            t_19 = sum(
+                m.sigma_23[g, y, s, m.T.first()] * m.P0[g, y, s] for g in m.G_THERM.union(m.G_E_HYDRO) for y in m.Y for
+                s in m.S)
 
             # # Ramp-down constraint - storage charging
             # t_20 = sum(- m.sigma_24[g, y, s, t] * m.RR_DOWN[g] for g in m.G_STORAGE for y in m.Y for s in m.S for t in m.T)
@@ -936,7 +974,8 @@ class Dual:
             t_24 = sum(m.sigma_27[l, y, s, t] * m.POWERFLOW_MIN[l] for l in m.L for y in m.Y for s in m.S for t in m.T)
 
             # Max powerflow
-            t_25 = sum(- m.sigma_28[l, y, s, t] * m.POWERFLOW_MAX[l] for l in m.L for y in m.Y for s in m.S for t in m.T)
+            t_25 = sum(
+                - m.sigma_28[l, y, s, t] * m.POWERFLOW_MAX[l] for l in m.L for y in m.Y for s in m.S for t in m.T)
 
             # Demand
             t_26 = sum(m.lamb[z, y, s, t] * m.DEMAND[z, y, s, t] for z in m.Z for y in m.Y for s in m.S for t in m.T)
@@ -976,7 +1015,9 @@ class Dual:
 
             else:
                 # Revenue from electricity sales (wholesale)
-                revenue = sum((m.lamb[z, y, s, t] / m.RHO[y, s]) * (1 / (1 + (1 / m.INTEREST_RATE))) * m.DEMAND[z, y, s, t] for z in m.Z for t in m.T)
+                revenue = sum(
+                    (m.lamb[z, y, s, t] / m.RHO[y, s]) * (1 / (1 + (1 / m.INTEREST_RATE))) * m.DEMAND[z, y, s, t] for z
+                    in m.Z for t in m.T)
 
             # Average price
             average_price = revenue / demand
@@ -990,10 +1031,7 @@ class Dual:
             """Average price for a given year"""
 
             # Days in year - accounting for leap-years
-            if y % 4 == 0:
-                days = 366
-            else:
-                days = 365
+            days = sum(m.RHO[y, s] for s in m.S)
 
             return sum((m.RHO[y, s] / days) * m.SCENARIO_AVERAGE_PRICE[y, s] for s in m.S)
 
@@ -1064,7 +1102,9 @@ class Dual:
                     + sum(m.mu_4[self.k(m, g), j] for j in m.Y if j >= y)
                     - m.mu_1[g, y]
                     + ((m.DELTA[m.Y.last()] / m.INTEREST_RATE) * m.C_FOM[g])
-                    + sum((- m.sigma_12[g, j, s, t] - m.sigma_14[g, j, s, t] - m.sigma_17[g, j, s, t]) for s in m.S for t in m.T for j in m.Y if j >= y)
+                    + sum(
+                        (- m.sigma_12[g, j, s, t] - m.sigma_14[g, j, s, t] - m.sigma_17[g, j, s, t]) for s in m.S for t
+                        in m.T for j in m.Y if j >= y)
                     == 0)
 
         # Investment decision for storage units
@@ -1123,7 +1163,8 @@ class Dual:
                         - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t + 1]
                         - m.lamb[self.k(m, g), y, s, t]
                         # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
-                        + ((m.DELTA[y] * m.RHO[y, s]) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (
+                                m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
                         == 0)
 
             elif y != m.Y.last() and t == m.T.last():
@@ -1132,7 +1173,8 @@ class Dual:
                         - m.sigma_23[g, y, s, t]
                         - m.lamb[self.k(m, g), y, s, t]
                         # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
-                        + ((m.DELTA[y] * m.RHO[y, s]) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (
+                                m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
                         == 0)
 
             elif y == m.Y.last() and t != m.T.last():
@@ -1141,7 +1183,8 @@ class Dual:
                         - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t + 1]
                         - m.lamb[self.k(m, g), y, s, t]
                         # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
-                        + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (
+                                m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
                         == 0)
 
             elif y == m.Y.last() and t == m.T.last():
@@ -1150,14 +1193,16 @@ class Dual:
                         - m.sigma_23[g, y, s, t]
                         - m.lamb[self.k(m, g), y, s, t]
                         # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
-                        + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (
+                                m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
                         == 0)
 
             else:
                 raise Exception(f'Unhandled case: {g, y, s, t}')
 
         # Total power output from thermal generators
-        m.POWER_OUTPUT_EXISTING_THERMAL = Constraint(m.G_E_THERM, m.Y, m.S, m.T, rule=power_output_existing_thermal_rule)
+        m.POWER_OUTPUT_EXISTING_THERMAL = Constraint(m.G_E_THERM, m.Y, m.S, m.T,
+                                                     rule=power_output_existing_thermal_rule)
 
         def power_output_candidate_thermal_rule(_m, g, y, s, t):
             """Power output from candidate thermal generators"""
@@ -1168,7 +1213,8 @@ class Dual:
                         - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t + 1]
                         - m.lamb[self.k(m, g), y, s, t]
                         # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
-                        + ((m.DELTA[y] * m.RHO[y, s]) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (
+                                m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
                         == 0)
 
             elif y != m.Y.last() and t == m.T.last():
@@ -1177,7 +1223,8 @@ class Dual:
                         - m.sigma_23[g, y, s, t]
                         - m.lamb[self.k(m, g), y, s, t]
                         # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
-                        + ((m.DELTA[y] * m.RHO[y, s]) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (
+                                m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
                         == 0)
 
             elif y == m.Y.last() and t != m.T.last():
@@ -1186,7 +1233,8 @@ class Dual:
                         - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t + 1]
                         - m.lamb[self.k(m, g), y, s, t]
                         # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
-                        + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (
+                                m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
                         == 0)
 
             elif y == m.Y.last() and t == m.T.last():
@@ -1195,7 +1243,8 @@ class Dual:
                         - m.sigma_23[g, y, s, t]
                         - m.lamb[self.k(m, g), y, s, t]
                         # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
-                        + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (
+                                m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
                         == 0)
 
             else:
@@ -1217,8 +1266,10 @@ class Dual:
             #             # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
             #             + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] + ((m.EMISSIONS_RATE[g] - m.baseline[y]) * m.permit_price[y])))
             #             == 0)
+
         # Total power output from candidate thermal generators
-        m.POWER_OUTPUT_CANDIDATE_THERMAL = Constraint(m.G_C_THERM, m.Y, m.S, m.T, rule=power_output_candidate_thermal_rule)
+        m.POWER_OUTPUT_CANDIDATE_THERMAL = Constraint(m.G_C_THERM, m.Y, m.S, m.T,
+                                                      rule=power_output_candidate_thermal_rule)
 
         def power_output_existing_wind_rule(_m, g, y, s, t):
             """Power output from existing wind generators"""
@@ -1260,7 +1311,8 @@ class Dual:
                         # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
                         - m.lamb[self.k(m, g), y, s, t]
                         # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
-                        + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] - (m.baseline[y] * m.permit_price[y])))
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (
+                                m.C_MC[g, y] - (m.baseline[y] * m.permit_price[y])))
                         == 0)
 
         # Total power output from candidate wind generators
@@ -1308,7 +1360,8 @@ class Dual:
                         # - m.sigma_23[g, y, s, t] + m.sigma_23[g, y, s, t+1]
                         - m.lamb[self.k(m, g), y, s, t]
                         # - ((m.zeta_2[g, y, s, t] + m.zeta_2[g, y, s, t+1]) / 2)
-                        + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (m.C_MC[g, y] - (m.baseline[y] * m.permit_price[y])))
+                        + ((m.DELTA[y] * m.RHO[y, s]) * (1 + (1 / m.INTEREST_RATE)) * (
+                                m.C_MC[g, y] - (m.baseline[y] * m.permit_price[y])))
                         == 0)
 
         # Total power output from candidate solar generators
@@ -1377,7 +1430,8 @@ class Dual:
             #             == 0)
 
         # Existing storage unit charging power
-        m.CHARGING_POWER_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T, rule=charging_power_existing_storage_rule)
+        m.CHARGING_POWER_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T,
+                                                       rule=charging_power_existing_storage_rule)
 
         def charging_power_candidate_storage_rule(_m, g, y, s, t):
             """Charging power for candidate storage units"""
@@ -1397,7 +1451,8 @@ class Dual:
             #             == 0)
 
         # Existing storage unit charging power
-        m.CHARGING_POWER_CANDIDATE_STORAGE = Constraint(m.G_C_STORAGE, m.Y, m.S, m.T, rule=charging_power_candidate_storage_rule)
+        m.CHARGING_POWER_CANDIDATE_STORAGE = Constraint(m.G_C_STORAGE, m.Y, m.S, m.T,
+                                                        rule=charging_power_candidate_storage_rule)
 
         def discharging_power_existing_storage_rule(_m, g, y, s, t):
             """Discharging power for existing storage units"""
@@ -1417,7 +1472,7 @@ class Dual:
                         # - ((m.zeta_3[g, y, s, t] + m.zeta_3[g, y, s, t+1]) / 2)
                         # + m.sigma_22[g, y, s, t] - m.sigma_22[g, y, s, t + 1]
                         # - m.sigma_25[g, y, s, t] + m.sigma_25[g, y, s, t + 1]
-                        == 0)            # else:
+                        == 0)  # else:
             #     return (- m.sigma_10[g, y, s, t] + m.sigma_13[g, y, s, t] - m.lamb[self.k(m, g), y, s, t]
             #             - ((1 / m.ETA[g]) * m.zeta_1[g, y, s, t])
             #             - (m.zeta_3[g, y, s, t] / 2)
@@ -1426,7 +1481,8 @@ class Dual:
             #             == 0)
 
         # Existing storage unit discharging power
-        m.DISCHARGING_POWER_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T, rule=discharging_power_existing_storage_rule)
+        m.DISCHARGING_POWER_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T,
+                                                          rule=discharging_power_existing_storage_rule)
 
         def discharging_power_candidate_storage_rule(_m, g, y, s, t):
             """Discharging power for candidate storage units"""
@@ -1456,16 +1512,19 @@ class Dual:
             #             == 0)
 
         # Candidate storage unit discharging power
-        m.DISCHARGING_POWER_CANDIDATE_STORAGE = Constraint(m.G_C_STORAGE, m.Y, m.S, m.T, rule=discharging_power_candidate_storage_rule)
+        m.DISCHARGING_POWER_CANDIDATE_STORAGE = Constraint(m.G_C_STORAGE, m.Y, m.S, m.T,
+                                                           rule=discharging_power_candidate_storage_rule)
 
         def energy_existing_storage_unit(_m, g, y, s, t):
             """Storage unit energy"""
 
             if t != m.T.last():
-                return - m.sigma_15[g, y, s, t] + m.sigma_16[g, y, s, t] - m.zeta_1[g, y, s, t] + m.zeta_1[g, y, s, t + 1] == 0
+                return - m.sigma_15[g, y, s, t] + m.sigma_16[g, y, s, t] - m.zeta_1[g, y, s, t] + m.zeta_1[
+                    g, y, s, t + 1] == 0
 
             else:
-                return - m.sigma_15[g, y, s, t] + m.sigma_16[g, y, s, t] - m.zeta_1[g, y, s, t] - m.sigma_18[g, y, s] + m.sigma_19[g, y, s] == 0
+                return - m.sigma_15[g, y, s, t] + m.sigma_16[g, y, s, t] - m.zeta_1[g, y, s, t] - m.sigma_18[g, y, s] + \
+                       m.sigma_19[g, y, s] == 0
 
         # Existing storage unit energy
         m.ENERGY_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T, rule=energy_existing_storage_unit)
@@ -1474,10 +1533,12 @@ class Dual:
             """Storage unit energy"""
 
             if t != m.T.last():
-                return - m.sigma_15[g, y, s, t] + m.sigma_17[g, y, s, t] - m.zeta_1[g, y, s, t] + m.zeta_1[g, y, s, t + 1] == 0
+                return - m.sigma_15[g, y, s, t] + m.sigma_17[g, y, s, t] - m.zeta_1[g, y, s, t] + m.zeta_1[
+                    g, y, s, t + 1] == 0
 
             else:
-                return - m.sigma_15[g, y, s, t] + m.sigma_17[g, y, s, t] - m.zeta_1[g, y, s, t] - m.sigma_18[g, y, s] + m.sigma_19[g, y, s] == 0
+                return - m.sigma_15[g, y, s, t] + m.sigma_17[g, y, s, t] - m.zeta_1[g, y, s, t] - m.sigma_18[g, y, s] + \
+                       m.sigma_19[g, y, s] == 0
 
         # Existing storage unit energy
         m.ENERGY_CANDIDATE_STORAGE = Constraint(m.G_C_STORAGE, m.Y, m.S, m.T, rule=energy_candidate_storage_unit)
@@ -1587,7 +1648,8 @@ class Dual:
             if y != m.Y.last():
                 return - m.sigma_26[z, y, s, t] - m.lamb[z, y, s, t] + (m.DELTA[y] * m.RHO[y, s] * m.C_L[z]) == 0
             else:
-                return - m.sigma_26[z, y, s, t] - m.lamb[z, y, s, t] + (m.DELTA[y] * m.RHO[y, s] * (1 + (1 / m.INTEREST_RATE)) * m.C_L[z]) == 0
+                return - m.sigma_26[z, y, s, t] - m.lamb[z, y, s, t] + (
+                        m.DELTA[y] * m.RHO[y, s] * (1 + (1 / m.INTEREST_RATE)) * m.C_L[z]) == 0
 
         # Load shedding power
         m.LOAD_SHEDDING_POWER = Constraint(m.Z, m.Y, m.S, m.T, rule=load_shedding_power_rule)
@@ -1676,8 +1738,8 @@ class MPPDCModel:
         self.dual = Dual()
 
         # Solver options
-        self.keepfiles = True
-        self.solver_options = {}  # 'MIPGap': 0.0005, 'optimalitytarget': 2
+        self.keepfiles = False
+        self.solver_options = {}  # 'MIPGap': 0.0005, 'optimalitytarget': 2, 'simplex tolerances optimality': 1e-4
         self.opt = SolverFactory('cplex', solver_io='mps')
 
     @staticmethod
@@ -1699,6 +1761,12 @@ class MPPDCModel:
         # Fixed permit price values
         m.FIXED_PERMIT_PRICE = Param(m.Y, initialize=0, mutable=True)
 
+        # Average price in year prior to model start
+        m.YEAR_AVERAGE_PRICE_0 = Param(initialize=40)
+
+        # Strong duality constraint violation penalty
+        m.STRONG_DUALITY_VIOLATION_PENALTY = Param(initialize=float(1e6))
+
         return m
 
     @staticmethod
@@ -1712,6 +1780,14 @@ class MPPDCModel:
         m.z_e1 = Var(m.Y, within=NonNegativeReals, initialize=0)
         m.z_e2 = Var(m.Y, within=NonNegativeReals, initialize=0)
 
+        # Dummy variables used to minimise price differences between successive years
+        m.z_p1 = Var(m.Y, within=NonNegativeReals, initialize=0)
+        m.z_p2 = Var(m.Y, within=NonNegativeReals, initialize=0)
+
+        # Dummy variables to ensure strong duality constraint feasibility
+        m.sd_1 = Var(within=NonNegativeReals, initialize=0)
+        m.sd_2 = Var(within=NonNegativeReals, initialize=0)
+
         return m
 
     @staticmethod
@@ -1720,6 +1796,12 @@ class MPPDCModel:
 
         # Emissions target deviation
         m.EMISSIONS_TARGET_DEVIATION = Expression(expr=sum(m.z_e1[y] + m.z_e2[y] for y in m.Y))
+
+        # Change in price between successive intervals
+        m.PRICE_TARGET_DEVIATION = Expression(expr=sum(m.z_p1[y] + m.z_p2[y] for y in m.Y))
+
+        # Strong duality constraint violation
+        m.STRONG_DUALITY_VIOLATION_COST = Expression(expr=(m.sd_1 + m.sd_2) * m.STRONG_DUALITY_VIOLATION_PENALTY)
 
         return m
 
@@ -1730,7 +1812,7 @@ class MPPDCModel:
         def strong_duality_rule(_m):
             """Strong duality constraint"""
 
-            return m.TPV == m.DUAL_OBJECTIVE_EXPRESSION
+            return m.TPV + m.sd_1 == m.DUAL_OBJECTIVE_EXPRESSION + m.sd_2
 
         # Strong duality constraint (primal objective = dual objective at optimality)
         m.STRONG_DUALITY = Constraint(rule=strong_duality_rule)
@@ -1751,13 +1833,51 @@ class MPPDCModel:
         # Emissions intensity deviation
         m.EMISSIONS_INTENSITY_TARGET_DEV_2 = Constraint(m.Y, rule=emissions_intensity_target_deviation_2_rule)
 
+        def price_target_deviation_1_rule(_m, y):
+            """Constraint computing absolute difference between prices in successive years"""
+
+            if y == m.Y.first():
+                return m.z_p1[y] >= m.YEAR_AVERAGE_PRICE[y] - m.YEAR_AVERAGE_PRICE_0
+            else:
+                return m.z_p1[y] >= m.YEAR_AVERAGE_PRICE[y] - m.YEAR_AVERAGE_PRICE[y - 1]
+
+        # Emissions intensity deviation - 1
+        m.PRICE_TARGET_DEV_1 = Constraint(m.Y, rule=price_target_deviation_1_rule)
+
+        def price_target_deviation_2_rule(_m, y):
+            """Constraint computing absolute difference between prices in successive years"""
+
+            if y == m.Y.first():
+                return m.z_p2[y] >= m.YEAR_AVERAGE_PRICE_0 - m.YEAR_AVERAGE_PRICE[y]
+            else:
+                return m.z_p2[y] >= m.YEAR_AVERAGE_PRICE[y - 1] - m.YEAR_AVERAGE_PRICE[y]
+
+        # Emissions intensity deviation - 2
+        m.PRICE_TARGET_DEV_2 = Constraint(m.Y, rule=price_target_deviation_2_rule)
+
+        def total_scheme_revenue_rule(_m):
+            """Ensure that net scheme revenue is greater than 0 over model horizon"""
+
+            return m.TOTAL_SCHEME_REVENUE >= 0
+
+        # Total net scheme revenue constraint
+        m.TOTAL_NET_SCHEME_REVENUE_CONS = Constraint(rule=total_scheme_revenue_rule)
+
+        def year_scheme_revenue_rule(_m, y):
+            """Ensure that scheme revenue each year is greater than some lower limit"""
+
+            return sum(m.YEAR_SCHEME_REVENUE[j] for j in m.Y if j <= y) >= 0
+
+        # Year net scheme revenue constraint
+        m.YEAR_NET_SCHEME_REVENUE_CONS = Constraint(m.Y, rule=year_scheme_revenue_rule)
+
         def fixed_permit_price_rule(_m, y):
             """Fixing permit price to a given value"""
 
             return m.permit_price[y] == m.FIXED_PERMIT_PRICE[y]
 
         # Fixed permit price
-        m.FIXED_PERMIT_PRICE_CONS = Constraint(m.Y, rule=fixed_permit_price_rule)
+        # m.FIXED_PERMIT_PRICE_CONS = Constraint(m.Y, rule=fixed_permit_price_rule)
 
         def fixed_baseline_rule(_m, y):
             """Fixing baseline to a given value"""
@@ -1765,7 +1885,7 @@ class MPPDCModel:
             return m.baseline[y] == m.FIXED_BASELINE[y]
 
         # Fixed emissions intensity baseline
-        m.FIXED_BASELINE_CONS = Constraint(m.Y, rule=fixed_baseline_rule)
+        # m.FIXED_BASELINE_CONS = Constraint(m.Y, rule=fixed_baseline_rule)
 
         return m
 
@@ -1777,7 +1897,10 @@ class MPPDCModel:
         # m.OBJECTIVE = Objective(expr=m.dummy, sense=minimize)
 
         # Emissions targeting objective
-        m.OBJECTIVE = Objective(expr=m.EMISSIONS_TARGET_DEVIATION, sense=minimize)
+        # m.OBJECTIVE = Objective(expr=m.EMISSIONS_TARGET_DEVIATION, sense=minimize)
+
+        # Price targeting objective
+        m.OBJECTIVE = Objective(expr=m.PRICE_TARGET_DEVIATION + m.STRONG_DUALITY_VIOLATION_COST, sense=minimize)
 
         return m
 
@@ -1900,14 +2023,19 @@ def check_solution(m_p, m_d, elements):
 
     # Absolute difference
     if elements['primal_var']:
-        difference = {i: {'primal': p[i].value, 'dual': m_d.dual[d[i]], 'abs_diff': abs(abs(p[i].value) - abs(m_d.dual[d[i]]))} for i in common_keys}
+        difference = {
+            i: {'primal': p[i].value, 'dual': m_d.dual[d[i]], 'abs_diff': abs(abs(p[i].value) - abs(m_d.dual[d[i]]))}
+            for i in common_keys}
     else:
-        difference = {i: {'primal': m_p.dual[p[i]], 'dual': d[i].value, 'abs_diff': abs(abs(m_p.dual[p[i]]) - abs(d[i].value))} for i in common_keys}
+        difference = {
+            i: {'primal': m_p.dual[p[i]], 'dual': d[i].value, 'abs_diff': abs(abs(m_p.dual[p[i]]) - abs(d[i].value))}
+            for i in common_keys}
 
     # Max difference over all keys
     max_difference = max([v['abs_diff'] for _, v in difference.items()])
 
-    print(f"""Primal element: {elements['primal']}, Dual element: {elements['dual']}, Max difference: {max_difference}, keys: {len(common_keys)}""")
+    print(f"""Primal element: {elements['primal']}, Dual element: {elements[
+        'dual']}, Max difference: {max_difference}, keys: {len(common_keys)}""")
 
     # Only retain elements where difference is non-negative
     non_negative_difference = {k: v for k, v in difference.items() if v['abs_diff'] > 0.1}
@@ -1915,95 +2043,153 @@ def check_solution(m_p, m_d, elements):
     return difference, max_difference, non_negative_difference
 
 
-if __name__ == '__main__':
-    # primal = Primal()
-    # model_primal = primal.construct_model()
-    # model_primal, status_primal = primal.solve_model(model_primal)
-    #
-    # dual = Dual()
-    # model_dual = dual.construct_model()
-    # model_dual, status_dual = dual.solve_model(model_dual)
+def run_checks():
+    """Verify primal and dual models are correctly formulated by comparing results"""
 
-    mppdc = MPPDCModel()
-    model_mppdc = mppdc.construct_model()
-    # model_mppdc, status_mppdc = mppdc.solve_model(model_mppdc)
+    # Object used to construct and run primal model
+    primal = Primal()
+    model_primal = primal.construct_model()
+    model_primal, status_primal = primal.solve_model(model_primal)
 
-    candidate_baselines = {y: 0.1 for y in model_mppdc.Y}
-    candidate_permit_prices = {y: 20 for y in model_mppdc.Y}
-    # var_sensitivities = mppdc.execute_solution_sequence(model_mppdc, candidate_baselines, candidate_permit_prices)
+    # Object used to construct and run dual model
+    dual = Dual()
+    model_dual = dual.construct_model()
+    model_dual, status_dual = dual.solve_model(model_dual)
 
-    # try:
-    #     check = [{'primal': 'POWER_BALANCE', 'dual': 'lamb', 'primal_var': False},
-    #              {'primal': 'p', 'dual': 'POWER_OUTPUT_EXISTING_THERMAL', 'primal_var': True},
-    #              {'primal': 'p_V', 'dual': 'LOAD_SHEDDING_POWER', 'primal_var': True},
-    #              {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_THERMAL', 'primal_var': True},
-    #              {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_WIND', 'primal_var': True},
-    #              {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_SOLAR', 'primal_var': True},
-    #              {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_STORAGE', 'primal_var': True},
-    #              {'primal': 'NON_NEGATIVE_CAPACITY', 'dual': 'mu_1', 'primal_var': False},
-    #              # {'primal': 'SOLAR_BUILD_LIMIT_CONS', 'dual': 'mu_2', 'primal_var': False},
-    #              # {'primal': 'WIND_BUILD_LIMIT_CONS', 'dual': 'mu_3', 'primal_var': False},
-    #              # {'primal': 'CUMULATIVE_CAPACITY', 'dual': 'nu_1', 'primal_var': False},
-    #              {'primal': 'MIN_POWER_CONS', 'dual': 'sigma_1', 'primal_var': False},
-    #              {'primal': 'MAX_POWER_EXISTING_THERMAL', 'dual': 'sigma_2', 'primal_var': False},
-    #              {'primal': 'MAX_POWER_CANDIDATE_THERMAL', 'dual': 'sigma_3', 'primal_var': False},
-    #              {'primal': 'MAX_POWER_EXISTING_WIND', 'dual': 'sigma_4', 'primal_var': False},
-    #              {'primal': 'MAX_POWER_CANDIDATE_WIND', 'dual': 'sigma_5', 'primal_var': False},
-    #              {'primal': 'MAX_POWER_EXISTING_SOLAR', 'dual': 'sigma_6', 'primal_var': False},
-    #              {'primal': 'MAX_POWER_CANDIDATE_SOLAR', 'dual': 'sigma_7', 'primal_var': False},
-    #              {'primal': 'MAX_POWER_EXISTING_HYDRO', 'dual': 'sigma_8', 'primal_var': False},
-    #              {'primal': 'NON_NEGATIVE_LOST_LOAD', 'dual': 'sigma_26', 'primal_var': False},
-    #              {'primal': 'MIN_FLOW', 'dual': 'sigma_27', 'primal_var': False},
-    #              {'primal': 'MAX_FLOW', 'dual': 'sigma_28', 'primal_var': False},
-    #              ]
-    #
-    #     for c in check:
-    #         diff, max_diff, non_negative_diff = check_solution(model_primal, model_dual, c)
-    #
-    # except Exception as e:
-    #     print(f'Failed: {e}')
+    # Model elements to compare
+    elements = [{'primal': 'POWER_BALANCE', 'dual': 'lamb', 'primal_var': False},
+                {'primal': 'p', 'dual': 'POWER_OUTPUT_EXISTING_THERMAL', 'primal_var': True},
+                {'primal': 'p_V', 'dual': 'LOAD_SHEDDING_POWER', 'primal_var': True},
+                {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_THERMAL', 'primal_var': True},
+                {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_WIND', 'primal_var': True},
+                {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_SOLAR', 'primal_var': True},
+                {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_STORAGE', 'primal_var': True},
+                {'primal': 'NON_NEGATIVE_CAPACITY', 'dual': 'mu_1', 'primal_var': False},
+                # {'primal': 'SOLAR_BUILD_LIMIT_CONS', 'dual': 'mu_2', 'primal_var': False},
+                # {'primal': 'WIND_BUILD_LIMIT_CONS', 'dual': 'mu_3', 'primal_var': False},
+                # {'primal': 'CUMULATIVE_CAPACITY', 'dual': 'nu_1', 'primal_var': False},
+                {'primal': 'MIN_POWER_CONS', 'dual': 'sigma_1', 'primal_var': False},
+                {'primal': 'MAX_POWER_EXISTING_THERMAL', 'dual': 'sigma_2', 'primal_var': False},
+                {'primal': 'MAX_POWER_CANDIDATE_THERMAL', 'dual': 'sigma_3', 'primal_var': False},
+                {'primal': 'MAX_POWER_EXISTING_WIND', 'dual': 'sigma_4', 'primal_var': False},
+                {'primal': 'MAX_POWER_CANDIDATE_WIND', 'dual': 'sigma_5', 'primal_var': False},
+                {'primal': 'MAX_POWER_EXISTING_SOLAR', 'dual': 'sigma_6', 'primal_var': False},
+                {'primal': 'MAX_POWER_CANDIDATE_SOLAR', 'dual': 'sigma_7', 'primal_var': False},
+                {'primal': 'MAX_POWER_EXISTING_HYDRO', 'dual': 'sigma_8', 'primal_var': False},
+                {'primal': 'NON_NEGATIVE_LOST_LOAD', 'dual': 'sigma_26', 'primal_var': False},
+                {'primal': 'MIN_FLOW', 'dual': 'sigma_27', 'primal_var': False},
+                {'primal': 'MAX_FLOW', 'dual': 'sigma_28', 'primal_var': False},
+                ]
 
-    os.environ['TMPDIR'] = os.path.abspath(os.path.dirname(__file__))
+    for c in elements:
+        try:
+            diff, max_diff, non_negative_diff = check_solution(model_primal, model_dual, c)
 
-    self = mppdc
-    m = model_mppdc
-    baselines = candidate_baselines
-    permit_prices = candidate_permit_prices
+        except Exception as e:
+            print(f'Failed: {e}')
 
-    # Fix policy variables and corresponding parameters for each year in model horizon
+
+def run_primal(baselines, permit_prices):
+    """Run business-as-usual scenario"""
+
+    # Instantiate class used to run primal model
+    primal = Primal()
+
+    # Construct model
+    m = primal.construct_model()
+
+    # Fix baseline and permit prices to given values
     for y in m.Y:
-        # Fix variables
-        m.baseline[y].fix(baselines[y])
         m.permit_price[y].fix(permit_prices[y])
+        m.baselines[y].fix(baselines[y])
 
-        # Update parameters
-        m.FIXED_PERMIT_PRICE[y] = permit_prices[y]
-        m.FIXED_BASELINE[y] = baselines[y]
+    # Solve model
+    m, status = primal.solve_model(m)
 
-    # Solve model (with policy variables fixed)
-    m, solve_status = self.solve_model(m)
+    # Compile result information
+    result = {'model': m, 'status': status, 'permit_prices': permit_prices, 'baselines': baselines}
 
-    # Fix variables
-    # m.p.fix()
+    return result
 
-    # Unfix permit price - resolve model
+
+def extract_results(m):
+    """Extract results from a model run"""
+
+    # Copying results from model object into a dictionary
+    results = {'x_c': copy.deepcopy(m.x_c.get_values()),
+               'p': copy.deepcopy(m.p.get_values()),
+               'baseline': copy.deepcopy(m.baseline.get_values()),
+               'permit_price': copy.deepcopy(m.permit_price.get_values()),
+               'YEAR_EMISSIONS': copy.deepcopy({k: m.YEAR_EMISSIONS[k].expr() for k in m.YEAR_EMISSIONS.keys()}),
+               'YEAR_EMISSIONS_INTENSITY': copy.deepcopy({k: m.YEAR_EMISSIONS_INTENSITY[k].expr() for k in m.YEAR_EMISSIONS_INTENSITY.keys()}),
+               'YEAR_SCHEME_REVENUE': copy.deepcopy({k: m.YEAR_SCHEME_REVENUE[k].expr() for k in m.YEAR_SCHEME_REVENUE.keys()}),
+               'TOTAL_SCHEME_REVENUE': m.TOTAL_SCHEME_REVENUE.expr(),
+               }
+
+    return results
+
+
+def run_mppdc(baselines, permit_prices):
+    """Run MPPDC model"""
+
+    # Initialise results dictionary
+    results = {}
+
+    # Initialise object and model used to run MPPDC
+    mppdc = MPPDCModel()
+    m = mppdc.construct_model()
+
+    # Fix permit prices and baselines
+    for y in m.Y:
+        m.permit_price[y].fix(permit_prices[y])
+        m.baseline[y].fix(baselines[y])
+
+    # Solve MPPDC model with fixed policy parameters
+    m, status = mppdc.solve_model(m)
+    results[0] = extract_results(m)
+
+    # Fix power output and capacity decisions, unfix baseline
+    m.p.fix()
+    m.x_c.fix()
     m.baseline.unfix()
 
-    m, solve_status = self.solve_model(m)
+    # Re-solve model
+    m, status = mppdc.solve_model(m)
+    results[1] = extract_results(m)
 
-    # # Obtain dual for permit price constraint
-    # permit_price_duals = {y: m.dual[m.FIXED_PERMIT_PRICE_CONS[y]] for y in m.Y}
-    #
-    # # Fix permit price, unfix baseline - resolve model
-    # for y in m.Y:
-    #     m.permit_price.fix(permit_prices[y])
-    #
-    # m.baseline.unfix()
-    # m, solve_status = self.solve_model(m)
-    #
-    # # Obtain dual for baseline constraint
-    # baseline_duals = {y: m.dual[m.FIXED_BASELINE_CONS[y]] for y in m.Y}
-    #
-    # sensitivities = {'baseline_duals': baseline_duals, 'permit_price_duals': permit_price_duals}
-    #
-    # # return sensitivities
+    # Fix baseline, unfix power and capacity decision variables
+    m.baseline.fix()
+    m.p.unfix()
+    m.x_c.unfix()
+
+    # Re-solve model
+    m, status = mppdc.solve_model(m)
+    results[2] = extract_results(m)
+
+    return results
+
+
+def get_max_difference(model, results, variable):
+    """Compute max difference between model runs for a given variable"""
+
+    # Extract keys for a given variable
+    keys = model.__getattribute__(variable).keys()
+
+    return max([abs(results[1][variable][i] - results[2][variable][i]) for i in keys])
+
+
+if __name__ == '__main__':
+    # Instantiate model objects
+    mppdc_dummy = MPPDCModel()
+    mppdc_dummy_model = mppdc_dummy.construct_model()
+
+    # Candidate baseline solution
+    candidate_baselines = {y: 0.1 for y in mppdc_dummy_model.Y}
+    candidate_permit_prices = {y: 20 for y in mppdc_dummy_model.Y}
+
+    # Results from running MPPDC model
+    mppdc_results = run_mppdc(candidate_baselines, candidate_permit_prices)
+
+    # Check results
+    print(f"Capacity difference (x_c): {get_max_difference(mppdc_dummy_model, mppdc_results, 'x_c')}")
+    print(f"Power difference (p): {get_max_difference(mppdc_dummy_model, mppdc_results, 'p')}")
