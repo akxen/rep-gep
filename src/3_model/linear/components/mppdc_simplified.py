@@ -3,6 +3,7 @@
 import os
 import sys
 import copy
+import pickle
 
 # os.environ['TMPDIR'] = os.path.abspath(os.path.dirname(__file__))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'base'))
@@ -2112,7 +2113,7 @@ def run_primal(baselines, permit_prices):
     return result
 
 
-def extract_results(m):
+def extract_mppdc_results(m):
     """Extract results from a model run"""
 
     # Copying results from model object into a dictionary
@@ -2123,13 +2124,51 @@ def extract_results(m):
                'YEAR_EMISSIONS': copy.deepcopy({k: m.YEAR_EMISSIONS[k].expr() for k in m.YEAR_EMISSIONS.keys()}),
                'YEAR_EMISSIONS_INTENSITY': copy.deepcopy({k: m.YEAR_EMISSIONS_INTENSITY[k].expr() for k in m.YEAR_EMISSIONS_INTENSITY.keys()}),
                'YEAR_SCHEME_REVENUE': copy.deepcopy({k: m.YEAR_SCHEME_REVENUE[k].expr() for k in m.YEAR_SCHEME_REVENUE.keys()}),
-               'TOTAL_SCHEME_REVENUE': m.TOTAL_SCHEME_REVENUE.expr(),
+               'TOTAL_SCHEME_REVENUE': copy.deepcopy(m.TOTAL_SCHEME_REVENUE.expr()),
+               'YEAR_AVERAGE_PRICE': copy.deepcopy({k: m.YEAR_AVERAGE_PRICE[k].expr() for k in m.YEAR_AVERAGE_PRICE.keys()}),
                }
 
     return results
 
 
-def run_mppdc(baselines, permit_prices):
+def extract_primal_results(m):
+    """Extract results from a model run"""
+
+    # Copying results from model object into a dictionary
+    results = {'x_c': copy.deepcopy(m.x_c.get_values()),
+               'p': copy.deepcopy(m.p.get_values()),
+               'baseline': copy.deepcopy(m.baseline.get_values()),
+               'permit_price': copy.deepcopy(m.permit_price.get_values()),
+               'YEAR_EMISSIONS': copy.deepcopy({k: m.YEAR_EMISSIONS[k].expr() for k in m.YEAR_EMISSIONS.keys()}),
+               'YEAR_EMISSIONS_INTENSITY': copy.deepcopy({k: m.YEAR_EMISSIONS_INTENSITY[k].expr() for k in m.YEAR_EMISSIONS_INTENSITY.keys()}),
+               'YEAR_SCHEME_REVENUE': copy.deepcopy({k: m.YEAR_SCHEME_REVENUE[k].expr() for k in m.YEAR_SCHEME_REVENUE.keys()}),
+               'TOTAL_SCHEME_REVENUE': copy.deepcopy(m.TOTAL_SCHEME_REVENUE.expr()),
+               'PRICES': copy.deepcopy({k: m.dual[m.POWER_BALANCE[k]] for k in m.POWER_BALANCE.keys()})
+               }
+
+    return results
+
+
+def run_mppdc_fixed_policy(baselines, permit_prices):
+    """Run BAU case"""
+
+    # Initialise object and model used to run MPPDC
+    mppdc = MPPDCModel()
+    m = mppdc.construct_model()
+
+    # Fix permit prices and baselines
+    for y in m.Y:
+        m.permit_price[y].fix(permit_prices[y])
+        m.baseline[y].fix(baselines[y])
+
+    # Solve MPPDC model with fixed policy parameters
+    m, status = mppdc.solve_model(m)
+    results = extract_mppdc_results(m)
+
+    return results
+
+
+def run_mppdc_price_targeting(baselines, permit_prices):
     """Run MPPDC model"""
 
     # Initialise results dictionary
@@ -2146,7 +2185,7 @@ def run_mppdc(baselines, permit_prices):
 
     # Solve MPPDC model with fixed policy parameters
     m, status = mppdc.solve_model(m)
-    results[0] = extract_results(m)
+    results[0] = extract_mppdc_results(m)
 
     # Fix power output and capacity decisions, unfix baseline
     m.p.fix()
@@ -2155,7 +2194,7 @@ def run_mppdc(baselines, permit_prices):
 
     # Re-solve model
     m, status = mppdc.solve_model(m)
-    results[1] = extract_results(m)
+    results[1] = extract_mppdc_results(m)
 
     # Fix baseline, unfix power and capacity decision variables
     m.baseline.fix()
@@ -2164,7 +2203,26 @@ def run_mppdc(baselines, permit_prices):
 
     # Re-solve model
     m, status = mppdc.solve_model(m)
-    results[2] = extract_results(m)
+    results[2] = extract_mppdc_results(m)
+
+    return results
+
+
+def run_primal_fixed_policy(baselines, permit_prices):
+    """Run primal model with fixed policy parameters"""
+
+    # Initialise object and model used to run primal model
+    primal = Primal()
+    m = primal.construct_model()
+
+    # Fix permit prices and baselines
+    for y in m.Y:
+        m.permit_price[y].fix(permit_prices[y])
+        m.baseline[y].fix(baselines[y])
+
+    # Solve primal model with fixed policy parameters
+    m, status = primal.solve_model(m)
+    results = extract_primal_results(m)
 
     return results
 
@@ -2183,13 +2241,23 @@ if __name__ == '__main__':
     mppdc_dummy = MPPDCModel()
     mppdc_dummy_model = mppdc_dummy.construct_model()
 
-    # Candidate baseline solution
-    candidate_baselines = {y: 0.1 for y in mppdc_dummy_model.Y}
-    candidate_permit_prices = {y: 20 for y in mppdc_dummy_model.Y}
+    # # Candidate baseline solution
+    # candidate_baselines = {y: 0.1 for y in mppdc_dummy_model.Y}
+    # candidate_permit_prices = {y: 20 for y in mppdc_dummy_model.Y}
+    #
+    # # Results from running price targeting MPPDC model
+    # mppdc_price_target_results = run_mppdc_price_targeting(candidate_baselines, candidate_permit_prices)
+    #
+    # # Check results
+    # print(f"Capacity difference (x_c): {get_max_difference(mppdc_dummy_model, mppdc_price_target_results, 'x_c')}")
+    # print(f"Power difference (p): {get_max_difference(mppdc_dummy_model, mppdc_price_target_results, 'p')}")
+    #
+    # Set all policy parameters = 0 for BAU case (no policy)
+    bau_parameters = {y: float(0) for y in mppdc_dummy_model.Y}
+    # mppdc_bau_results = run_mppdc_fixed_policy(bau_parameters, bau_parameters)
 
-    # Results from running MPPDC model
-    mppdc_results = run_mppdc(candidate_baselines, candidate_permit_prices)
+    # Run primal model (better for longer horizons as has fewer variables)
+    primal_bau_results = run_primal_fixed_policy(bau_parameters, bau_parameters)
 
-    # Check results
-    print(f"Capacity difference (x_c): {get_max_difference(mppdc_dummy_model, mppdc_results, 'x_c')}")
-    print(f"Power difference (p): {get_max_difference(mppdc_dummy_model, mppdc_results, 'p')}")
+    with open('primal_bau_results.pickle', 'wb') as f:
+        pickle.dump(primal_bau_results, f)
