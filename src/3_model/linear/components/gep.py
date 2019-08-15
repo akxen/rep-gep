@@ -16,9 +16,9 @@ from base.components import CommonComponents
 
 
 class Primal:
-    def __init__(self):
+    def __init__(self, final_year, scenarios_per_year):
         self.data = ModelData()
-        self.components = CommonComponents()
+        self.components = CommonComponents(final_year, scenarios_per_year)
 
         # Solver options
         self.keepfiles = False
@@ -709,9 +709,9 @@ class Primal:
 
 
 class Dual:
-    def __init__(self):
+    def __init__(self, final_year, scenarios_per_year):
         self.data = ModelData()
-        self.components = CommonComponents()
+        self.components = CommonComponents(final_year, scenarios_per_year)
 
         # Solver options
         self.keepfiles = False
@@ -1733,10 +1733,10 @@ class Dual:
 
 
 class MPPDCModel:
-    def __init__(self):
-        self.components = CommonComponents()
-        self.primal = Primal()
-        self.dual = Dual()
+    def __init__(self, final_year, scenarios_per_year):
+        self.components = CommonComponents(final_year, scenarios_per_year)
+        self.primal = Primal(final_year, scenarios_per_year)
+        self.dual = Dual(final_year, scenarios_per_year)
 
         # Solver options
         self.keepfiles = False
@@ -2121,6 +2121,7 @@ def extract_mppdc_results(m):
                'p': copy.deepcopy(m.p.get_values()),
                'baseline': copy.deepcopy(m.baseline.get_values()),
                'permit_price': copy.deepcopy(m.permit_price.get_values()),
+               'lamb': copy.deepcopy(m.lamb.get_values()),
                'YEAR_EMISSIONS': copy.deepcopy({k: m.YEAR_EMISSIONS[k].expr() for k in m.YEAR_EMISSIONS.keys()}),
                'YEAR_EMISSIONS_INTENSITY': copy.deepcopy({k: m.YEAR_EMISSIONS_INTENSITY[k].expr() for k in m.YEAR_EMISSIONS_INTENSITY.keys()}),
                'YEAR_SCHEME_REVENUE': copy.deepcopy({k: m.YEAR_SCHEME_REVENUE[k].expr() for k in m.YEAR_SCHEME_REVENUE.keys()}),
@@ -2149,11 +2150,11 @@ def extract_primal_results(m):
     return results
 
 
-def run_mppdc_fixed_policy(baselines, permit_prices):
+def run_mppdc_fixed_policy(baselines, permit_prices, final_year, scenarios_per_year):
     """Run BAU case"""
 
-    # Initialise object and model used to run MPPDC
-    mppdc = MPPDCModel()
+    # Initialise object and model used to run MPPDC model
+    mppdc = MPPDCModel(final_year, scenarios_per_year)
     m = mppdc.construct_model()
 
     # Fix permit prices and baselines
@@ -2168,14 +2169,14 @@ def run_mppdc_fixed_policy(baselines, permit_prices):
     return results
 
 
-def run_mppdc_price_targeting(baselines, permit_prices):
+def run_mppdc_price_smoothing(output_dir, baselines, permit_prices, final_year, scenarios_per_year):
     """Run MPPDC model"""
 
     # Initialise results dictionary
     results = {}
 
     # Initialise object and model used to run MPPDC
-    mppdc = MPPDCModel()
+    mppdc = MPPDCModel(final_year, scenarios_per_year)
     m = mppdc.construct_model()
 
     # Fix permit prices and baselines
@@ -2205,14 +2206,18 @@ def run_mppdc_price_targeting(baselines, permit_prices):
     m, status = mppdc.solve_model(m)
     results[2] = extract_mppdc_results(m)
 
+    # Save model results
+    with open(os.path.join(output_dir, 'mppdc_price_smoothing_results.pickle'), 'wb') as f:
+        pickle.dump(results, f)
+
     return results
 
 
-def run_primal_fixed_policy(baselines, permit_prices):
+def run_primal_fixed_policy(baselines, permit_prices, final_year, scenarios_per_year):
     """Run primal model with fixed policy parameters"""
 
     # Initialise object and model used to run primal model
-    primal = Primal()
+    primal = Primal(final_year, scenarios_per_year)
     m = primal.construct_model()
 
     # Fix permit prices and baselines
@@ -2223,6 +2228,36 @@ def run_primal_fixed_policy(baselines, permit_prices):
     # Solve primal model with fixed policy parameters
     m, status = primal.solve_model(m)
     results = extract_primal_results(m)
+
+    return results
+
+
+def run_bau(output_dir, final_year, scenarios_per_year, mode='primal'):
+    """Run business-as-usual model"""
+
+    # Initialise object and model used to run primal model
+    primal = Primal(final_year, scenarios_per_year)
+    primal_dummy_model = primal.construct_model()
+
+    # Baselines and permit prices = 0 for all years in model horizon
+    parameters = {y: float(0) for y in primal_dummy_model.Y}
+
+    if mode == 'primal':
+        # Run primal BAU case
+        results = run_primal_fixed_policy(parameters, parameters, final_year, scenarios_per_year)
+        filename = 'primal_bau_results.pickle'
+
+    elif mode == 'mppdc':
+        # Run MPPDC BAU case
+        results = run_mppdc_fixed_policy(parameters, parameters, final_year, scenarios_per_year)
+        filename = 'mppdc_bau_results.pickle'
+
+    else:
+        raise Exception(f'Unexpected run mode: {mode}')
+
+    # Save results
+    with open(os.path.join(output_dir, filename), 'wb') as f:
+        pickle.dump(results, f)
 
     return results
 
@@ -2238,8 +2273,8 @@ def get_max_difference(model, results, variable):
 
 if __name__ == '__main__':
     # Instantiate model objects
-    mppdc_dummy = MPPDCModel()
-    mppdc_dummy_model = mppdc_dummy.construct_model()
+    # mppdc_dummy = MPPDCModel()
+    # mppdc_dummy_model = mppdc_dummy.construct_model()
 
     # # Candidate baseline solution
     # candidate_baselines = {y: 0.1 for y in mppdc_dummy_model.Y}
@@ -2251,13 +2286,6 @@ if __name__ == '__main__':
     # # Check results
     # print(f"Capacity difference (x_c): {get_max_difference(mppdc_dummy_model, mppdc_price_target_results, 'x_c')}")
     # print(f"Power difference (p): {get_max_difference(mppdc_dummy_model, mppdc_price_target_results, 'p')}")
-    #
-    # Set all policy parameters = 0 for BAU case (no policy)
-    bau_parameters = {y: float(0) for y in mppdc_dummy_model.Y}
-    # mppdc_bau_results = run_mppdc_fixed_policy(bau_parameters, bau_parameters)
 
-    # Run primal model (better for longer horizons as has fewer variables)
-    primal_bau_results = run_primal_fixed_policy(bau_parameters, bau_parameters)
-
-    with open('primal_bau_results.pickle', 'wb') as f:
-        pickle.dump(primal_bau_results, f)
+    # r = run_bau('.', 2018, 10)
+    pass
