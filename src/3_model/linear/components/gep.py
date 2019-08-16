@@ -2262,6 +2262,72 @@ def run_bau(output_dir, final_year, scenarios_per_year, mode='primal'):
     return results
 
 
+def run_permit_price_algorithm(output_dir, final_year, scenarios_per_year, target_trajectory):
+    """Run algorithm to identify sequence of permit prices that achieves a given emissions intensity trajectory"""
+
+    # Initialise container for results
+    results = {'target_trajectory': target_trajectory, 'iteration_results': {}}
+
+    # Initialise model object (primal model)
+    primal = Primal(final_year, scenarios_per_year)
+    model = primal.construct_model()
+
+    # Initialise permit prices for each year in model horizon
+    permit_prices = {y: float(0) for y in model.Y}
+
+    # Update permit prices and emissions intensity baseline. Set baseline = target emissions intensity trajectory
+    for y in model.Y:
+        model.permit_price[y].fix(permit_prices[y])
+        model.baseline[y].fix(target_trajectory[y])
+
+    # Iteration counter
+    i = 1
+
+    while True:
+        print(f'Running iteration {i}')
+
+        # Run model
+        model, solver_status = primal.solve_model(model)
+
+        # Compute difference between actual emissions intensity and target
+        emissions_intensity_difference = {y: model.YEAR_EMISSIONS_INTENSITY[y] - target_trajectory[y] for y in model.Y}
+
+        # Container for new permit prices
+        new_permit_prices = {}
+
+        # Update permit prices
+        for y in model.Y:
+            new_permit_prices[y] = permit_prices[y] + (emissions_intensity_difference[y] * 10)
+
+            # Set equal to zero if permit price is less than 0
+            if new_permit_prices[y] < 0:
+                new_permit_prices[y] = 0
+
+        # Compute max difference between new and old permit prices
+        max_permit_price_difference = max([abs(new_permit_prices[y] - permit_prices[y]) for y in model.Y])
+
+        # Extract results from primal model for each iteration
+        iteration_results = extract_primal_results(model)
+        results['iteration_results'][i] = copy.deepcopy(iteration_results)
+
+        # Check if the max difference is less than the threshold
+        if max_permit_price_difference < 2:
+            print('Permit price trajectory difference less than threshold. Terminating algorithm.')
+
+            # Save iteration results to file
+            with open(os.path.join(output_dir, 'permit_price_trajectory'), 'wb') as f:
+                pickle.dump(results, f)
+
+            return results
+
+        else:
+            # update permit prices to use in next iteration
+            permit_prices = new_permit_prices
+
+            # Update iteration counter
+            i += 1
+
+
 def get_max_difference(model, results, variable):
     """Compute max difference between model runs for a given variable"""
 
