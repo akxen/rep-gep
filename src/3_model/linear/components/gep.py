@@ -695,10 +695,6 @@ class Primal:
     def solve_model(self, m):
         """Solve model"""
 
-        # Fix values for policy variables
-        m.baseline.fix(0)
-        m.permit_price.fix(0)
-
         # Solve model
         solve_status = self.opt.solve(m, tee=True, options=self.solver_options, keepfiles=self.keepfiles)
 
@@ -1719,10 +1715,6 @@ class Dual:
     def solve_model(self, m):
         """Solve model"""
 
-        # Fix values for policy variables
-        m.baseline.fix(0)
-        m.permit_price.fix(0)
-
         # Solve model
         solve_status = self.opt.solve(m, tee=True, options=self.solver_options, keepfiles=self.keepfiles)
 
@@ -2262,10 +2254,10 @@ def run_bau(output_dir, final_year, scenarios_per_year, mode='primal'):
     return results
 
 
-def run_permit_price_algorithm(output_dir, final_year, scenarios_per_year, target_trajectory):
+def run_permit_price_algorithm(output_dir, target_trajectory, final_year, scenarios_per_year):
     """Run algorithm to identify sequence of permit prices that achieves a given emissions intensity trajectory"""
 
-    # Initialise container for results
+    # Initialise results container
     results = {'target_trajectory': target_trajectory, 'iteration_results': {}}
 
     # Initialise model object (primal model)
@@ -2275,47 +2267,64 @@ def run_permit_price_algorithm(output_dir, final_year, scenarios_per_year, targe
     # Initialise permit prices for each year in model horizon
     permit_prices = {y: float(0) for y in model.Y}
 
-    # Update permit prices and emissions intensity baseline. Set baseline = target emissions intensity trajectory
+    # Update emissions intensity baseline. Set baseline = target emissions intensity trajectory
     for y in model.Y:
-        model.permit_price[y].fix(permit_prices[y])
         model.baseline[y].fix(target_trajectory[y])
 
     # Iteration counter
     i = 1
 
     while True:
+        # Update permit prices
+        print(f'Fixing permit prices: {permit_prices}')
+        for y in model.Y:
+            model.permit_price[y].fix(permit_prices[y])
+
         print(f'Running iteration {i}')
 
         # Run model
         model, solver_status = primal.solve_model(model)
 
         # Compute difference between actual emissions intensity and target
-        emissions_intensity_difference = {y: model.YEAR_EMISSIONS_INTENSITY[y] - target_trajectory[y] for y in model.Y}
+        emissions_intensity_difference = {y: model.YEAR_EMISSIONS_INTENSITY[y].expr() - target_trajectory[y] for y in model.Y}
 
         # Container for new permit prices
         new_permit_prices = {}
 
         # Update permit prices
         for y in model.Y:
-            new_permit_prices[y] = permit_prices[y] + (emissions_intensity_difference[y] * 10)
+            new_permit_prices[y] = permit_prices[y] + (emissions_intensity_difference[y] * 100)
 
             # Set equal to zero if permit price is less than 0
             if new_permit_prices[y] < 0:
                 new_permit_prices[y] = 0
+
+        print(f'Permit price trajectory: {new_permit_prices}')
+        current_emissions_intensities = {y: model.YEAR_EMISSIONS_INTENSITY[y].expr() for y in model.Y}
+        print(f'Emissions intensities: {current_emissions_intensities}')
+        print(f'Emissions intensity target difference: {emissions_intensity_difference}')
+        current_permit_prices = {y: model.permit_price[y].value for y in model.Y}
+        print(f'Current permit prices: {current_permit_prices}')
 
         # Compute max difference between new and old permit prices
         max_permit_price_difference = max([abs(new_permit_prices[y] - permit_prices[y]) for y in model.Y])
 
         # Extract results from primal model for each iteration
         iteration_results = extract_primal_results(model)
-        results['iteration_results'][i] = copy.deepcopy(iteration_results)
+
+        # Copying results from model object into a dictionary
+        result_keys = ['baseline', 'permit_price', 'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE',
+                       'TOTAL_SCHEME_REVENUE']
+
+        # Store selected results
+        results['iteration_results'][i] = {k: iteration_results[k] for k in result_keys}
 
         # Check if the max difference is less than the threshold
         if max_permit_price_difference < 2:
             print('Permit price trajectory difference less than threshold. Terminating algorithm.')
 
             # Save iteration results to file
-            with open(os.path.join(output_dir, 'permit_price_trajectory'), 'wb') as f:
+            with open(os.path.join(output_dir, 'permit_price_trajectory.pickle'), 'wb') as f:
                 pickle.dump(results, f)
 
             return results

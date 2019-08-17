@@ -15,14 +15,19 @@ if __name__ == '__main__':
     # Final year in model horizon
     final_year = 2018
 
-    # Run business-as-usual scenario
-    primal_bau_results = gep.run_bau(output_dir, final_year=final_year, scenarios_per_year=10, mode='primal')
-    mppdc_bau_results = gep.run_bau(output_dir, final_year=final_year, scenarios_per_year=10, mode='mppdc')
+    # # Run business-as-usual scenario
+    # primal_bau_results = gep.run_bau(output_dir, final_year=final_year, scenarios_per_year=10, mode='primal')
+    # mppdc_bau_results = gep.run_bau(output_dir, final_year=final_year, scenarios_per_year=10, mode='mppdc')
+    #
+    # # Parameters for price smoothing model
+    # baselines = {y: 0.8 for y in range(2016, final_year + 1)}
+    # permit_prices = {y: 30 for y in range(2016, final_year + 1)}
+    #
+    # # Run price smoothing model
+    # price_smoothing_results = gep.run_mppdc_price_smoothing(output_dir, baselines, permit_prices,
+    #                                                         final_year=final_year, scenarios_per_year=10)
 
-    # Parameters for price smoothing model
-    baselines = {y: 0.8 for y in range(2016, final_year + 1)}
-    permit_prices = {y: 30 for y in range(2016, final_year + 1)}
-
-    # Run price smoothing model
-    price_smoothing_results = gep.run_mppdc_price_smoothing(output_dir, baselines, permit_prices, final_year=final_year,
-                                                            scenarios_per_year=10)
+    # Determine permit price trajectory
+    target_trajectory = {y: 0.7 for y in range(2016, final_year + 1)}
+    permit_price_results = gep.run_permit_price_algorithm(output_dir, target_trajectory, final_year=final_year,
+                                                          scenarios_per_year=10)
