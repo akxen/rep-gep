@@ -4,6 +4,7 @@ import os
 import sys
 import copy
 import pickle
+import logging
 
 # os.environ['TMPDIR'] = os.path.abspath(os.path.dirname(__file__))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'base'))
@@ -1760,6 +1761,12 @@ class MPPDCModel:
         # Strong duality constraint violation penalty
         m.STRONG_DUALITY_VIOLATION_PENALTY = Param(initialize=float(1e6))
 
+        # Lower limit for scheme revenue in a given year
+        m.SCHEME_REVENUE_LB = Param(initialize=float(-10e6))
+
+        # Year at which yearly revenue neutrality constraint will be enforced
+        m.TRANSITION_YEAR = Param(initialize=0, mutable=True)
+
         return m
 
     @staticmethod
@@ -1768,10 +1775,6 @@ class MPPDCModel:
 
         # Dummy objective function variable
         m.dummy = Var(within=NonNegativeReals, initialize=0)
-
-        # Dummy variables used to minimise difference between emissions and target
-        m.z_e1 = Var(m.Y, within=NonNegativeReals, initialize=0)
-        m.z_e2 = Var(m.Y, within=NonNegativeReals, initialize=0)
 
         # Dummy variables used to minimise price differences between successive years
         m.z_p1 = Var(m.Y, within=NonNegativeReals, initialize=0)
@@ -1787,11 +1790,8 @@ class MPPDCModel:
     def define_expressions(m):
         """Define MPPDC expressions"""
 
-        # Emissions target deviation
-        m.EMISSIONS_TARGET_DEVIATION = Expression(expr=sum(m.z_e1[y] + m.z_e2[y] for y in m.Y))
-
         # Change in price between successive intervals
-        m.PRICE_TARGET_DEVIATION = Expression(expr=sum(m.z_p1[y] + m.z_p2[y] for y in m.Y))
+        m.AVERAGE_PRICE_DIFFERENCE = Expression(expr=sum(m.z_p1[y] + m.z_p2[y] for y in m.Y))
 
         # Strong duality constraint violation
         m.STRONG_DUALITY_VIOLATION_COST = Expression(expr=(m.sd_1 + m.sd_2) * m.STRONG_DUALITY_VIOLATION_PENALTY)
@@ -1809,22 +1809,6 @@ class MPPDCModel:
 
         # Strong duality constraint (primal objective = dual objective at optimality)
         m.STRONG_DUALITY = Constraint(rule=strong_duality_rule)
-
-        def emissions_intensity_target_deviation_1_rule(_m, y):
-            """Constraint computing absolute difference between system emissions intensity and target"""
-
-            return m.z_e1[y] >= m.YEAR_EMISSIONS_INTENSITY[y] - m.EMISSIONS_INTENSITY_TARGET[y]
-
-        # Emissions intensity deviation - 1
-        m.EMISSIONS_INTENSITY_TARGET_DEV_1 = Constraint(m.Y, rule=emissions_intensity_target_deviation_1_rule)
-
-        def emissions_intensity_target_deviation_2_rule(_m, y):
-            """Constraint computing absolute difference between system emissions intensity and target"""
-
-            return m.z_e2[y] >= m.EMISSIONS_INTENSITY_TARGET[y] - m.YEAR_EMISSIONS_INTENSITY[y]
-
-        # Emissions intensity deviation
-        m.EMISSIONS_INTENSITY_TARGET_DEV_2 = Constraint(m.Y, rule=emissions_intensity_target_deviation_2_rule)
 
         def price_target_deviation_1_rule(_m, y):
             """Constraint computing absolute difference between prices in successive years"""
@@ -1848,37 +1832,53 @@ class MPPDCModel:
         # Emissions intensity deviation - 2
         m.PRICE_TARGET_DEV_2 = Constraint(m.Y, rule=price_target_deviation_2_rule)
 
-        def total_scheme_revenue_rule(_m):
+        def total_scheme_revenue_non_negative_rule(_m):
             """Ensure that net scheme revenue is greater than 0 over model horizon"""
 
             return m.TOTAL_SCHEME_REVENUE >= 0
 
-        # Total net scheme revenue constraint
-        m.TOTAL_NET_SCHEME_REVENUE_CONS = Constraint(rule=total_scheme_revenue_rule)
+        # Total net scheme revenue non-negativity constraint
+        m.TOTAL_SCHEME_REVENUE_NON_NEGATIVE_CONS = Constraint(rule=total_scheme_revenue_non_negative_rule)
+        m.TOTAL_SCHEME_REVENUE_NON_NEGATIVE_CONS.deactivate()
 
-        def year_scheme_revenue_rule(_m, y):
-            """Ensure that scheme revenue each year is greater than some lower limit"""
+        def total_scheme_revenue_neutral_rule(_m):
+            """Ensure that net scheme revenue is equals 0 over model horizon"""
 
-            return sum(m.YEAR_SCHEME_REVENUE[j] for j in m.Y if j <= y) >= 0
+            return m.TOTAL_SCHEME_REVENUE == 0
 
-        # Year net scheme revenue constraint
-        m.YEAR_NET_SCHEME_REVENUE_CONS = Constraint(m.Y, rule=year_scheme_revenue_rule)
+        # Total net scheme revenue neutrality constraint
+        m.TOTAL_NET_SCHEME_REVENUE_NEUTRAL_CONS = Constraint(rule=total_scheme_revenue_neutral_rule)
+        m.TOTAL_NET_SCHEME_REVENUE_NEUTRAL_CONS.deactivate()
 
-        def fixed_permit_price_rule(_m, y):
-            """Fixing permit price to a given value"""
+        def year_scheme_revenue_neutral_rule(_m, y):
+            """Ensure that net scheme revenue in each year = 0 (equivalent to a REP scheme)"""
 
-            return m.permit_price[y] == m.FIXED_PERMIT_PRICE[y]
+            return m.YEAR_SCHEME_REVENUE[y] == 0
 
-        # Fixed permit price
-        # m.FIXED_PERMIT_PRICE_CONS = Constraint(m.Y, rule=fixed_permit_price_rule)
+        # Ensure scheme is revenue neutral in each year of model horizon (equivalent to a REP scheme)
+        m.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS = Constraint(m.Y, rule=year_scheme_revenue_neutral_rule)
+        m.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS.deactivate()
 
-        def fixed_baseline_rule(_m, y):
-            """Fixing baseline to a given value"""
+        def cumulative_scheme_revenue_lower_bound_rule(_m, y):
+            """Ensure that cumulative scheme revenue each year is greater than some lower limit"""
 
-            return m.baseline[y] == m.FIXED_BASELINE[y]
+            return sum(m.YEAR_SCHEME_REVENUE[j] for j in m.Y if j <= y) >= m.SCHEME_REVENUE_LB
 
-        # Fixed emissions intensity baseline
-        # m.FIXED_BASELINE_CONS = Constraint(m.Y, rule=fixed_baseline_rule)
+        # Ensure cumulative scheme revenue is greater than or equal to some lower limit
+        m.CUMULATIVE_NET_SCHEME_REVENUE_LB_CONS = Constraint(m.Y, rule=cumulative_scheme_revenue_lower_bound_rule)
+        m.CUMULATIVE_NET_SCHEME_REVENUE_LB_CONS.deactivate()
+
+        def transition_net_scheme_revenue_neutral_rule(_m):
+            """Ensure revenue neutrality over transitional period"""
+
+            if m.TRANSITION_YEAR.value >= m.Y.first():
+                return sum(m.YEAR_SCHEME_REVENUE[y] for y in m.Y if y <= m.TRANSITION_YEAR.value) == 0
+
+            else:
+                return Constraint.Skip
+
+        # Enforce net scheme revenue over transitional period = 0
+        m.TRANSITION_NET_SCHEME_REVENUE_NEUTRAL_CONS = Constraint(rule=transition_net_scheme_revenue_neutral_rule)
 
         return m
 
@@ -1886,14 +1886,8 @@ class MPPDCModel:
     def define_objective(m):
         """MPPDC objective function"""
 
-        # Dummy objective function
-        # m.OBJECTIVE = Objective(expr=m.dummy, sense=minimize)
-
-        # Emissions targeting objective
-        # m.OBJECTIVE = Objective(expr=m.EMISSIONS_TARGET_DEVIATION, sense=minimize)
-
         # Price targeting objective
-        m.OBJECTIVE = Objective(expr=m.PRICE_TARGET_DEVIATION + m.STRONG_DUALITY_VIOLATION_COST, sense=minimize)
+        m.OBJECTIVE = Objective(expr=m.AVERAGE_PRICE_DIFFERENCE + m.STRONG_DUALITY_VIOLATION_COST, sense=minimize)
 
         return m
 
@@ -1949,48 +1943,63 @@ class MPPDCModel:
 
         return m, solve_status
 
-    def execute_solution_sequence(self, m, baselines, permit_prices):
-        """
-        Solve MPPDC with policy variables fixed, then free policy variables and fix primal + dual variables
-        to obtain policy variable sensitivities
-        """
 
-        # Fix policy variables and corresponding parameters for each year in model horizon
-        for y in m.Y:
-            # Fix variables
-            m.baseline[y].fix(baselines[y])
-            m.permit_price[y].fix(permit_prices[y])
+def setup_logger():
+    """Setup logger to be used when running algorithm"""
 
-            # Update parameters
-            m.FIXED_PERMIT_PRICE[y] = permit_prices[y]
-            m.FIXED_BASELINE[y] = baselines[y]
+    logging.basicConfig(filename='calibrator-log.log', filemode='w',
+                        format='%(asctime)s %(name)s %(levelname)s %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S',
+                        level=logging.DEBUG)
 
-        # Solve model (with policy variables fixed)
-        m, solve_status = self.solve_model(m)
 
-        # Fix all variables
-        m.fix_all_vars()
+def algorithm_logger(function, message, print_message=False):
+    """Write message to logfile and optionally print output"""
 
-        # Unfix permit price - resolve model
-        m.permit_price.unfix()
-        m, solve_status = self.solve_model(m)
+    # Get logging object
+    logger = logging.getLogger(__name__)
 
-        # Obtain dual for permit price constraint
-        permit_price_duals = {y: m.dual[m.FIXED_PERMIT_PRICE_CONS[y]] for y in m.Y}
+    # Message to write to logfile
+    log_message = f'{function} - {message}'
 
-        # Fix permit price, unfix baseline - resolve model
-        for y in m.Y:
-            m.permit_price.fix(permit_prices[y])
+    if print_message:
+        print(log_message)
+        logger.info(log_message)
+    else:
+        logger.info(log_message)
 
-        m.baseline.unfix()
-        m, solve_status = self.solve_model(m)
 
-        # Obtain dual for baseline constraint
-        baseline_duals = {y: m.dual[m.FIXED_BASELINE_CONS[y]] for y in m.Y}
+def get_max_absolute_difference(d1, d2):
+    """Compute max absolute difference between two dictionaries"""
 
-        sensitivities = {'baseline_duals': baseline_duals, 'permit_price_duals': permit_price_duals}
+    # Check that keys are the same
+    assert set(d1.keys()) == set(d2.keys()), f'Keys are not the same: {d1.keys()}, {d2.keys()}'
 
-        return sensitivities
+    # Absolute difference for each key
+    abs_difference = {k: abs(d1[k] - d2[k]) for k in d1.keys()}
+
+    # Max absolute difference
+    max_abs_difference = max(abs_difference.values())
+
+    return max_abs_difference
+
+
+def extract_result(m, component_name):
+    """Extract values associated with model components"""
+
+    model_component = m.__getattribute__(component_name)
+
+    if type(model_component) == pyomo.core.base.expression.IndexedExpression:
+        return {k: model_component[k].expr() for k in model_component.keys()}
+
+    elif type(model_component) == pyomo.core.base.expression.SimpleExpression:
+        return model_component.expr()
+
+    elif type(model_component) == pyomo.core.base.var.IndexedVar:
+        return model_component.get_values()
+
+    else:
+        raise Exception(f'Unexpected model component: {component_name}')
 
 
 def check_solution(m_p, m_d, elements):
@@ -2036,110 +2045,20 @@ def check_solution(m_p, m_d, elements):
     return difference, max_difference, non_negative_difference
 
 
-def run_checks():
-    """Verify primal and dual models are correctly formulated by comparing results"""
+def transfer_primal_solution_to_mppdc(m_p, m_m, vars_to_fix):
+    """Transfer solution from primal model to MPPDC model"""
 
-    # Object used to construct and run primal model
-    primal = Primal()
-    model_primal = primal.construct_model()
-    model_primal, status_primal = primal.solve_model(model_primal)
+    for v in vars_to_fix:
+        # Get values obtained from primal model
+        primal_values = m_p.__getattribute__(v).get_values()
 
-    # Object used to construct and run dual model
-    dual = Dual()
-    model_dual = dual.construct_model()
-    model_dual, status_dual = dual.solve_model(model_dual)
+        # Fix values in MPPDC model
+        m_m.__getattribute__(v).set_values(primal_values)
 
-    # Model elements to compare
-    elements = [{'primal': 'POWER_BALANCE', 'dual': 'lamb', 'primal_var': False},
-                {'primal': 'p', 'dual': 'POWER_OUTPUT_EXISTING_THERMAL', 'primal_var': True},
-                {'primal': 'p_V', 'dual': 'LOAD_SHEDDING_POWER', 'primal_var': True},
-                {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_THERMAL', 'primal_var': True},
-                {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_WIND', 'primal_var': True},
-                {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_SOLAR', 'primal_var': True},
-                {'primal': 'x_c', 'dual': 'INVESTMENT_DECISION_STORAGE', 'primal_var': True},
-                {'primal': 'NON_NEGATIVE_CAPACITY', 'dual': 'mu_1', 'primal_var': False},
-                # {'primal': 'SOLAR_BUILD_LIMIT_CONS', 'dual': 'mu_2', 'primal_var': False},
-                # {'primal': 'WIND_BUILD_LIMIT_CONS', 'dual': 'mu_3', 'primal_var': False},
-                # {'primal': 'CUMULATIVE_CAPACITY', 'dual': 'nu_1', 'primal_var': False},
-                {'primal': 'MIN_POWER_CONS', 'dual': 'sigma_1', 'primal_var': False},
-                {'primal': 'MAX_POWER_EXISTING_THERMAL', 'dual': 'sigma_2', 'primal_var': False},
-                {'primal': 'MAX_POWER_CANDIDATE_THERMAL', 'dual': 'sigma_3', 'primal_var': False},
-                {'primal': 'MAX_POWER_EXISTING_WIND', 'dual': 'sigma_4', 'primal_var': False},
-                {'primal': 'MAX_POWER_CANDIDATE_WIND', 'dual': 'sigma_5', 'primal_var': False},
-                {'primal': 'MAX_POWER_EXISTING_SOLAR', 'dual': 'sigma_6', 'primal_var': False},
-                {'primal': 'MAX_POWER_CANDIDATE_SOLAR', 'dual': 'sigma_7', 'primal_var': False},
-                {'primal': 'MAX_POWER_EXISTING_HYDRO', 'dual': 'sigma_8', 'primal_var': False},
-                {'primal': 'NON_NEGATIVE_LOST_LOAD', 'dual': 'sigma_26', 'primal_var': False},
-                {'primal': 'MIN_FLOW', 'dual': 'sigma_27', 'primal_var': False},
-                {'primal': 'MAX_FLOW', 'dual': 'sigma_28', 'primal_var': False},
-                ]
+        # Fix MPPDC values
+        m_m.__getattribute__(v).fix()
 
-    for c in elements:
-        try:
-            diff, max_diff, non_negative_diff = check_solution(model_primal, model_dual, c)
-
-        except Exception as e:
-            print(f'Failed: {e}')
-
-
-def run_primal(baselines, permit_prices):
-    """Run business-as-usual scenario"""
-
-    # Instantiate class used to run primal model
-    primal = Primal()
-
-    # Construct model
-    m = primal.construct_model()
-
-    # Fix baseline and permit prices to given values
-    for y in m.Y:
-        m.permit_price[y].fix(permit_prices[y])
-        m.baselines[y].fix(baselines[y])
-
-    # Solve model
-    m, status = primal.solve_model(m)
-
-    # Compile result information
-    result = {'model': m, 'status': status, 'permit_prices': permit_prices, 'baselines': baselines}
-
-    return result
-
-
-def extract_mppdc_results(m):
-    """Extract results from a model run"""
-
-    # Copying results from model object into a dictionary
-    results = {'x_c': copy.deepcopy(m.x_c.get_values()),
-               'p': copy.deepcopy(m.p.get_values()),
-               'baseline': copy.deepcopy(m.baseline.get_values()),
-               'permit_price': copy.deepcopy(m.permit_price.get_values()),
-               'lamb': copy.deepcopy(m.lamb.get_values()),
-               'YEAR_EMISSIONS': copy.deepcopy({k: m.YEAR_EMISSIONS[k].expr() for k in m.YEAR_EMISSIONS.keys()}),
-               'YEAR_EMISSIONS_INTENSITY': copy.deepcopy({k: m.YEAR_EMISSIONS_INTENSITY[k].expr() for k in m.YEAR_EMISSIONS_INTENSITY.keys()}),
-               'YEAR_SCHEME_REVENUE': copy.deepcopy({k: m.YEAR_SCHEME_REVENUE[k].expr() for k in m.YEAR_SCHEME_REVENUE.keys()}),
-               'TOTAL_SCHEME_REVENUE': copy.deepcopy(m.TOTAL_SCHEME_REVENUE.expr()),
-               'YEAR_AVERAGE_PRICE': copy.deepcopy({k: m.YEAR_AVERAGE_PRICE[k].expr() for k in m.YEAR_AVERAGE_PRICE.keys()}),
-               }
-
-    return results
-
-
-def extract_primal_results(m):
-    """Extract results from a model run"""
-
-    # Copying results from model object into a dictionary
-    results = {'x_c': copy.deepcopy(m.x_c.get_values()),
-               'p': copy.deepcopy(m.p.get_values()),
-               'baseline': copy.deepcopy(m.baseline.get_values()),
-               'permit_price': copy.deepcopy(m.permit_price.get_values()),
-               'YEAR_EMISSIONS': copy.deepcopy({k: m.YEAR_EMISSIONS[k].expr() for k in m.YEAR_EMISSIONS.keys()}),
-               'YEAR_EMISSIONS_INTENSITY': copy.deepcopy({k: m.YEAR_EMISSIONS_INTENSITY[k].expr() for k in m.YEAR_EMISSIONS_INTENSITY.keys()}),
-               'YEAR_SCHEME_REVENUE': copy.deepcopy({k: m.YEAR_SCHEME_REVENUE[k].expr() for k in m.YEAR_SCHEME_REVENUE.keys()}),
-               'TOTAL_SCHEME_REVENUE': copy.deepcopy(m.TOTAL_SCHEME_REVENUE.expr()),
-               'PRICES': copy.deepcopy({k: m.dual[m.POWER_BALANCE[k]] for k in m.POWER_BALANCE.keys()})
-               }
-
-    return results
+    return m_m
 
 
 def run_mppdc_fixed_policy(baselines, permit_prices, final_year, scenarios_per_year):
@@ -2156,51 +2075,13 @@ def run_mppdc_fixed_policy(baselines, permit_prices, final_year, scenarios_per_y
 
     # Solve MPPDC model with fixed policy parameters
     m, status = mppdc.solve_model(m)
-    results = extract_mppdc_results(m)
 
-    return results
+    # Results to extract
+    result_keys = ['x_c', 'p', 'baseline', 'permit_price', 'lamb', 'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY',
+                   'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'YEAR_AVERAGE_PRICE']
 
-
-def run_mppdc_price_smoothing(output_dir, baselines, permit_prices, final_year, scenarios_per_year):
-    """Run MPPDC model"""
-
-    # Initialise results dictionary
-    results = {}
-
-    # Initialise object and model used to run MPPDC
-    mppdc = MPPDCModel(final_year, scenarios_per_year)
-    m = mppdc.construct_model()
-
-    # Fix permit prices and baselines
-    for y in m.Y:
-        m.permit_price[y].fix(permit_prices[y])
-        m.baseline[y].fix(baselines[y])
-
-    # Solve MPPDC model with fixed policy parameters
-    m, status = mppdc.solve_model(m)
-    results[0] = extract_mppdc_results(m)
-
-    # Fix power output and capacity decisions, unfix baseline
-    m.p.fix()
-    m.x_c.fix()
-    m.baseline.unfix()
-
-    # Re-solve model
-    m, status = mppdc.solve_model(m)
-    results[1] = extract_mppdc_results(m)
-
-    # Fix baseline, unfix power and capacity decision variables
-    m.baseline.fix()
-    m.p.unfix()
-    m.x_c.unfix()
-
-    # Re-solve model
-    m, status = mppdc.solve_model(m)
-    results[2] = extract_mppdc_results(m)
-
-    # Save model results
-    with open(os.path.join(output_dir, 'mppdc_price_smoothing_results.pickle'), 'wb') as f:
-        pickle.dump(results, f)
+    # Model results
+    results = {k: extract_result(m, k) for k in result_keys}
 
     return results
 
@@ -2219,29 +2100,39 @@ def run_primal_fixed_policy(baselines, permit_prices, final_year, scenarios_per_
 
     # Solve primal model with fixed policy parameters
     m, status = primal.solve_model(m)
-    results = extract_primal_results(m)
+
+    # Results to extract
+    result_keys = ['x_c', 'p', 'baseline', 'permit_price', 'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY',
+                   'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE']
+
+    # Model results
+    results = {k: extract_result(m, k) for k in result_keys}
+
+    # Add dual variable from power balance constraint
+    results['PRICES'] = {k: m.dual[m.POWER_BALANCE[k]] for k in m.POWER_BALANCE.keys()}
 
     return results
 
 
-def run_bau(output_dir, final_year, scenarios_per_year, mode='primal'):
-    """Run business-as-usual model"""
+def run_bau_case(output_dir, final_year, scenarios_per_year, mode='primal'):
+    """Run business-as-usual case"""
 
     # Initialise object and model used to run primal model
     primal = Primal(final_year, scenarios_per_year)
     primal_dummy_model = primal.construct_model()
 
     # Baselines and permit prices = 0 for all years in model horizon
-    parameters = {y: float(0) for y in primal_dummy_model.Y}
+    baselines = {y: float(0) for y in primal_dummy_model.Y}
+    permit_prices = {y: float(0) for y in primal_dummy_model.Y}
 
     if mode == 'primal':
         # Run primal BAU case
-        results = run_primal_fixed_policy(parameters, parameters, final_year, scenarios_per_year)
+        results = run_primal_fixed_policy(baselines, permit_prices, final_year, scenarios_per_year)
         filename = 'primal_bau_results.pickle'
 
     elif mode == 'mppdc':
         # Run MPPDC BAU case
-        results = run_mppdc_fixed_policy(parameters, parameters, final_year, scenarios_per_year)
+        results = run_mppdc_fixed_policy(baselines, permit_prices, final_year, scenarios_per_year)
         filename = 'mppdc_bau_results.pickle'
 
     else:
@@ -2254,39 +2145,49 @@ def run_bau(output_dir, final_year, scenarios_per_year, mode='primal'):
     return results
 
 
-def run_permit_price_algorithm(output_dir, target_trajectory, final_year, scenarios_per_year):
+def get_permit_price_trajectory(primal, model, target_emissions_trajectory, baselines, initial_permit_prices,
+                                permit_price_tol):
     """Run algorithm to identify sequence of permit prices that achieves a given emissions intensity trajectory"""
 
-    # Initialise results container
-    results = {'target_trajectory': target_trajectory, 'iteration_results': {}}
+    # Name of function - used by logger
+    function_name = 'get_permit_price_trajectory'
 
-    # Initialise model object (primal model)
-    primal = Primal(final_year, scenarios_per_year)
-    model = primal.construct_model()
+    # Initialise results container
+    results = {'target_emissions_trajectory': target_emissions_trajectory, 'iteration_results': {}}
 
     # Initialise permit prices for each year in model horizon
-    permit_prices = {y: float(0) for y in model.Y}
+    permit_prices = initial_permit_prices
 
     # Update emissions intensity baseline. Set baseline = target emissions intensity trajectory
     for y in model.Y:
-        model.baseline[y].fix(target_trajectory[y])
+        model.baseline[y].fix(baselines[y])
 
     # Iteration counter
     i = 1
 
     while True:
-        # Update permit prices
-        print(f'Fixing permit prices: {permit_prices}')
+        algorithm_logger(function_name, f'Running iteration {i}', print_message=True)
+
+        # Fix permit prices
         for y in model.Y:
             model.permit_price[y].fix(permit_prices[y])
 
-        print(f'Running iteration {i}')
+        algorithm_logger(function_name, f'Model permit prices: {model.permit_price.get_values()}',
+                         print_message=True)
 
         # Run model
         model, solver_status = primal.solve_model(model)
+        algorithm_logger(function_name, 'Solved model')
+
+        # Latest emissions intensities
+        latest_emissions_intensities = extract_result(model, 'YEAR_EMISSIONS_INTENSITY')
+        algorithm_logger(function_name, f'Emissions intensities: {latest_emissions_intensities}', print_message=True)
 
         # Compute difference between actual emissions intensity and target
-        emissions_intensity_difference = {y: model.YEAR_EMISSIONS_INTENSITY[y].expr() - target_trajectory[y] for y in model.Y}
+        emissions_intensity_difference = {y: latest_emissions_intensities[y] - target_emissions_trajectory[y]
+                                          for y in model.Y}
+        algorithm_logger(function_name, f'Emissions intensity target difference: {emissions_intensity_difference}',
+                         print_message=True)
 
         # Container for new permit prices
         new_permit_prices = {}
@@ -2299,35 +2200,28 @@ def run_permit_price_algorithm(output_dir, target_trajectory, final_year, scenar
             if new_permit_prices[y] < 0:
                 new_permit_prices[y] = 0
 
-        print(f'Permit price trajectory: {new_permit_prices}')
-        current_emissions_intensities = {y: model.YEAR_EMISSIONS_INTENSITY[y].expr() for y in model.Y}
-        print(f'Emissions intensities: {current_emissions_intensities}')
-        print(f'Emissions intensity target difference: {emissions_intensity_difference}')
-        current_permit_prices = {y: model.permit_price[y].value for y in model.Y}
-        print(f'Current permit prices: {current_permit_prices}')
+        algorithm_logger(function_name, f'Updated permit prices: {new_permit_prices}', print_message=True)
 
         # Compute max difference between new and old permit prices
-        max_permit_price_difference = max([abs(new_permit_prices[y] - permit_prices[y]) for y in model.Y])
-
-        # Extract results from primal model for each iteration
-        iteration_results = extract_primal_results(model)
+        max_permit_price_difference = get_max_absolute_difference(new_permit_prices, permit_prices)
 
         # Copying results from model object into a dictionary
         result_keys = ['baseline', 'permit_price', 'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE',
                        'TOTAL_SCHEME_REVENUE']
 
         # Store selected results
-        results['iteration_results'][i] = {k: iteration_results[k] for k in result_keys}
+        results['iteration_results'][i] = {k: extract_result(model, k) for k in result_keys}
 
-        # Check if the max difference is less than the threshold
-        if max_permit_price_difference < 2:
-            print('Permit price trajectory difference less than threshold. Terminating algorithm.')
+        # Check if the max difference is less than the tolerance
+        if max_permit_price_difference < permit_price_tol:
+            message = f"""
+            Max permit price difference: {max_permit_price_difference}
+            Tolerance: {permit_price_tol}
+            Exiting algorithm
+            """
+            algorithm_logger(function_name, message, print_message=True)
 
-            # Save iteration results to file
-            with open(os.path.join(output_dir, 'permit_price_trajectory.pickle'), 'wb') as f:
-                pickle.dump(results, f)
-
-            return results
+            return model, results
 
         else:
             # update permit prices to use in next iteration
@@ -2337,30 +2231,226 @@ def run_permit_price_algorithm(output_dir, target_trajectory, final_year, scenar
             i += 1
 
 
-def get_max_difference(model, results, variable):
-    """Compute max difference between model runs for a given variable"""
+def run_carbon_tax_case(output_dir, final_year, scenarios_per_year, target_emissions_trajectory, permit_price_tol):
+    """Run carbon tax case (no refunding)"""
 
-    # Extract keys for a given variable
-    keys = model.__getattribute__(variable).keys()
+    # Initialise object and model used to run primal model
+    primal = Primal(final_year, scenarios_per_year)
+    primal_model = primal.construct_model()
 
-    return max([abs(results[1][variable][i] - results[2][variable][i]) for i in keys])
+    # Baselines = 0 for all years in model horizon
+    baselines = {y: float(0) for y in primal_model.Y}
+
+    # Initial permit prices (assume = 0 for all years)
+    initial_permit_prices = {y: float(0) for y in primal_model.Y}
+
+    # Run algorithm to identify permit price trajectory that achieve emissions trajectory target
+    primal_model, permit_price_results = get_permit_price_trajectory(primal, primal_model, target_emissions_trajectory,
+                                                                     baselines, initial_permit_prices, permit_price_tol)
+
+    # Combine results into single dictionary
+    results = {'permit_price_trajectory': permit_price_results}
+
+    # Save results
+    filename = 'carbon_tax_results.pickle'
+
+    with open(os.path.join(output_dir, filename), 'wb') as f:
+        pickle.dump(results, f)
+
+    return results
+
+
+def run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_trajectory, baseline_tol,
+                  permit_price_tol, case):
+    """Run price smoothing case where non-negative revenue is enforced"""
+
+    # Name of function
+    function_name = 'run_algorithm'
+
+    # Model parameters
+    parameters = {'final_year': final_year, 'scenarios_per_year': scenarios_per_year,
+                  'target_emissions_trajectory': target_emissions_trajectory, 'baseline_tol': baseline_tol,
+                  'permit_price_tol': permit_price_tol, 'case': case}
+
+    algorithm_logger(function_name, f'Running algorithm with parameters: {parameters}', print_message=True)
+
+    # Container for model results
+    results = {'parameters': parameters, 'baseline_iteration': {}}
+
+    # Construct primal model
+    primal = Primal(final_year, scenarios_per_year)
+    primal_model = primal.construct_model()
+    algorithm_logger(function_name, f'Constructed primal model', print_message=True)
+
+    # Construct MPPDC
+    mppdc = MPPDCModel(final_year, scenarios_per_year)
+    mppdc_model = mppdc.construct_model()
+    algorithm_logger(function_name, f'Constructed MPPDC model', print_message=True)
+
+    # Activate constraints required for case
+    if case == 'price_smoothing_non_negative_revenue':
+        mppdc_model.TOTAL_SCHEME_REVENUE_NON_NEGATIVE_CONS.activate()
+
+    elif case == 'price_smoothing_neutral_revenue':
+        mppdc_model.TOTAL_NET_SCHEME_REVENUE_NEUTRAL_CONS.activate()
+
+    elif case == 'rep':
+        mppdc_model.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS.activate()
+
+    elif case == 'transition':
+        # Set the transition year
+        transition_year = 2017
+        mppdc_model.TRANSITION_YEAR = 2017
+
+        # Record transition year in model parameters dictionary
+        results['parameters']['transition_year'] = transition_year
+
+        # Activate year revenue neutrality requirement for all years
+        mppdc_model.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS.activate()
+
+        # Deactivate year revenue neutrality requirement for years before transition year
+        for y in range(2016, transition_year + 1):
+            mppdc_model.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS[y].deactivate()
+
+        # Reconstruct and enforce revenue neutrality over the transition period
+        mppdc_model.TRANSITION_NET_SCHEME_REVENUE_NEUTRAL_CONS.reconstruct()
+        mppdc_model.TRANSITION_NET_SCHEME_REVENUE_NEUTRAL_CONS.activate()
+
+    else:
+        algorithm_logger(function_name, f'Unexpected case: {case}')
+        raise Exception(f'Unexpected case: {case}')
+
+    # Initialise baselines = target emissions intensity trajectory
+    baselines = target_emissions_trajectory
+
+    # Initialise permit prices = 0 for first iteration
+    initial_permit_prices = {y: float(0) for y in primal_model.Y}
+
+    # Iteration counter
+    i = 1
+
+    while True:
+        algorithm_logger(function_name, f'Performing iteration {i}', print_message=True)
+
+        # Initialise container for iteration results
+        baseline_iteration = {'baselines': baselines}
+
+        algorithm_logger(function_name, f'Fixing baselines {baselines}')
+        for k, v in baselines.items():
+            primal_model.baseline[k].fix(v)
+
+        # Implement permit price trajectory algorithm
+        algorithm_logger(function_name, f'Solving for permit price trajectory')
+        primal_model, permit_price_results = get_permit_price_trajectory(primal, primal_model,
+                                                                         target_emissions_trajectory,
+                                                                         baselines, initial_permit_prices,
+                                                                         permit_price_tol)
+
+        algorithm_logger(function_name, f'Solved permit price trajectory: {permit_price_results}')
+
+        # Save permit price trajectory results to dictionary
+        baseline_iteration['permit_price_results'] = permit_price_results
+
+        # Fix p, x_c, and baseline, and permit_price based on primal model solution
+        mppdc_model = transfer_primal_solution_to_mppdc(primal_model, mppdc_model,
+                                                        vars_to_fix=['p', 'x_c', 'permit_price', 'baseline'])
+        algorithm_logger(function_name, f'Fixed primal variables')
+
+        # Unfixing baseline
+        mppdc_model.baseline.unfix()
+
+        # Solving MPPDC
+        mppdc_model, model_status = mppdc.solve_model(mppdc_model)
+        algorithm_logger(function_name, f'Solved MPPDC model: {model_status}')
+
+        # New baseline trajectory
+        latest_baselines = mppdc_model.baseline.get_values()
+        algorithm_logger(function_name, f'New baseline trajectory: {latest_baselines}')
+
+        # Check max difference between baselines from this iteration and last
+        max_baseline_difference = get_max_absolute_difference(latest_baselines, baselines)
+        algorithm_logger(function_name,
+                         f'Max baseline difference between successive iterations: {max_baseline_difference}')
+
+        # Store baseline iteration results
+        results['baseline_iteration'][i] = baseline_iteration
+
+        # If max difference < tol stop; else update baseline and repeat procedure
+        if max_baseline_difference < baseline_tol:
+
+            message = f"""
+            Max baseline difference between successive iterations: {max_baseline_difference}
+            Difference less than tolerance: {baseline_tol}
+            Terminating algorithm"""
+            algorithm_logger(function_name, message, print_message=True)
+
+            break
+
+        else:
+            # Update baselines
+            baselines = latest_baselines
+
+            # Update initial permit prices to be used in next iteration for permit price trajectory algorithm
+            max_iteration = max(permit_price_results['iteration_results'].keys())
+            initial_permit_prices = permit_price_results['iteration_results'][max_iteration]['permit_price']
+
+            message = f"""
+            Max baseline difference between successive iterations: {max_baseline_difference}
+            Difference greater than tolerance: {baseline_tol}
+            Updated baselines: {baselines}"""
+            algorithm_logger(function_name, message, print_message=True)
+
+            # Update iteration counter
+            i += 1
+
+    # Extract results from final MPPDC model
+    result_keys = ['x_c', 'p', 'baseline', 'permit_price', 'lamb', 'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY',
+                   'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'YEAR_AVERAGE_PRICE']
+
+    # Model results
+    results['final_iteration'] = {k: extract_result(mppdc_model, k) for k in result_keys}
+
+    # Filename
+    filename = f'{case}_results.pickle'
+
+    # Save results
+    with open(os.path.join(output_dir, filename), 'wb') as f:
+        pickle.dump(results, f)
+
+    return results
 
 
 if __name__ == '__main__':
-    # Instantiate model objects
-    # mppdc_dummy = MPPDCModel()
-    # mppdc_dummy_model = mppdc_dummy.construct_model()
+    output_dir = os.path.join(os.path.dirname(__file__))
+    final_year = 2018
+    scenarios_per_year = 2
+    setup_logger()
 
-    # # Candidate baseline solution
-    # candidate_baselines = {y: 0.1 for y in mppdc_dummy_model.Y}
-    # candidate_permit_prices = {y: 20 for y in mppdc_dummy_model.Y}
-    #
-    # # Results from running price targeting MPPDC model
-    # mppdc_price_target_results = run_mppdc_price_targeting(candidate_baselines, candidate_permit_prices)
-    #
-    # # Check results
-    # print(f"Capacity difference (x_c): {get_max_difference(mppdc_dummy_model, mppdc_price_target_results, 'x_c')}")
-    # print(f"Power difference (p): {get_max_difference(mppdc_dummy_model, mppdc_price_target_results, 'p')}")
+    # BAU case
+    # primal_results = run_bau_case(output_dir, final_year, scenarios_per_year, mode='primal')
+    # mppdc_results = run_bau_case(output_dir, final_year, scenarios_per_year, mode='mppdc')
 
-    # r = run_bau('.', 2018, 10)
-    pass
+    # Carbon tax
+    target_emissions_intensities = {y: 0.7 for y in range(2016, final_year + 1)}
+    # carbon_tax_results = run_carbon_tax_case(output_dir, final_year, scenarios_per_year, target_emissions_intensities,
+    #                                          permit_price_tol=2)
+
+    # # Non-negative scheme revenue
+    # non_neg_revenue_results = run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_intensities,
+    #                                         baseline_tol=0.05, permit_price_tol=10,
+    #                                         case='price_smoothing_non_negative_revenue')
+    #
+    # # Revenue neutral scheme
+    # neutral_revenue_results = run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_intensities,
+    #                                         baseline_tol=0.05, permit_price_tol=10,
+    #                                         case='price_smoothing_neutral_revenue')
+
+    # Revenue neutral scheme
+    rep_results = run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_intensities,
+                                baseline_tol=0.05, permit_price_tol=10,
+                                case='rep')
+
+    # Transitional scheme
+    transition_results = run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_intensities,
+                                       baseline_tol=0.05, permit_price_tol=10,
+                                       case='transition')
