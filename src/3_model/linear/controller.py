@@ -9,25 +9,45 @@ from components import gep
 
 
 if __name__ == '__main__':
-    # Output directory
     output_dir = os.path.join(os.path.dirname(__file__), 'output')
-
-    # Final year in model horizon
     final_year = 2018
+    scenarios_per_year = 2
+    gep.setup_logger('controller')
 
-    # # Run business-as-usual scenario
-    # primal_bau_results = gep.run_bau(output_dir, final_year=final_year, scenarios_per_year=10, mode='primal')
-    # mppdc_bau_results = gep.run_bau(output_dir, final_year=final_year, scenarios_per_year=10, mode='mppdc')
-    #
-    # # Parameters for price smoothing model
-    # baselines = {y: 0.8 for y in range(2016, final_year + 1)}
-    # permit_prices = {y: 30 for y in range(2016, final_year + 1)}
-    #
-    # # Run price smoothing model
-    # price_smoothing_results = gep.run_mppdc_price_smoothing(output_dir, baselines, permit_prices,
-    #                                                         final_year=final_year, scenarios_per_year=10)
+    # BAU case
+    primal_results = gep.run_bau_case(output_dir, final_year, scenarios_per_year, mode='primal')
+    mppdc_results = gep.run_bau_case(output_dir, final_year, scenarios_per_year, mode='mppdc')
 
-    # Determine permit price trajectory
-    target_trajectory = {y: 0.7 for y in range(2016, final_year + 1)}
-    permit_price_results = gep.run_permit_price_algorithm(output_dir, target_trajectory, final_year=final_year,
-                                                          scenarios_per_year=10)
+    # Carbon tax
+    target_emissions_intensities = {y: 0.7 for y in range(2016, final_year + 1)}
+    carbon_tax_results = gep.run_carbon_tax_case(output_dir, final_year, scenarios_per_year,
+                                                 target_emissions_intensities,
+                                                 permit_price_tol=2)
+
+    # Non-negative scheme revenue
+    non_neg_revenue_results = gep.run_algorithm(output_dir, final_year, scenarios_per_year,
+                                                target_emissions_intensities,
+                                                baseline_tol=0.05, permit_price_tol=10,
+                                                case='price_smoothing_non_negative_revenue')
+
+    # Revenue neutral scheme
+    neutral_revenue_results = gep.run_algorithm(output_dir, final_year, scenarios_per_year,
+                                                target_emissions_intensities,
+                                                baseline_tol=0.05, permit_price_tol=10,
+                                                case='price_smoothing_neutral_revenue')
+
+    # Revenue neutral scheme with lower bound
+    neutral_revenue_with_lb_results = gep.run_algorithm(output_dir, final_year, scenarios_per_year,
+                                                        target_emissions_intensities, baseline_tol=0.05,
+                                                        permit_price_tol=10,
+                                                        case='price_smoothing_neutral_revenue_lower_bound')
+
+    # Refunded Emissions Payment (REP) scheme
+    rep_results = gep.run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_intensities,
+                                    baseline_tol=0.05, permit_price_tol=10,
+                                    case='rep')
+
+    # Transitional scheme
+    transition_results = gep.run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_intensities,
+                                           baseline_tol=0.05, permit_price_tol=10,
+                                           case='transition')

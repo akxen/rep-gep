@@ -1944,10 +1944,10 @@ class MPPDCModel:
         return m, solve_status
 
 
-def setup_logger():
+def setup_logger(name):
     """Setup logger to be used when running algorithm"""
 
-    logging.basicConfig(filename='calibrator-log.log', filemode='w',
+    logging.basicConfig(filename=f'{name}.log', filemode='w',
                         format='%(asctime)s %(name)s %(levelname)s %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S',
                         level=logging.DEBUG)
@@ -2294,6 +2294,10 @@ def run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_t
     elif case == 'price_smoothing_neutral_revenue':
         mppdc_model.TOTAL_NET_SCHEME_REVENUE_NEUTRAL_CONS.activate()
 
+    elif case == 'price_smoothing_neutral_revenue_lower_bound':
+        mppdc_model.TOTAL_NET_SCHEME_REVENUE_NEUTRAL_CONS.activate()
+        mppdc_model.CUMULATIVE_NET_SCHEME_REVENUE_LB_CONS.activate()
+
     elif case == 'rep':
         mppdc_model.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS.activate()
 
@@ -2424,7 +2428,7 @@ if __name__ == '__main__':
     output_dir = os.path.join(os.path.dirname(__file__))
     final_year = 2018
     scenarios_per_year = 2
-    setup_logger()
+    setup_logger('controller')
 
     # BAU case
     # primal_results = run_bau_case(output_dir, final_year, scenarios_per_year, mode='primal')
@@ -2445,12 +2449,18 @@ if __name__ == '__main__':
     #                                         baseline_tol=0.05, permit_price_tol=10,
     #                                         case='price_smoothing_neutral_revenue')
 
-    # Revenue neutral scheme
-    rep_results = run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_intensities,
-                                baseline_tol=0.05, permit_price_tol=10,
-                                case='rep')
+    # Revenue neutral scheme with lower bound
+    neutral_revenue_with_lb_results = run_algorithm(output_dir, final_year, scenarios_per_year,
+                                                    target_emissions_intensities, baseline_tol=0.05,
+                                                    permit_price_tol=10,
+                                                    case='price_smoothing_neutral_revenue_lower_bound')
 
-    # Transitional scheme
-    transition_results = run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_intensities,
-                                       baseline_tol=0.05, permit_price_tol=10,
-                                       case='transition')
+    # # Refunded emissions payment scheme
+    # rep_results = run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_intensities,
+    #                             baseline_tol=0.05, permit_price_tol=10,
+    #                             case='rep')
+    #
+    # # Transitional scheme
+    # transition_results = run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_intensities,
+    #                                    baseline_tol=0.05, permit_price_tol=10,
+    #                                    case='transition')
