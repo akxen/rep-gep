@@ -10,8 +10,8 @@ from components import gep
 
 if __name__ == '__main__':
     output_dir = os.path.join(os.path.dirname(__file__), 'output', 'remote')
-    final_year = 2018
-    scenarios_per_year = 2
+    final_year = 2050
+    scenarios_per_year = 10
     gep.setup_logger('controller')
 
     # BAU case
