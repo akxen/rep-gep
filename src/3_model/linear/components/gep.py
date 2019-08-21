@@ -2077,7 +2077,7 @@ def run_mppdc_fixed_policy(baselines, permit_prices, final_year, scenarios_per_y
     m, status = mppdc.solve_model(m)
 
     # Results to extract
-    result_keys = ['x_c', 'p', 'baseline', 'permit_price', 'lamb', 'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY',
+    result_keys = ['x_c', 'p', 'p_V', 'baseline', 'permit_price', 'lamb', 'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY',
                    'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'YEAR_AVERAGE_PRICE']
 
     # Model results
@@ -2102,7 +2102,7 @@ def run_primal_fixed_policy(baselines, permit_prices, final_year, scenarios_per_
     m, status = primal.solve_model(m)
 
     # Results to extract
-    result_keys = ['x_c', 'p', 'baseline', 'permit_price', 'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY',
+    result_keys = ['x_c', 'p', 'p_V', 'baseline', 'permit_price', 'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY',
                    'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE']
 
     # Model results
@@ -2408,7 +2408,7 @@ def run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_t
             i += 1
 
     # Extract results from final MPPDC model
-    result_keys = ['x_c', 'p', 'baseline', 'permit_price', 'lamb', 'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY',
+    result_keys = ['x_c', 'p', 'p_V', 'baseline', 'permit_price', 'lamb', 'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY',
                    'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'YEAR_AVERAGE_PRICE']
 
     # Model results

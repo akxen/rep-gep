@@ -20,7 +20,7 @@ class ParseOutput:
         """Load model results"""
 
         # Path to model results
-        path = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', filename)
+        path = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote', filename)
 
         # Load results
         with open(path, 'rb') as f:
@@ -106,4 +106,4 @@ if __name__ == '__main__':
 
     # Average yearly prices obtained from primal and MPPDC models
     primal_prices = res.parse_prices(mode='primal')
-    mppdc_prices = res.parse_prices(mode='mppdc')
+    # mppdc_prices = res.parse_prices(mode='mppdc')
