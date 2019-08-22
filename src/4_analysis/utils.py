@@ -89,15 +89,19 @@ class ParseOutput:
         # Demand scaled by scenario duration
         df_c['demand_scaled'] = df_c['demand'].mul(df_c['duration'])
 
-        # Average price = total revenue collected from wholesale electricity sales / total energy demand
-        df_c['average_price'] = (df_c.groupby(['year'])['revenue_scaled'].sum()
-                                 .div(df_c.groupby(['year'])['demand_scaled'].sum()))
+        # Average price for each scenario
+        df_c['average_price'] = df_c['revenue_scaled'].div(df_c['demand_scaled'])
 
-        # Average price for a given year
-        year_average_price = (df_c.groupby(['year'])['revenue_scaled'].sum()
-                              .div(df_c.groupby(['year'])['demand_scaled'].sum()))
+        # # Average price = total revenue collected from wholesale electricity sales / total energy demand
+        # df_c['average_price'] = (df_c.groupby(['year'])['revenue_scaled'].sum()
+        #                          .div(df_c.groupby(['year'])['demand_scaled'].sum()))
+        #
+        # # Average price for a given year
+        # year_average_price = (df_c.groupby(['year'])['revenue_scaled'].sum()
+        #                       .div(df_c.groupby(['year'])['demand_scaled'].sum()))
 
-        return year_average_price
+        # return year_average_price
+        return df_c
 
 
 if __name__ == '__main__':
