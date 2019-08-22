@@ -12,7 +12,7 @@ if __name__ == '__main__':
     output_dir = os.path.join(os.path.dirname(__file__), 'output', 'remote')
     final_year = 2050
     scenarios_per_year = 10
-    gep.setup_logger('controller')
+    gep.setup_logger(output_dir, 'controller')
 
     # BAU case
     primal_results = gep.run_bau_case(output_dir, final_year, scenarios_per_year, mode='primal')

@@ -1814,9 +1814,9 @@ class MPPDCModel:
             """Constraint computing absolute difference between prices in successive years"""
 
             if y == m.Y.first():
-                return m.z_p1[y] >= m.YEAR_AVERAGE_PRICE[y] - m.YEAR_AVERAGE_PRICE_0
+                return m.z_p1[y] >= (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])) - m.YEAR_AVERAGE_PRICE_0
             else:
-                return m.z_p1[y] >= m.YEAR_AVERAGE_PRICE[y] - m.YEAR_AVERAGE_PRICE[y - 1]
+                return m.z_p1[y] >= (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])) - (m.YEAR_AVERAGE_PRICE[y - 1] * (1 / m.DELTA[y - 1]))
 
         # Emissions intensity deviation - 1
         m.PRICE_TARGET_DEV_1 = Constraint(m.Y, rule=price_target_deviation_1_rule)
@@ -1825,9 +1825,9 @@ class MPPDCModel:
             """Constraint computing absolute difference between prices in successive years"""
 
             if y == m.Y.first():
-                return m.z_p2[y] >= m.YEAR_AVERAGE_PRICE_0 - m.YEAR_AVERAGE_PRICE[y]
+                return m.z_p2[y] >= m.YEAR_AVERAGE_PRICE_0 - (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y]))
             else:
-                return m.z_p2[y] >= m.YEAR_AVERAGE_PRICE[y - 1] - m.YEAR_AVERAGE_PRICE[y]
+                return m.z_p2[y] >= (m.YEAR_AVERAGE_PRICE[y - 1] * (1 / m.DELTA[y - 1])) - (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y]))
 
         # Emissions intensity deviation - 2
         m.PRICE_TARGET_DEV_2 = Constraint(m.Y, rule=price_target_deviation_2_rule)
@@ -1944,10 +1944,10 @@ class MPPDCModel:
         return m, solve_status
 
 
-def setup_logger(name):
+def setup_logger(output_directory, filename):
     """Setup logger to be used when running algorithm"""
 
-    logging.basicConfig(filename=f'{name}.log', filemode='w',
+    logging.basicConfig(filename=os.path.join(output_directory, f'{filename}.log'), filemode='w',
                         format='%(asctime)s %(name)s %(levelname)s %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S',
                         level=logging.DEBUG)
@@ -2428,7 +2428,7 @@ if __name__ == '__main__':
     output_dir = os.path.join(os.path.dirname(__file__))
     final_year = 2018
     scenarios_per_year = 2
-    setup_logger('controller')
+    setup_logger(output_dir, 'controller')
 
     # BAU case
     # primal_results = run_bau_case(output_dir, final_year, scenarios_per_year, mode='primal')
