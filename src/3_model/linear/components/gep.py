@@ -2284,7 +2284,7 @@ def run_mppdc_fixed_policy(baselines, permit_prices, final_year, scenarios_per_y
     m, status = mppdc.solve_model(m)
 
     # Results to extract
-    result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'baseline', 'permit_price', 'lamb', 'YEAR_EMISSIONS',
+    result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'lamb', 'YEAR_EMISSIONS',
                    'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'YEAR_AVERAGE_PRICE']
 
     # Model results
@@ -2309,7 +2309,7 @@ def run_primal_fixed_policy(baselines, permit_prices, final_year, scenarios_per_
     m, status = primal.solve_model(m)
 
     # Results to extract
-    result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
+    result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
                    'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE']
 
     # Model results
@@ -2457,6 +2457,13 @@ def run_carbon_tax_case(output_dir, final_year, scenarios_per_year, target_emiss
 
     # Combine results into single dictionary
     results = {'permit_price_trajectory': permit_price_results}
+
+    # Extract results from final MPPDC model
+    result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
+                   'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE']
+
+    # Model results
+    results['final_iteration'] = {k: extract_result(primal_model, k) for k in result_keys}
 
     # Save results
     filename = 'carbon_tax_results.pickle'
@@ -2615,7 +2622,7 @@ def run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_t
             i += 1
 
     # Extract results from final MPPDC model
-    result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'baseline', 'permit_price', 'lamb', 'YEAR_EMISSIONS',
+    result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'lamb', 'YEAR_EMISSIONS',
                    'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'YEAR_AVERAGE_PRICE']
 
     # Model results
