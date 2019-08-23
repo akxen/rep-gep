@@ -14,12 +14,14 @@ from pyomo.util.infeasible import log_infeasible_constraints
 
 from base.data import ModelData
 from base.components import CommonComponents
+from base.utils import Utilities
 
 
 class Primal:
     def __init__(self, final_year, scenarios_per_year):
         self.data = ModelData()
         self.components = CommonComponents(final_year, scenarios_per_year)
+        self.utilities = Utilities()
 
         # Solver options
         self.keepfiles = False
@@ -607,12 +609,12 @@ class Primal:
             generators = existing_units + candidate_units
 
             # Storage units within a given zone TODO: will need to update if existing storage units are included
-            # storage_units = [gen for gen, zone in self.data.battery_properties_dict['NEM_ZONE'].items() if zone == z]
+            storage_units = [gen for gen, zone in self.data.battery_properties_dict['NEM_ZONE'].items() if zone == z]
 
             return (m.DEMAND[z, y, s, t]
                     - sum(m.p[g, y, s, t] for g in generators)
                     + sum(m.INCIDENCE_MATRIX[l, z] * m.p_L[l, y, s, t] for l in m.L)
-                    # - sum(m.p_out[g, y, s, t] - m.p_in[g, y, s, t] for g in storage_units)
+                    - sum(m.p_out[g, y, s, t] - m.p_in[g, y, s, t] for g in storage_units)
                     - m.p_V[z, y, s, t]
                     == 0)
 
@@ -709,6 +711,7 @@ class Dual:
     def __init__(self, final_year, scenarios_per_year):
         self.data = ModelData()
         self.components = CommonComponents(final_year, scenarios_per_year)
+        self.utilities = Utilities()
 
         # Solver options
         self.keepfiles = False
@@ -1730,6 +1733,7 @@ class MPPDCModel:
         self.components = CommonComponents(final_year, scenarios_per_year)
         self.primal = Primal(final_year, scenarios_per_year)
         self.dual = Dual(final_year, scenarios_per_year)
+        self.utilities = Utilities()
 
         # Solver options
         self.keepfiles = False
@@ -1816,7 +1820,8 @@ class MPPDCModel:
             if y == m.Y.first():
                 return m.z_p1[y] >= (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])) - m.YEAR_AVERAGE_PRICE_0
             else:
-                return m.z_p1[y] >= (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])) - (m.YEAR_AVERAGE_PRICE[y - 1] * (1 / m.DELTA[y - 1]))
+                return m.z_p1[y] >= (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])) - (
+                            m.YEAR_AVERAGE_PRICE[y - 1] * (1 / m.DELTA[y - 1]))
 
         # Emissions intensity deviation - 1
         m.PRICE_TARGET_DEV_1 = Constraint(m.Y, rule=price_target_deviation_1_rule)
@@ -1827,7 +1832,8 @@ class MPPDCModel:
             if y == m.Y.first():
                 return m.z_p2[y] >= m.YEAR_AVERAGE_PRICE_0 - (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y]))
             else:
-                return m.z_p2[y] >= (m.YEAR_AVERAGE_PRICE[y - 1] * (1 / m.DELTA[y - 1])) - (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y]))
+                return m.z_p2[y] >= (m.YEAR_AVERAGE_PRICE[y - 1] * (1 / m.DELTA[y - 1])) - (
+                            m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y]))
 
         # Emissions intensity deviation - 2
         m.PRICE_TARGET_DEV_2 = Constraint(m.Y, rule=price_target_deviation_2_rule)
@@ -1944,10 +1950,269 @@ class MPPDCModel:
         return m, solve_status
 
 
-def setup_logger(output_directory, filename):
+class CheckSolution:
+    def __init__(self):
+        # Objects used to construct primal, dual, and MPPDC models
+        self.primal = Primal(final_year=2018, scenarios_per_year=2)
+        self.dual = Dual(final_year=2018, scenarios_per_year=2)
+        self.mppdc = MPPDCModel(final_year=2018, scenarios_per_year=2)
+        self.utilities = Utilities()
+
+        # Construct models
+        self.m_p = self.primal.construct_model()
+        self.m_d = self.dual.construct_model()
+        self.m_m = self.mppdc.construct_model()
+
+        # Fix policy variables
+        self.m_p.permit_price.fix(20)
+        self.m_d.permit_price.fix(20)
+        self.m_m.permit_price.fix(20)
+
+        self.m_p.baseline.fix(0.5)
+        self.m_d.baseline.fix(0.5)
+        self.m_m.baseline.fix(0.5)
+
+    @staticmethod
+    def get_component_values(element, parent_model, keys, is_dual):
+        """Extract either primal or dual solution values"""
+
+        if is_dual:
+            return {k: parent_model.dual[element[k]] for k in keys}
+        else:
+            return {k: element[k].value for k in keys}
+
+    def compare_primal_and_dual_components(self, e):
+        """Compare primal and dual solution element"""
+
+        # Components
+        p, d = self.m_p.__getattribute__(e['primal']['id']), self.m_d.__getattribute__(e['dual']['id'])
+
+        # Common keys
+        common_keys = set(p.keys()).intersection(set(d.keys()))
+
+        # Values from primal component
+        primal_values = self.get_component_values(p, self.m_p, common_keys, e['primal']['is_dual'])
+
+        # Values from dual component
+        dual_values = self.get_component_values(d, self.m_d, common_keys, e['dual']['is_dual'])
+
+        # Absolute difference between dictionaries
+        absolute_diff = self.utilities.get_absolute_difference(primal_values, dual_values)
+
+        # Get non-zero absolute difference between dictionaries
+        non_zero_diff = self.utilities.get_non_zero_absolute_difference(primal_values, dual_values)
+
+        # Get max absolute difference
+        max_abs_diff = self.utilities.get_max_absolute_difference(primal_values, dual_values)
+
+        return absolute_diff, non_zero_diff, max_abs_diff
+
+    def compare_primal_and_mppdc_components(self, e):
+        """Compare primal and MPPDC solution element"""
+
+        # Components
+        p, m = self.m_p.__getattribute__(e['primal']['id']), self.m_m.__getattribute__(e['mppdc']['id'])
+
+        # Common keys
+        common_keys = set(p.keys()).intersection(set(m.keys()))
+
+        # Values from primal component
+        primal_values = self.get_component_values(p, self.m_p, common_keys, e['primal']['is_dual'])
+
+        # Values from MPPDC component
+        mppdc_values = self.get_component_values(m, self.m_m, common_keys, e['mppdc']['is_dual'])
+
+        # Absolute difference between dictionaries
+        absolute_diff = self.utilities.get_absolute_difference(primal_values, mppdc_values)
+
+        # Get non-zero absolute difference between dictionaries
+        non_zero_diff = self.utilities.get_non_zero_absolute_difference(primal_values, mppdc_values)
+
+        # Get max absolute difference
+        max_abs_diff = self.utilities.get_max_absolute_difference(primal_values, mppdc_values)
+
+        return absolute_diff, non_zero_diff, max_abs_diff
+
+    def compare_dual_and_mppdc_components(self, e):
+        """Compare dual and MPPDC solution element"""
+
+        # Components
+        d, m = self.m_d.__getattribute__(e['dual']['id']), self.m_m.__getattribute__(e['mppdc']['id'])
+
+        # Common keys
+        common_keys = set(d.keys()).intersection(set(m.keys()))
+
+        # Values from dual component
+        dual_values = self.get_component_values(d, self.m_p, common_keys, e['dual']['is_dual'])
+
+        # Values from MPPDC component
+        mppdc_values = self.get_component_values(m, self.m_m, common_keys, e['mppdc']['is_dual'])
+
+        # Absolute difference between dictionaries
+        absolute_diff = self.utilities.get_absolute_difference(dual_values, mppdc_values)
+
+        # Get non-zero absolute difference between dictionaries
+        non_zero_diff = self.utilities.get_non_zero_absolute_difference(dual_values, mppdc_values)
+
+        # Get max absolute difference
+        max_abs_diff = self.utilities.get_max_absolute_difference(dual_values, mppdc_values)
+
+        return absolute_diff, non_zero_diff, max_abs_diff
+
+    def check_primal_and_dual_solutions(self):
+        """Compare primal and dual solution elements"""
+
+        # Solve primal and dual models
+        self.primal.solve_model(self.m_p)
+        self.dual.solve_model(self.m_d)
+
+        # Elements to check
+        elements = {
+            'power - existing thermal':
+                {
+                    'primal': {'id': 'p', 'is_dual': False},
+                    'dual': {'id': 'POWER_OUTPUT_EXISTING_THERMAL', 'is_dual': True}
+                },
+            'power - existing wind':
+                {
+                    'primal': {'id': 'p', 'is_dual': False},
+                    'dual': {'id': 'POWER_OUTPUT_EXISTING_WIND', 'is_dual': True}
+                },
+            'power - existing solar':
+                {
+                    'primal': {'id': 'p', 'is_dual': False},
+                    'dual': {'id': 'POWER_OUTPUT_EXISTING_SOLAR', 'is_dual': True}
+                },
+            'power - existing hydro':
+                {
+                    'primal': {'id': 'p', 'is_dual': False},
+                    'dual': {'id': 'POWER_OUTPUT_HYDRO', 'is_dual': True}
+                },
+            # 'charging power - existing storage':
+            #     {
+            #         'primal': {'id': 'p_in', 'is_dual': False},
+            #         'dual': {'id': 'CHARGING_POWER_EXISTING_STORAGE', 'is_dual': True}
+            #     },
+            # 'discharging power - existing storage':
+            #     {
+            #         'primal': {'id': 'p_out', 'is_dual': False},
+            #         'dual': {'id': 'DISCHARGING_POWER_EXISTING_STORAGE', 'is_dual': True}
+            #     },
+            'power - candidate thermal':
+                {
+                    'primal': {'id': 'p', 'is_dual': False},
+                    'dual': {'id': 'POWER_OUTPUT_CANDIDATE_THERMAL', 'is_dual': True}
+                },
+            'power - candidate wind':
+                {
+                    'primal': {'id': 'p', 'is_dual': False},
+                    'dual': {'id': 'POWER_OUTPUT_CANDIDATE_WIND', 'is_dual': True}
+                },
+            'power - candidate solar':
+                {
+                    'primal': {'id': 'p', 'is_dual': False},
+                    'dual': {'id': 'POWER_OUTPUT_CANDIDATE_SOLAR', 'is_dual': True}
+                },
+            'charging power - candidate storage':
+                {
+                    'primal': {'id': 'p_in', 'is_dual': False},
+                    'dual': {'id': 'CHARGING_POWER_CANDIDATE_STORAGE', 'is_dual': True}
+                },
+            'discharging power - candidate storage':
+                {
+                    'primal': {'id': 'p_out', 'is_dual': False},
+                    'dual': {'id': 'DISCHARGING_POWER_CANDIDATE_STORAGE', 'is_dual': True}
+                },
+            'locational marginal prices':
+                {
+                    'primal': {'id': 'POWER_BALANCE', 'is_dual': True},
+                    'dual': {'id': 'lamb', 'is_dual': False}
+                },
+            'load shedding':
+                {
+                    'primal': {'id': 'p_V', 'is_dual': False},
+                    'dual': {'id': 'LOAD_SHEDDING_POWER', 'is_dual': True}
+                },
+        }
+
+        print(f"Checking primal and dual solutions")
+        for el_id, e in elements.items():
+            # Absolute, non-zero and max absolute difference
+            absolute_diff, non_zero_diff, max_abs_diff = self.compare_primal_and_dual_components(e)
+
+            print('---------------------------------------------------------------------------')
+            print(f"Primal component: {e['primal']['id']}, Dual component: {e['dual']['id']}')")
+            print(f'Total keys: {len(absolute_diff)}')
+            print(f"Max absolute difference: {max_abs_diff}")
+            print(f"Non-zero diff: {non_zero_diff}")
+
+    def check_primal_and_mppdc_solutions(self):
+        """Compare primal and MPPDC solution elements"""
+
+        # Solve primal and MPPDC models
+        self.primal.solve_model(self.m_p)
+        self.mppdc.solve_model(self.m_m)
+
+        elements = {
+            'power output':
+                {
+                    'primal': {'id': 'p', 'is_dual': False},
+                    'mppdc': {'id': 'p', 'is_dual': False}
+                },
+            'load shedding':
+                {
+                    'primal': {'id': 'p_V', 'is_dual': False},
+                    'mppdc': {'id': 'p_V', 'is_dual': False}
+                },
+            'locational marginal prices':
+                {
+                    'primal': {'id': 'POWER_BALANCE', 'is_dual': True},
+                    'mppdc': {'id': 'lamb', 'is_dual': False}
+                },
+        }
+
+        print(f"Checking primal and MPPDC solutions")
+        for el_id, e in elements.items():
+            # Absolute, non-zero and max absolute difference
+            absolute_diff, non_zero_diff, max_abs_diff = self.compare_primal_and_mppdc_components(e)
+
+            print('---------------------------------------------------------------------------')
+            print(f"Primal component: {e['primal']['id']}, MPPDC component: {e['mppdc']['id']}')")
+            print(f'Total keys: {len(absolute_diff)}')
+            print(f"Max absolute difference: {max_abs_diff}")
+            print(f"Non-zero diff: {non_zero_diff}")
+
+    def check_dual_and_mppdc_solutions(self):
+        """Compare dual and MPPDC solution elements"""
+
+        # Solve dual and MPPDC models
+        self.dual.solve_model(self.m_d)
+        self.mppdc.solve_model(self.m_m)
+
+        elements = {
+            'locational marginal prices':
+                {
+                    'dual': {'id': 'lamb', 'is_dual': False},
+                    'mppdc': {'id': 'lamb', 'is_dual': False}
+                },
+        }
+
+        print(f"Checking dual and MPPDC solutions")
+        for el_id, e in elements.items():
+            # Absolute, non-zero and max absolute difference
+            absolute_diff, non_zero_diff, max_abs_diff = self.compare_dual_and_mppdc_components(e)
+
+            print('---------------------------------------------------------------------------')
+            print(f"Dual component: {e['dual']['id']}, MPPDC component: {e['mppdc']['id']}')")
+            print(f'Total keys: {len(absolute_diff)}')
+            print(f"Max absolute difference: {max_abs_diff}")
+            print(f"Non-zero diff: {non_zero_diff}")
+
+
+def setup_logger(output_dir, filename):
     """Setup logger to be used when running algorithm"""
 
-    logging.basicConfig(filename=os.path.join(output_directory, f'{filename}.log'), filemode='w',
+    logging.basicConfig(filename=os.path.join(output_dir, f'{filename}.log'), filemode='w',
                         format='%(asctime)s %(name)s %(levelname)s %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S',
                         level=logging.DEBUG)
@@ -1969,21 +2234,6 @@ def algorithm_logger(function, message, print_message=False):
         logger.info(log_message)
 
 
-def get_max_absolute_difference(d1, d2):
-    """Compute max absolute difference between two dictionaries"""
-
-    # Check that keys are the same
-    assert set(d1.keys()) == set(d2.keys()), f'Keys are not the same: {d1.keys()}, {d2.keys()}'
-
-    # Absolute difference for each key
-    abs_difference = {k: abs(d1[k] - d2[k]) for k in d1.keys()}
-
-    # Max absolute difference
-    max_abs_difference = max(abs_difference.values())
-
-    return max_abs_difference
-
-
 def extract_result(m, component_name):
     """Extract values associated with model components"""
 
@@ -2000,49 +2250,6 @@ def extract_result(m, component_name):
 
     else:
         raise Exception(f'Unexpected model component: {component_name}')
-
-
-def check_solution(m_p, m_d, elements):
-    """Check solution
-
-    Parameters
-    ----------
-    m_p : pyomo model
-        Primal model
-
-    m_d : pyomo model
-        Dual model
-
-    elements : dict
-        primal and dual components to check
-    """
-
-    # Components
-    p, d = m_p.__getattribute__(elements['primal']), m_d.__getattribute__(elements['dual'])
-
-    # Common keys
-    common_keys = set(p.keys()).intersection(set(d.keys()))
-
-    # Absolute difference
-    if elements['primal_var']:
-        difference = {
-            i: {'primal': p[i].value, 'dual': m_d.dual[d[i]], 'abs_diff': abs(abs(p[i].value) - abs(m_d.dual[d[i]]))}
-            for i in common_keys}
-    else:
-        difference = {
-            i: {'primal': m_p.dual[p[i]], 'dual': d[i].value, 'abs_diff': abs(abs(m_p.dual[p[i]]) - abs(d[i].value))}
-            for i in common_keys}
-
-    # Max difference over all keys
-    max_difference = max([v['abs_diff'] for _, v in difference.items()])
-
-    print(f"""Primal element: {elements['primal']}, Dual element: {elements[
-        'dual']}, Max difference: {max_difference}, keys: {len(common_keys)}""")
-
-    # Only retain elements where difference is non-negative
-    non_negative_difference = {k: v for k, v in difference.items() if v['abs_diff'] > 0.1}
-
-    return difference, max_difference, non_negative_difference
 
 
 def transfer_primal_solution_to_mppdc(m_p, m_m, vars_to_fix):
@@ -2077,8 +2284,8 @@ def run_mppdc_fixed_policy(baselines, permit_prices, final_year, scenarios_per_y
     m, status = mppdc.solve_model(m)
 
     # Results to extract
-    result_keys = ['x_c', 'p', 'p_V', 'baseline', 'permit_price', 'lamb', 'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY',
-                   'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'YEAR_AVERAGE_PRICE']
+    result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'baseline', 'permit_price', 'lamb', 'YEAR_EMISSIONS',
+                   'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'YEAR_AVERAGE_PRICE']
 
     # Model results
     results = {k: extract_result(m, k) for k in result_keys}
@@ -2102,8 +2309,8 @@ def run_primal_fixed_policy(baselines, permit_prices, final_year, scenarios_per_
     m, status = primal.solve_model(m)
 
     # Results to extract
-    result_keys = ['x_c', 'p', 'p_V', 'baseline', 'permit_price', 'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY',
-                   'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE']
+    result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
+                   'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE']
 
     # Model results
     results = {k: extract_result(m, k) for k in result_keys}
@@ -2203,7 +2410,7 @@ def get_permit_price_trajectory(primal, model, target_emissions_trajectory, base
         algorithm_logger(function_name, f'Updated permit prices: {new_permit_prices}', print_message=True)
 
         # Compute max difference between new and old permit prices
-        max_permit_price_difference = get_max_absolute_difference(new_permit_prices, permit_prices)
+        max_permit_price_difference = primal.utilities.get_max_absolute_difference(new_permit_prices, permit_prices)
 
         # Copying results from model object into a dictionary
         result_keys = ['baseline', 'permit_price', 'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE',
@@ -2372,7 +2579,7 @@ def run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_t
         algorithm_logger(function_name, f'New baseline trajectory: {latest_baselines}')
 
         # Check max difference between baselines from this iteration and last
-        max_baseline_difference = get_max_absolute_difference(latest_baselines, baselines)
+        max_baseline_difference = primal.utilities.get_max_absolute_difference(latest_baselines, baselines)
         algorithm_logger(function_name,
                          f'Max baseline difference between successive iterations: {max_baseline_difference}')
 
@@ -2408,8 +2615,8 @@ def run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_t
             i += 1
 
     # Extract results from final MPPDC model
-    result_keys = ['x_c', 'p', 'p_V', 'baseline', 'permit_price', 'lamb', 'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY',
-                   'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'YEAR_AVERAGE_PRICE']
+    result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'baseline', 'permit_price', 'lamb', 'YEAR_EMISSIONS',
+                   'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'YEAR_AVERAGE_PRICE']
 
     # Model results
     results['final_iteration'] = {k: extract_result(mppdc_model, k) for k in result_keys}
@@ -2425,42 +2632,16 @@ def run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_t
 
 
 if __name__ == '__main__':
-    output_dir = os.path.join(os.path.dirname(__file__))
-    final_year = 2018
-    scenarios_per_year = 2
-    setup_logger(output_dir, 'controller')
+    # Setup model parameters
+    output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'local')
+    final_model_year = 2018
+    scenarios_per_model_year = 2
+    setup_logger(output_directory, 'controller-test')
 
-    # BAU case
-    # primal_results = run_bau_case(output_dir, final_year, scenarios_per_year, mode='primal')
-    # mppdc_results = run_bau_case(output_dir, final_year, scenarios_per_year, mode='mppdc')
+    # Check model solution
+    check = CheckSolution()
 
-    # Carbon tax
-    target_emissions_intensities = {y: 0.7 for y in range(2016, final_year + 1)}
-    # carbon_tax_results = run_carbon_tax_case(output_dir, final_year, scenarios_per_year, target_emissions_intensities,
-    #                                          permit_price_tol=2)
-
-    # # Non-negative scheme revenue
-    # non_neg_revenue_results = run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_intensities,
-    #                                         baseline_tol=0.05, permit_price_tol=10,
-    #                                         case='price_smoothing_non_negative_revenue')
-    #
-    # # Revenue neutral scheme
-    # neutral_revenue_results = run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_intensities,
-    #                                         baseline_tol=0.05, permit_price_tol=10,
-    #                                         case='price_smoothing_neutral_revenue')
-
-    # Revenue neutral scheme with lower bound
-    neutral_revenue_with_lb_results = run_algorithm(output_dir, final_year, scenarios_per_year,
-                                                    target_emissions_intensities, baseline_tol=0.05,
-                                                    permit_price_tol=10,
-                                                    case='price_smoothing_neutral_revenue_lower_bound')
-
-    # # Refunded emissions payment scheme
-    # rep_results = run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_intensities,
-    #                             baseline_tol=0.05, permit_price_tol=10,
-    #                             case='rep')
-    #
-    # # Transitional scheme
-    # transition_results = run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_intensities,
-    #                                    baseline_tol=0.05, permit_price_tol=10,
-    #                                    case='transition')
+    # Check primal and dual solution - primal and dual elements should be the same for prices and power output
+    check.check_primal_and_dual_solutions()
+    check.check_primal_and_mppdc_solutions()
+    check.check_dual_and_mppdc_solutions()
