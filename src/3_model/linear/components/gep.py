@@ -2353,7 +2353,7 @@ def run_bau_case(output_dir, final_year, scenarios_per_year, mode='primal'):
 
 
 def get_permit_price_trajectory(primal, model, target_emissions_trajectory, baselines, initial_permit_prices,
-                                permit_price_tol):
+                                permit_price_tol, permit_price_cap):
     """Run algorithm to identify sequence of permit prices that achieves a given emissions intensity trajectory"""
 
     # Name of function - used by logger
@@ -2401,11 +2401,15 @@ def get_permit_price_trajectory(primal, model, target_emissions_trajectory, base
 
         # Update permit prices
         for y in model.Y:
-            new_permit_prices[y] = permit_prices[y] + (emissions_intensity_difference[y] * 100)
+            new_permit_prices[y] = permit_prices[y] + (emissions_intensity_difference[y] * 200)
 
             # Set equal to zero if permit price is less than 0
             if new_permit_prices[y] < 0:
                 new_permit_prices[y] = 0
+
+            # Set equal to price cap is permit price exceeds cap
+            elif new_permit_prices[y] > permit_price_cap:
+                new_permit_prices[y] = permit_price_cap
 
         algorithm_logger(function_name, f'Updated permit prices: {new_permit_prices}', print_message=True)
 
@@ -2438,7 +2442,8 @@ def get_permit_price_trajectory(primal, model, target_emissions_trajectory, base
             i += 1
 
 
-def run_carbon_tax_case(output_dir, final_year, scenarios_per_year, target_emissions_trajectory, permit_price_tol):
+def run_carbon_tax_case(output_dir, final_year, scenarios_per_year, target_emissions_trajectory, permit_price_tol,
+                        permit_price_cap):
     """Run carbon tax case (no refunding)"""
 
     # Initialise object and model used to run primal model
@@ -2453,7 +2458,8 @@ def run_carbon_tax_case(output_dir, final_year, scenarios_per_year, target_emiss
 
     # Run algorithm to identify permit price trajectory that achieve emissions trajectory target
     primal_model, permit_price_results = get_permit_price_trajectory(primal, primal_model, target_emissions_trajectory,
-                                                                     baselines, initial_permit_prices, permit_price_tol)
+                                                                     baselines, initial_permit_prices, permit_price_tol,
+                                                                     permit_price_cap)
 
     # Combine results into single dictionary
     results = {'permit_price_trajectory': permit_price_results}
@@ -2475,7 +2481,7 @@ def run_carbon_tax_case(output_dir, final_year, scenarios_per_year, target_emiss
 
 
 def run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_trajectory, baseline_tol,
-                  permit_price_tol, case):
+                  permit_price_tol, permit_price_cap, case):
     """Run price smoothing case where non-negative revenue is enforced"""
 
     # Name of function
@@ -2484,7 +2490,7 @@ def run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_t
     # Model parameters
     parameters = {'final_year': final_year, 'scenarios_per_year': scenarios_per_year,
                   'target_emissions_trajectory': target_emissions_trajectory, 'baseline_tol': baseline_tol,
-                  'permit_price_tol': permit_price_tol, 'case': case}
+                  'permit_price_tol': permit_price_tol, 'permit_price_cap': permit_price_cap, 'case': case}
 
     algorithm_logger(function_name, f'Running algorithm with parameters: {parameters}', print_message=True)
 
@@ -2562,7 +2568,7 @@ def run_algorithm(output_dir, final_year, scenarios_per_year, target_emissions_t
         primal_model, permit_price_results = get_permit_price_trajectory(primal, primal_model,
                                                                          target_emissions_trajectory,
                                                                          baselines, initial_permit_prices,
-                                                                         permit_price_tol)
+                                                                         permit_price_tol, permit_price_cap)
 
         algorithm_logger(function_name, f'Solved permit price trajectory: {permit_price_results}')
 
