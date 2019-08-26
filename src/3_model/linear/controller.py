@@ -4,8 +4,10 @@ import os
 import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'components'))
+sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, '4_analysis'))
 
 from components import gep
+from targets import load_emissions_intensity_target
 
 
 if __name__ == '__main__':
@@ -18,8 +20,11 @@ if __name__ == '__main__':
     # primal_results = gep.run_bau_case(output_dir, final_year, scenarios_per_year, mode='primal')
     # mppdc_results = gep.run_bau_case(output_dir, final_year, scenarios_per_year, mode='mppdc')
 
+    # Load target emissions intensities
+    # target_emissions_intensities = {y: 0.7 for y in range(2016, final_year + 1)}
+    target_emissions_intensities = load_emissions_intensity_target('emissions_target.json')
+
     # Carbon tax
-    target_emissions_intensities = {y: 0.7 for y in range(2016, final_year + 1)}
     carbon_tax_results = gep.run_carbon_tax_case(output_dir, final_year, scenarios_per_year,
                                                  target_emissions_intensities,
                                                  permit_price_tol=2, permit_price_cap=500)

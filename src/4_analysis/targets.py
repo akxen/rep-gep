@@ -1,5 +1,8 @@
 """Generate emissions intensity target based on on BAU results"""
 
+import os
+import json
+
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -58,9 +61,46 @@ def get_first_year_average_real_bau_price():
     return prices.iloc[0]['average_price_real']
 
 
+def load_emissions_intensity_target(filename):
+    """Load emissions intensity target"""
+
+    # Check that emissions target loads correctly
+    with open(os.path.join(os.path.dirname(__file__), 'output', filename), 'r') as f:
+        target = json.load(f)
+
+    # Convert keys from strings to integers
+    target = {int(k): v for k, v in target.items()}
+
+    return target
+
+
+def load_first_year_average_bau_price(filename):
+    """Load average price in first year - BAU scenario"""
+
+    # Check that price loads correctly
+    with open(os.path.join(os.path.dirname(__file__), 'output', filename), 'r') as f:
+        price = json.load(f)
+
+    return price['first_year_average_price']
+
+
 if __name__ == '__main__':
     # Emissions intensity target - assumes system emissions intensity will halve every 25 years
     df_emissions_target = get_emissions_intensity_target(half_life=25)
 
+    # Save the emissions target as a json file
+    emissions_target_path = os.path.join(os.path.dirname(__file__), 'output', 'emissions_target.json')
+    df_emissions_target['emissions_intensity_target'].to_json(emissions_target_path)
+
     # Average real BAU price in first year of model horizon
-    first_year_average_real_bau_price = get_first_year_average_real_bau_price()
+    first_year_average_real_bau_price = {'first_year_average_price': get_first_year_average_real_bau_price()}
+
+    # Save first year average price information
+    with open(os.path.join(os.path.dirname(__file__), 'output', 'first_year_average_price.json'), 'w') as f:
+        json.dump(first_year_average_real_bau_price, f)
+
+    # Check that emissions target loads correctly
+    emissions_target = load_emissions_intensity_target('emissions_target.json')
+
+    # Check that average price in first year of BAU scenario loads correctly
+    first_year_average_bau_price = load_first_year_average_bau_price('first_year_average_price.json')
