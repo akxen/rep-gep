@@ -670,6 +670,12 @@ class CommonComponents:
         # Scenario duration
         m.RHO = Param(m.Y, m.S, rule=scenario_duration_rule)
 
+        # Cumulative emissions cap - default value is 0 - should be updated when running specific case
+        m.CUMULATIVE_EMISSIONS_CAP = Param(initialize=0, mutable=True)
+
+        # Interim emissions cap - default value is 0 - should be updated when running specific case
+        m.INTERIM_EMISSIONS_CAP = Param(m.Y, initialize=0, mutable=True)
+
         return m
 
     @staticmethod

@@ -14,19 +14,15 @@ from data import ModelData
 
 
 class AnalyseResults:
-    def __init__(self):
+    def __init__(self, results_dir):
         self.data = ModelData()
+        self.results_dir = results_dir
 
-        self.results_dir = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output',
-                                        'remote')
-
-    @staticmethod
-    def load_results(filename):
+    def load_results(self, filename):
         """Load model results"""
 
         # Path to model results
-        path = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote',
-                            filename)
+        path = os.path.join(self.results_dir, filename)
 
         # Load results
         with open(path, 'rb') as f:
@@ -264,15 +260,29 @@ class AnalyseResults:
         fuel_map_standardised = (fuel_map.apply(lambda x: fuel_categories[x['fuel'].upper()], axis=1)
                                  .to_frame(name='fuel').rename_axis('generator'))
 
-        # Capacity map for 2044
-        capacity_map = (pd.concat([self.data.existing_units.loc[:, ('PARAMETERS', 'REG_CAP')],
-                                   pd.Series(results['x_c']).rename_axis(['generator', 'year']).groupby('generator')
-                                  .apply(lambda x: x.cumsum()).loc[slice(None), 2044]]).to_frame(name='capacity')
-                        .rename_axis('generator'))
+        # Existing capacity (doesn't take into account unit retirement)
+        existing_capacity_map = self.data.existing_units.loc[:, ('PARAMETERS', 'REG_CAP')].to_frame(
+            'capacity').rename_axis('generator')
+
+        # Candidate capacity available in each year
+        candidate_capacity_map = (pd.Series(results['x_c']).rename_axis(['generator', 'year']).unstack().T.cumsum()
+                                  .stack().to_frame(name='capacity'))
+
+        # Merge existing capacity information
+        df_merged_1 = df.join(existing_capacity_map, how='left')
+
+        # Merge candidate capacity information
+        df_merged_2 = pd.merge(df.reset_index(), candidate_capacity_map.reset_index(), how='left',
+                               left_on=['year', 'generator'], right_on=['year', 'generator']).set_index(
+            ['generator', 'year', 'scenario', 'interval'])
+
+        # Update values
+        df_merged_1.update(df_merged_2, overwrite=False)
+        df_merged = df_merged_1.copy()
 
         # Merge zone and capacity information with generator output
-        df_merged = (df.join(zone_map, how='left').join(capacity_map, how='left')
-                     .join(fuel_map_standardised, how='left').join(duration_map, how='left'))
+        df_merged = df_merged.join(zone_map, how='left').join(fuel_map_standardised, how='left').join(duration_map,
+                                                                                                      how='left')
 
         # Map between NEM zones and regions
         region_map = (self.data.existing_units.drop_duplicates(subset=[('PARAMETERS', 'NEM_ZONE'),
@@ -285,10 +295,29 @@ class AnalyseResults:
 
         return df_merged
 
+    def get_total_emissions(self, filename):
+        """Compute total emissions over model horizon"""
+
+        # Results from model
+        results = self.load_results(filename)
+
+        return sum(results['YEAR_EMISSIONS'].values())
+
+    def get_year_emissions(self, filename):
+        """Get total emissions in each year of model horizon"""
+
+        # Results from model
+        results = self.load_results(filename)
+
+        return results['YEAR_EMISSIONS']
+
 
 if __name__ == '__main__':
+    # Path where results can be found
+    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'local')
+
     # Object used to analyse results
-    analysis = AnalyseResults()
+    analysis = AnalyseResults(results_directory)
 
     # Average price
     # average_price = analysis.get_year_average_price(mode='primal')
@@ -301,7 +330,10 @@ if __name__ == '__main__':
     # Results from primal model
     # generator_output = analysis.get_generator_interval_output()
 
-    f = 'primal_bau_results.pickle'
+    # f = 'primal_bau_results.pickle'
+    # f = 'cumulative_emissions_cap_results.pickle'
+    f = 'interim_emissions_cap_results.pickle'
+
     # r = analysis.get_year_system_emissions_intensities(f)
     # analysis.plot_year_system_emissions_intensities(f)
 
@@ -312,4 +344,8 @@ if __name__ == '__main__':
     # r = analysis.get_year_input_traces(2016, 'WIND')
     # r = analysis.get_year_average_price(f)
     # analysis.plot_demand_duration_curve(2016)
-    r = analysis.get_interval_generator_output(f)
+    # r = analysis.get_interval_generator_output(f)
+    # r = analysis.get_total_emissions(f)
+    # r = analysis.get_year_emissions(f)
+    r = analysis.load_results(f)
+

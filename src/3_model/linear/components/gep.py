@@ -656,6 +656,34 @@ class Primal:
         # # Lost load energy
         # m.LOST_LOAD_ENERGY = Constraint(m.Z, m.Y, m.S, m.T, rule=lost_load_energy_rule)
 
+        def cumulative_emissions_cap_rule(_m):
+            """
+            Constraint on cumulative emissions over model horizon
+
+            Note: Minus signs used so sign of dual has correct interpretation. E.g. tightening the cap by 1 unit will
+            lead to x $ increase in operating cost - gives marginal CO2 price
+            """
+
+            return - sum(m.YEAR_EMISSIONS[y] for y in m.Y) >= - m.CUMULATIVE_EMISSIONS_CAP
+
+        # Cumulative emissions cap constraint - deactivated by default
+        m.CUMULATIVE_EMISSIONS_CAP_CONS = Constraint(rule=cumulative_emissions_cap_rule)
+        m.CUMULATIVE_EMISSIONS_CAP_CONS.deactivate()
+
+        def interim_emissions_cap_rule(_m, y):
+            """
+            Constraint on interim emissions over model horizon
+
+            Note: Minus signs used so sign of dual has correct interpretation. E.g. tightening the cap by 1 unit will
+            lead to x $ increase in operating cost - gives marginal CO2 price
+            """
+
+            return - m.YEAR_EMISSIONS[y] >= - m.INTERIM_EMISSIONS_CAP[y]
+
+        # Interim emissions cap constraint - deactivated by default
+        m.INTERIM_EMISSIONS_CAP_CONS = Constraint(m.Y, rule=interim_emissions_cap_rule)
+        m.INTERIM_EMISSIONS_CAP_CONS.deactivate()
+
         return m
 
     @staticmethod
@@ -2321,6 +2349,79 @@ def run_primal_fixed_policy(baselines, permit_prices, final_year, scenarios_per_
     return results
 
 
+def run_primal_cumulative_emissions_cap(final_year, scenarios_per_year, emissions_cap):
+    """Run primal emissions cap scenario"""
+
+    # Initialise object and model used to run primal model
+    primal = Primal(final_year, scenarios_per_year)
+    m = primal.construct_model()
+
+    # Fix permit prices and baselines
+    m.permit_price.fix(0)
+    m.baseline.fix(0)
+
+    # Update cumulative emissions cap parameter
+    m.CUMULATIVE_EMISSIONS_CAP = float(emissions_cap)
+
+    # Add cumulative emissions cap constraint
+    m.CUMULATIVE_EMISSIONS_CAP_CONS.activate()
+
+    # Solve primal model with fixed policy parameters
+    m, status = primal.solve_model(m)
+
+    # Results to extract
+    result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
+                   'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE']
+
+    # Model results
+    results = {k: extract_result(m, k) for k in result_keys}
+
+    # Add dual variable from power balance constraint
+    results['PRICES'] = {k: m.dual[m.POWER_BALANCE[k]] for k in m.POWER_BALANCE.keys()}
+
+    # Add dual variable associated with cumulative emissions cap constraint
+    results['CUMULATIVE_EMISSIONS_CAP_CONS_DUAL'] = m.dual[m.CUMULATIVE_EMISSIONS_CAP_CONS]
+
+    return results
+
+
+def run_primal_interim_emissions_cap(final_year, scenarios_per_year, interim_emissions_cap):
+    """Run primal emissions cap scenario"""
+
+    # Initialise object and model used to run primal model
+    primal = Primal(final_year, scenarios_per_year)
+    m = primal.construct_model()
+
+    # Fix permit prices and baselines
+    m.permit_price.fix(0)
+    m.baseline.fix(0)
+
+    # Update cumulative emissions cap parameter
+    for y in m.Y:
+        m.INTERIM_EMISSIONS_CAP[y] = float(interim_emissions_cap[y])
+
+    # Add interim emissions cap constraints
+    m.INTERIM_EMISSIONS_CAP_CONS.activate()
+
+    # Solve primal model with fixed policy parameters
+    m, status = primal.solve_model(m)
+
+    # Results to extract
+    result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
+                   'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE']
+
+    # Model results
+    results = {k: extract_result(m, k) for k in result_keys}
+
+    # Add dual variable from power balance constraint
+    results['PRICES'] = {k: m.dual[m.POWER_BALANCE[k]] for k in m.POWER_BALANCE.keys()}
+
+    # Add dual variable associated with interim emissions cap constraints
+    results['INTERIM_EMISSIONS_CAP_CONS_DUAL'] = {y: m.dual[m.INTERIM_EMISSIONS_CAP_CONS[y]] for y in m.Y}
+
+    return results
+
+
 def run_bau_case(output_dir, final_year, scenarios_per_year, mode='primal'):
     """Run business-as-usual case"""
 
@@ -2351,6 +2452,31 @@ def run_bau_case(output_dir, final_year, scenarios_per_year, mode='primal'):
 
     return results
 
+
+def run_cumulative_emissions_cap_case(output_dir, final_year, scenarios_per_year, emissions_cap):
+    """Run case with a cumulative emissions cap"""
+
+    # Initialise object and model used to run primal model
+    results = run_primal_cumulative_emissions_cap(final_year, scenarios_per_year, emissions_cap)
+
+    # Save results
+    with open(os.path.join(output_dir, 'cumulative_emissions_cap_results.pickle'), 'wb') as f:
+        pickle.dump(results, f)
+
+    return results
+
+
+def run_interim_emissions_cap_case(output_dir, final_year, scenarios_per_year, interim_emissions_cap):
+    """Run case with interim emissions cap - cap defined for each year of model horizon"""
+
+    # Initialise object and model used to run primal model
+    results = run_primal_interim_emissions_cap(final_year, scenarios_per_year, interim_emissions_cap)
+
+    # Save results
+    with open(os.path.join(output_dir, 'interim_emissions_cap_results.pickle'), 'wb') as f:
+        pickle.dump(results, f)
+
+    return results
 
 def get_permit_price_trajectory(primal, model, target_emissions_trajectory, baselines, initial_permit_prices,
                                 permit_price_tol, permit_price_cap):
