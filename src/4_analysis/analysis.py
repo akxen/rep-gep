@@ -333,9 +333,11 @@ if __name__ == '__main__':
     # f = 'primal_bau_results.pickle'
     # f = 'cumulative_emissions_cap_results.pickle'
     # f = 'interim_emissions_cap_results.pickle'
+    # f = 'carbon_tax_results.pickle'
 
     # r = analysis.get_year_system_emissions_intensities(f)
-    # analysis.plot_year_system_emissions_intensities(f)
+    analysis.plot_year_system_emissions_intensities('cumulative_emissions_cap_results.pickle')
+    analysis.plot_year_system_emissions_intensities('carbon_tax_results.pickle')
 
     # r = analysis.get_installed_capacity(f)
     # analysis.plot_installed_capacity(f)
