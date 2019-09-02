@@ -126,27 +126,43 @@ class Targets:
 
         return emissions_target
 
+    def get_cumulative_emissions_cap_carbon_price(self):
+        """Get carbon price from cumulative emissions cap model results"""
+
+        # Results
+        results = self.analysis.load_results('cumulative_emissions_cap_results.pickle')
+
+        return results['CUMULATIVE_EMISSIONS_CAP_CONS_DUAL']
+
+    def get_interim_emissions_cap_carbon_price(self):
+        """Get carbon price from interim emissions cap model results"""
+
+        # Results
+        results = self.analysis.load_results('interim_emissions_cap_results.pickle')
+
+        return results['INTERIM_EMISSIONS_CAP_CONS_DUAL']
+
 
 if __name__ == '__main__':
     # Directory containing model results
-    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'local')
+    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote')
 
     # Object used to get model targets
     targets = Targets(results_directory)
 
-    # Cumulative emissions target - based on fraction of BAU emissions
-    f = 'primal_bau_results.pickle'
-    cumulative_target = {'cumulative_emissions_target': targets.get_cumulative_emissions_target(f, 0.5)}
-    with open(os.path.join(os.path.dirname(__file__), 'output', 'cumulative_emissions_target.json'), 'w') as g:
-        json.dump(cumulative_target, g)
-    cumulative_target_loaded = targets.load_cumulative_emissions_target()
-
-    # Interim emissions target - based on emissions in each year when pursuing cumulative target
-    f = 'cumulative_emissions_cap_results.pickle'
-    interim_target = targets.get_interim_emissions_target(f)
-    with open(os.path.join(os.path.dirname(__file__), 'output', 'interim_emissions_target.json'), 'w') as g:
-        json.dump(interim_target, g)
-    interim_target_loaded = targets.load_interim_emissions_target()
+    # # Cumulative emissions target - based on fraction of BAU emissions
+    # f = 'primal_bau_results.pickle'
+    # cumulative_target = {'cumulative_emissions_target': targets.get_cumulative_emissions_target(f, 0.5)}
+    # with open(os.path.join(os.path.dirname(__file__), 'output', 'cumulative_emissions_target.json'), 'w') as g:
+    #     json.dump(cumulative_target, g)
+    # cumulative_target_loaded = targets.load_cumulative_emissions_target()
+    #
+    # # Interim emissions target - based on emissions in each year when pursuing cumulative target
+    # f = 'cumulative_emissions_cap_results.pickle'
+    # interim_target = targets.get_interim_emissions_target(f)
+    # with open(os.path.join(os.path.dirname(__file__), 'output', 'interim_emissions_target.json'), 'w') as g:
+    #     json.dump(interim_target, g)
+    # interim_target_loaded = targets.load_interim_emissions_target()
 
     # # Emissions intensity target - assumes system emissions intensity will halve every 25 years
     # df_emissions_target = get_emissions_intensity_target(half_life=25)
@@ -167,3 +183,6 @@ if __name__ == '__main__':
     #
     # # Check that average price in first year of BAU scenario loads correctly
     # first_year_average_bau_price = load_first_year_average_bau_price('first_year_average_price.json')
+
+    cumulative_cap_carbon_price = targets.get_cumulative_emissions_cap_carbon_price()
+    interim_cap_carbon_price = targets.get_interim_emissions_cap_carbon_price()

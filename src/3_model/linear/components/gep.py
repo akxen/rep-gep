@@ -2456,7 +2456,7 @@ def run_bau_case(output_dir, final_year, scenarios_per_year, mode='primal'):
 def run_cumulative_emissions_cap_case(output_dir, final_year, scenarios_per_year, emissions_cap):
     """Run case with a cumulative emissions cap"""
 
-    # Initialise object and model used to run primal model
+    # Run primal model with cumulative emissions cap
     results = run_primal_cumulative_emissions_cap(final_year, scenarios_per_year, emissions_cap)
 
     # Save results
@@ -2469,7 +2469,7 @@ def run_cumulative_emissions_cap_case(output_dir, final_year, scenarios_per_year
 def run_interim_emissions_cap_case(output_dir, final_year, scenarios_per_year, interim_emissions_cap):
     """Run case with interim emissions cap - cap defined for each year of model horizon"""
 
-    # Initialise object and model used to run primal model
+    # Run primal model with interim emissions cap
     results = run_primal_interim_emissions_cap(final_year, scenarios_per_year, interim_emissions_cap)
 
     # Save results
@@ -2477,6 +2477,7 @@ def run_interim_emissions_cap_case(output_dir, final_year, scenarios_per_year, i
         pickle.dump(results, f)
 
     return results
+
 
 def get_permit_price_trajectory(primal, model, target_emissions_trajectory, baselines, initial_permit_prices,
                                 permit_price_tol, permit_price_cap):
@@ -2568,8 +2569,8 @@ def get_permit_price_trajectory(primal, model, target_emissions_trajectory, base
             i += 1
 
 
-def run_carbon_tax_case(output_dir, final_year, scenarios_per_year, target_emissions_trajectory, permit_price_tol,
-                        permit_price_cap):
+def run_carbon_tax_permit_price_trajectory_case(output_dir, final_year, scenarios_per_year, target_emissions_trajectory,
+                                                permit_price_tol, permit_price_cap):
     """Run carbon tax case (no refunding)"""
 
     # Initialise object and model used to run primal model
@@ -2590,7 +2591,7 @@ def run_carbon_tax_case(output_dir, final_year, scenarios_per_year, target_emiss
     # Combine results into single dictionary
     results = {'permit_price_trajectory': permit_price_results}
 
-    # Extract results from final MPPDC model
+    # Extract results from model
     result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
                    'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE']
 
@@ -2601,6 +2602,21 @@ def run_carbon_tax_case(output_dir, final_year, scenarios_per_year, target_emiss
     filename = 'carbon_tax_results.pickle'
 
     with open(os.path.join(output_dir, filename), 'wb') as f:
+        pickle.dump(results, f)
+
+    return results
+
+
+def run_carbon_tax_case(output_dir, final_year, scenarios_per_year, permit_prices):
+    """Run carbon tax case (baseline = 0 for all years in model horizon)"""
+
+    # Baselines = 0 for all years in model horizon
+    baselines = {y: float(0) for y in range(2016, final_year + 1)}
+
+    # Run policy with fixed baselines and permit prices
+    results = run_primal_fixed_policy(baselines, permit_prices, final_year, scenarios_per_year)
+
+    with open(os.path.join(output_dir, 'carbon_tax_results.pickle'), 'wb') as f:
         pickle.dump(results, f)
 
     return results

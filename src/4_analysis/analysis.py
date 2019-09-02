@@ -4,8 +4,8 @@ import os
 import sys
 import pickle
 
-sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'components', 'base'))
 sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'components'))
+sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'components', 'base'))
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -314,7 +314,7 @@ class AnalyseResults:
 
 if __name__ == '__main__':
     # Path where results can be found
-    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'local')
+    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote')
 
     # Object used to analyse results
     analysis = AnalyseResults(results_directory)
@@ -332,7 +332,7 @@ if __name__ == '__main__':
 
     # f = 'primal_bau_results.pickle'
     # f = 'cumulative_emissions_cap_results.pickle'
-    f = 'interim_emissions_cap_results.pickle'
+    # f = 'interim_emissions_cap_results.pickle'
 
     # r = analysis.get_year_system_emissions_intensities(f)
     # analysis.plot_year_system_emissions_intensities(f)
@@ -347,5 +347,4 @@ if __name__ == '__main__':
     # r = analysis.get_interval_generator_output(f)
     # r = analysis.get_total_emissions(f)
     # r = analysis.get_year_emissions(f)
-    r = analysis.load_results(f)
-
+    # r = analysis.load_results(f)
