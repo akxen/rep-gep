@@ -213,8 +213,7 @@ class ModelCases:
             raise Exception(f'Unexpected run mode: {mode}')
 
         # Save results
-        with open(os.path.join(output_dir, filename), 'wb') as f:
-            pickle.dump(results, f)
+        self.save_results(results, output_dir, filename)
 
         return results
 
@@ -327,6 +326,22 @@ class ModelCases:
             mppdc_model.TOTAL_NET_SCHEME_REVENUE_NEUTRAL_CONS.activate()
             mppdc_model.CUMULATIVE_NET_SCHEME_REVENUE_LB_CONS.activate()
 
+        elif mode == 'transition':
+            # Set the transition year
+            transition_year = 2018
+            mppdc_model.TRANSITION_YEAR = transition_year
+
+            # Activate year revenue neutrality requirement for all years
+            mppdc_model.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS.activate()
+
+            # Deactivate year revenue neutrality requirement for years before transition year
+            for y in range(2016, transition_year + 1):
+                mppdc_model.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS[y].deactivate()
+
+            # Reconstruct and enforce revenue neutrality over the transition period
+            mppdc_model.TRANSITION_NET_SCHEME_REVENUE_NEUTRAL_CONS.reconstruct()
+            mppdc_model.TRANSITION_NET_SCHEME_REVENUE_NEUTRAL_CONS.activate()
+
         else:
             raise Exception(f'Unexpected mode: {mode}')
 
@@ -345,7 +360,7 @@ class ModelCases:
         combined_results = {**rep_results, **mppdc_results}
 
         # Save results
-        self.save_results(combined_results, output_directory, f'mppdc_{mode}_case.pickle')
+        self.save_results(combined_results, output_dir, f'mppdc_{mode}_case.pickle')
 
         return combined_results
 
@@ -369,9 +384,24 @@ class ModelCases:
         results = self.run_primal_fixed_policy(baselines, permit_prices, final_year, scenarios_per_year, result_keys)
 
         # Save results
-        self.save_results(results, output_directory, f'primal_{mode}_case_check.pickle')
+        self.save_results(results, output_dir, f'primal_{mode}_case_check.pickle')
 
         return results
+
+    @staticmethod
+    def compare_absolute_values(d1, d2):
+        """Compare max difference between two dicts"""
+
+        # Check keys are the same
+        assert set(d1.keys()) == set(d2.keys()), 'Keys do not match'
+
+        # Absolute difference between absolute values
+        difference = {k: abs(abs(d1[k]) - abs(d2[k])) for k in d1.keys()}
+
+        # Max absolute difference
+        max_difference = max(difference.values())
+
+        return difference, max_difference
 
     def get_permit_price_trajectory(self, primal, model, target_emissions_trajectory, baselines, initial_permit_prices,
                                     permit_price_tol, permit_price_cap):
@@ -664,21 +694,6 @@ class ModelCases:
         return results
 
 
-def compare_absolute_values(d1, d2):
-    """Compare max difference between two dicts"""
-
-    # Check keys are the same
-    assert set(d1.keys()) == set(d2.keys()), 'Keys do not match'
-
-    # Absolute difference between absolute values
-    difference = {k: abs(abs(d1[k]) - abs(d2[k])) for k in d1.keys()}
-
-    # Max absolute difference
-    max_difference = max(difference.values())
-
-    return difference, max_difference
-
-
 if __name__ == '__main__':
     output_directory = '.'
     log_file_name = 'case_logger'
@@ -701,7 +716,8 @@ if __name__ == '__main__':
                                                                  scenarios_per_year_model, 'non_negative_revenue')
 
     # Max price difference
-    non_neg_rev_price_diff = compare_absolute_values(non_neg_rev_check['PRICES'], non_neg_rev['stage_3_mppdc']['lamb'])
+    non_neg_rev_price_diff = cases.compare_absolute_values(non_neg_rev_check['PRICES'],
+                                                           non_neg_rev['stage_3_mppdc']['lamb'])
     print(f'Max price difference for non-negative revenue case: {non_neg_rev_price_diff[1]}')
 
     # Run MPPDC price smoothing algorithm - neutral revenue constraint
@@ -712,7 +728,8 @@ if __name__ == '__main__':
                                                                  scenarios_per_year_model, 'neutral_revenue')
 
     # Max price difference
-    neutral_rev_price_diff = compare_absolute_values(neutral_rev_check['PRICES'], neutral_rev['stage_3_mppdc']['lamb'])
+    neutral_rev_price_diff = cases.compare_absolute_values(neutral_rev_check['PRICES'],
+                                                           neutral_rev['stage_3_mppdc']['lamb'])
     print(f'Max price difference for neutral revenue case: {neutral_rev_price_diff[1]}')
 
     # Run MPPDC price smoothing algorithm - neutral revenue constraint with lower bound constraint on cumulative revenue
@@ -724,6 +741,6 @@ if __name__ == '__main__':
                                                                     'neutral_revenue_lower_bound')
 
     # Max price difference
-    neutral_rev_lb_price_diff = compare_absolute_values(neutral_rev_lb_check['PRICES'],
-                                                        neutral_rev_lb['stage_3_mppdc']['lamb'])
+    neutral_rev_lb_price_diff = cases.compare_absolute_values(neutral_rev_lb_check['PRICES'],
+                                                              neutral_rev_lb['stage_3_mppdc']['lamb'])
     print(f'Max price difference for neutral revenue case with lower revenue bound: {neutral_rev_lb_price_diff[1]}')
