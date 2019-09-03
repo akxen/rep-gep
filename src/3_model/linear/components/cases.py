@@ -264,8 +264,8 @@ class ModelCases:
         # Run policy with fixed baselines and permit prices
         results = self.run_primal_fixed_policy(baselines, permit_prices, final_year, scenarios_per_year, result_keys)
 
-        with open(os.path.join(output_dir, 'carbon_tax_case.pickle'), 'wb') as f:
-            pickle.dump(results, f)
+        # Save results
+        self.save_results(results, output_dir, 'carbon_tax_case.pickle')
 
         return results
 
@@ -358,7 +358,7 @@ class ModelCases:
 
         # Load baselines and permit prices from corresponding MPPDC solution
         baselines = mppdc_results['stage_3_mppdc']['baseline']
-        permit_prices = mppdc_results['stage_3_mppdc']['permit_prices']
+        permit_prices = mppdc_results['stage_3_mppdc']['permit_price']
 
         # Results to extract from primal model
         result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'q', 'baseline', 'permit_price',
@@ -664,15 +664,30 @@ class ModelCases:
         return results
 
 
+def compare_absolute_values(d1, d2):
+    """Compare max difference between two dicts"""
+
+    # Check keys are the same
+    assert set(d1.keys()) == set(d2.keys()), 'Keys do not match'
+
+    # Absolute difference between absolute values
+    difference = {k: abs(abs(d1[k]) - abs(d2[k])) for k in d1.keys()}
+
+    # Max absolute difference
+    max_difference = max(difference.values())
+
+    return difference, max_difference
+
+
 if __name__ == '__main__':
     output_directory = '.'
     log_file_name = 'case_logger'
     cases = ModelCases(output_directory, log_file_name)
 
-    output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'local')
+    output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'remote')
     start_model_year = 2016
-    final_year_model = 2020
-    scenarios_per_year_model = 2
+    final_year_model = 2050
+    scenarios_per_year_model = 10
     permit_prices_model = {y: float(40) for y in range(start_model_year, final_year_model + 1)}
 
     # Run REP case algorithm
@@ -685,12 +700,20 @@ if __name__ == '__main__':
     non_neg_rev_check = cases.run_primal_to_check_mppdc_solution(output_directory, final_year_model,
                                                                  scenarios_per_year_model, 'non_negative_revenue')
 
+    # Max price difference
+    non_neg_rev_price_diff = compare_absolute_values(non_neg_rev_check['PRICES'], non_neg_rev['stage_3_mppdc']['lamb'])
+    print(f'Max price difference for non-negative revenue case: {non_neg_rev_price_diff[1]}')
+
     # Run MPPDC price smoothing algorithm - neutral revenue constraint
     neutral_rev = cases.run_price_smoothing_mppdc_case(output_directory, final_year_model, scenarios_per_year_model,
                                                        permit_prices_model, 'neutral_revenue')
 
     neutral_rev_check = cases.run_primal_to_check_mppdc_solution(output_directory, final_year_model,
                                                                  scenarios_per_year_model, 'neutral_revenue')
+
+    # Max price difference
+    neutral_rev_price_diff = compare_absolute_values(neutral_rev_check['PRICES'], neutral_rev['stage_3_mppdc']['lamb'])
+    print(f'Max price difference for neutral revenue case: {neutral_rev_price_diff[1]}')
 
     # Run MPPDC price smoothing algorithm - neutral revenue constraint with lower bound constraint on cumulative revenue
     neutral_rev_lb = cases.run_price_smoothing_mppdc_case(output_directory, final_year_model, scenarios_per_year_model,
@@ -700,3 +723,7 @@ if __name__ == '__main__':
                                                                     scenarios_per_year_model,
                                                                     'neutral_revenue_lower_bound')
 
+    # Max price difference
+    neutral_rev_lb_price_diff = compare_absolute_values(neutral_rev_lb_check['PRICES'],
+                                                        neutral_rev_lb['stage_3_mppdc']['lamb'])
+    print(f'Max price difference for neutral revenue case with lower revenue bound: {neutral_rev_lb_price_diff[1]}')
