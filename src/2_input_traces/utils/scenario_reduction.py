@@ -69,7 +69,7 @@ def standardise_samples(df):
     return df_o, mean, std
 
 
-def get_centroids(samples, samples_max_demand, year, n_clusters=9):
+def get_centroids(samples, samples_max_demand, year, scenarios_per_year=10):
     """Construct centroids for a given year"""
 
     # Extract samples for a given year
@@ -82,7 +82,7 @@ def get_centroids(samples, samples_max_demand, year, n_clusters=9):
     X = df_in.values
 
     # Construct and fit K-means classifier
-    kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(X)
+    kmeans = KMeans(n_clusters=scenarios_per_year-1, random_state=0).fit(X)
 
     # Assign each sample to a cluster
     X_prediction = kmeans.predict(X)
@@ -181,7 +181,7 @@ def check_plots(centroids, samples):
     centroids[('SOLAR', 'ADE|SAT')].T.plot(ax=ax, color='b', alpha=0.8, legend=False)
 
 
-def main(output_dir):
+def main(output_dir, scenarios_per_year):
     """
     Process scenario data
 
@@ -190,6 +190,9 @@ def main(output_dir):
     output_dir : str
         Directory where output files are to be stored (also contains outputs from previous steps)
 
+    scenarios_per_year : str
+        Number of operating scenarios per year
+
     Returns
     -------
     df_all_centroids : pandas DataFrame
@@ -197,7 +200,7 @@ def main(output_dir):
     """
 
     # Load dataset of pre-processed input traces
-    dataset = pd.read_hdf(os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'dataset.h5'))
+    dataset = pd.read_hdf(os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', f'dataset.h5'))
 
     # All samples
     all_samples = get_all_samples(dataset)
@@ -215,7 +218,7 @@ def main(output_dir):
         print(f'Processing year {y}')
 
         # Centroids computed for a given year
-        df_c = get_centroids(remaining_samples, max_demand_days, y)
+        df_c = get_centroids(remaining_samples, max_demand_days, y, scenarios_per_year)
 
         # Append to main container
         all_centroids.append(df_c)
@@ -224,7 +227,7 @@ def main(output_dir):
     df_all_centroids = pd.concat(all_centroids)
 
     # Save to file
-    df_all_centroids.to_pickle(os.path.join(output_dir, 'centroids.pickle'))
+    df_all_centroids.to_pickle(os.path.join(output_dir, f'centroids_{scenarios_per_year}.pickle'))
 
     return df_all_centroids
 
@@ -234,4 +237,4 @@ if __name__ == '__main__':
     output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output')
 
     # Construct scenarios
-    df_centroids = main(output_directory)
+    df_centroids = main(output_directory, scenarios_per_year=10)

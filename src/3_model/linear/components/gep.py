@@ -1824,13 +1824,13 @@ class MPPDCModel:
         m.FIXED_PERMIT_PRICE = Param(m.Y, initialize=0, mutable=True)
 
         # Average price in year prior to model start
-        m.YEAR_AVERAGE_PRICE_0 = Param(initialize=40)
+        m.YEAR_AVERAGE_PRICE_0 = Param(initialize=40, mutable=True)
 
         # Strong duality constraint violation penalty
         m.STRONG_DUALITY_VIOLATION_PENALTY = Param(initialize=float(1e6))
 
         # Lower limit for scheme revenue in a given year
-        m.SCHEME_REVENUE_LB = Param(initialize=float(-10e6))
+        m.SCHEME_REVENUE_LB = Param(initialize=float(-10e6), mutable=True)
 
         # Year at which yearly revenue neutrality constraint will be enforced
         m.TRANSITION_YEAR = Param(initialize=0, mutable=True)
@@ -2292,10 +2292,13 @@ if __name__ == '__main__':
     final_model_year = 2018
     scenarios_per_model_year = 2
 
-    # Check model solution
-    check = CheckSolution()
+    # # Check model solution
+    # check = CheckSolution()
+    #
+    # # Check primal and dual solution - primal and dual elements should be the same for prices and power output
+    # check.check_primal_and_dual_solutions()
+    # check.check_primal_and_mppdc_solutions()
+    # check.check_dual_and_mppdc_solutions()
 
-    # Check primal and dual solution - primal and dual elements should be the same for prices and power output
-    check.check_primal_and_dual_solutions()
-    check.check_primal_and_mppdc_solutions()
-    check.check_dual_and_mppdc_solutions()
+    primal = Primal(2040, 5)
+    primal_model = primal.construct_model()

@@ -93,6 +93,9 @@ class AnalyseResults:
         # Average price for each scenario
         df_c['average_price'] = df_c['revenue_scaled'].div(df_c['demand_scaled'])
 
+        # Discount factor
+        df_c['discount_factor'] = df_c.apply(lambda x: 1.06 ** (x.name[0] - 2016), axis=1)
+
         return df_c
 
     def get_year_system_emissions_intensities(self, filename):
@@ -314,13 +317,13 @@ class AnalyseResults:
 
 if __name__ == '__main__':
     # Path where results can be found
-    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote')
+    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'local')
 
     # Object used to analyse results
     analysis = AnalyseResults(results_directory)
 
     # Average price
-    # average_price = analysis.get_year_average_price(mode='primal')
+    average_price = analysis.get_year_average_price('primal_bau_case.pickle')
 
     # lost_load = analysis.get_lost_load()
     # Output as a proportion of capacity available in each region
@@ -336,8 +339,8 @@ if __name__ == '__main__':
     # f = 'carbon_tax_results.pickle'
 
     # r = analysis.get_year_system_emissions_intensities(f)
-    analysis.plot_year_system_emissions_intensities('cumulative_emissions_cap_results.pickle')
-    analysis.plot_year_system_emissions_intensities('carbon_tax_results.pickle')
+    # analysis.plot_year_system_emissions_intensities('cumulative_emissions_cap_results.pickle')
+    # analysis.plot_year_system_emissions_intensities('carbon_tax_results.pickle')
 
     # r = analysis.get_installed_capacity(f)
     # analysis.plot_installed_capacity(f)

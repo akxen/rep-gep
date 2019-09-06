@@ -46,6 +46,9 @@ class ModelCases:
         elif type(model_component) == pyomo.core.base.var.IndexedVar:
             return model_component.get_values()
 
+        elif type(model_component) == pyomo.core.base.param.IndexedParam:
+            return {k: v for k, v in model_component.items()}
+
         else:
             raise Exception(f'Unexpected model component: {component_name}')
 
@@ -193,7 +196,7 @@ class ModelCases:
 
         # Results to extract
         result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
-                       'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE']
+                       'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'C_MC']
 
         if mode == 'primal':
             # Run primal BAU case
@@ -222,7 +225,7 @@ class ModelCases:
 
         # Results to extract
         result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
-                       'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE']
+                       'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'C_MC']
 
         # Run primal model with cumulative emissions cap
         results = self.run_primal_cumulative_emissions_cap(final_year, scenarios_per_year, emissions_cap, result_keys)
@@ -238,7 +241,7 @@ class ModelCases:
 
         # Results to extract
         result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
-                       'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE']
+                       'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'C_MC']
 
         # Run primal model with interim emissions cap
         results = self.run_primal_interim_emissions_cap(final_year, scenarios_per_year, interim_emissions_cap,
@@ -255,7 +258,7 @@ class ModelCases:
 
         # Results to extract
         result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
-                       'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE']
+                       'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'C_MC']
 
         # Baselines = 0 for all years in model horizon
         baselines = {y: float(0) for y in range(2016, final_year + 1)}
@@ -273,7 +276,7 @@ class ModelCases:
         # Results to extract
         result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'q', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
                        'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE',
-                       'TOTAL_SCHEME_REVENUE']
+                       'TOTAL_SCHEME_REVENUE', 'C_MC']
 
         # Run carbon tax case
         carbon_tax_baselines = {y: float(0) for y in range(2016, final_year + 1)}
@@ -293,7 +296,8 @@ class ModelCases:
 
         return results
 
-    def run_price_smoothing_mppdc_case(self, output_dir, final_year, scenarios_per_year, permit_prices, mode):
+    def run_price_smoothing_mppdc_case(self, output_dir, final_year, scenarios_per_year, permit_prices, initial_price,
+                                       mode, scheme_revenue_lb=None):
         """Run case to smooth prices over model horizon, subject to total revenue constraint"""
 
         # Try to load REP results from previous run
@@ -307,6 +311,12 @@ class ModelCases:
         # Construct MPPDC
         mppdc = MPPDCModel(final_year, scenarios_per_year)
         mppdc_model = mppdc.construct_model(include_primal_constraints=False)
+
+        # Set average price in year prior to model start (assume same first year average price in BAU case)
+        mppdc_model.YEAR_AVERAGE_PRICE_0 = float(initial_price)
+
+        if scheme_revenue_lb is not None:
+            mppdc_model.SCHEME_REVENUE_LB = float(scheme_revenue_lb)
 
         # Fix primal variables to results obtained from REP case (including permit price)
         primal_variables = ['x_c', 'p', 'p_in', 'p_out', 'q', 'p_V', 'p_L', 'permit_price']
@@ -328,7 +338,7 @@ class ModelCases:
 
         elif mode == 'transition':
             # Set the transition year
-            transition_year = 2018
+            transition_year = 2021
             mppdc_model.TRANSITION_YEAR = transition_year
 
             # Activate year revenue neutrality requirement for all years
