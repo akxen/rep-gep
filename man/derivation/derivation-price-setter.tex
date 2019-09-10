@@ -1,0 +1,452 @@
+\documentclass{article}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{8pt}
+
+%\usepackage{../notation/notation}
+\usepackage{notation}
+\usepackage{geometry,amsmath,amssymb,bm,mathtools,graphicx,pdfpages,tikz,float,blkarray,longtable,titlesec,cases,bm,titlesec,breqn}
+\graphicspath{{figures}}
+\setcounter{secnumdepth}{4}
+
+\titleformat{\paragraph}
+{\normalfont\normalsize\bfseries}{\theparagraph}{1em}{}
+\titlespacing*{\paragraph}
+{0pt}{3.25ex plus 1ex minus .2ex}{1.5ex plus .2ex}
+
+\geometry{
+	a4paper,
+	total={170mm,257mm},
+	left=15mm,
+	top=20mm,
+	right=15mm,
+	bottom=25mm
+}
+
+\title{Refunded Emissions Payment Scheme: Long-run Parameter Calibration\\Linear GEP Formulation}
+%\widehat{}\textasciicaron
+\allowdisplaybreaks[1]
+
+% Sets
+\newcommand{\sGenerators}{G}
+\newcommand{\sGeneratorsExisting}{G^{\mathrm{E}}}
+\newcommand{\sGeneratorsExistingThermal}{G^{\mathrm{E,T}}}
+\newcommand{\sGeneratorsExistingWind}{G^{\mathrm{E,W}}}
+\newcommand{\sGeneratorsExistingSolar}{G^{\mathrm{E,S}}}
+\newcommand{\sGeneratorsCandidate}{G^{\mathrm{C}}}
+\newcommand{\sGeneratorsCandidateThermal}{G^{\mathrm{C,T}}}
+\newcommand{\sGeneratorsCandidateWind}{G^{\mathrm{C,W}}}
+\newcommand{\sGeneratorsCandidateSolar}{G^{\mathrm{C,S}}}
+\newcommand{\sGeneratorsThermal}{G^{\mathrm{T}}}
+\newcommand{\sGeneratorsHydro}{G^{\mathrm{H}}}
+\newcommand{\sStorage}{G^{\mathrm{Q}}}
+\newcommand{\sStorageExisting}{G^{\mathrm{E,Q}}}
+\newcommand{\sStorageCandidate}{G^{\mathrm{C,Q}}}
+\newcommand{\sYears}{Y}
+\newcommand{\sScenarios}{S}
+\newcommand{\sIntervals}{T}
+\newcommand{\sZones}{Z}
+\newcommand{\sRegions}{R}
+%\newcommand{\sInvestmentSizeOptions}{N^{\mathrm{C}}}
+%\newcommand{\sInvestmentSizeOptionsGenerator}[1][\iGenerator]{\sInvestmentSizeOptions_{#1}}
+%\newcommand{\sGeneratorsExistingThermalQuickStart}{G^{\mathrm{E,T}}_\mathrm{Q}}
+%\newcommand{\sGeneratorsCandidateThermalQuickStart}{G^{\mathrm{C,T}}_\mathrm{Q}}
+%\newcommand{\sGeneratorsThermalQuickStart}{G^{\mathrm{T}}_\mathrm{Q}}
+%\newcommand{\sGeneratorsExistingThermalSlowStart}{G^{\mathrm{E,T}}_\mathrm{S}}
+\newcommand{\sLinks}{L}
+\newcommand{\sScenariosYear}{\sScenarios_{\iYear}}
+
+% Indices
+\newcommand{\iGenerator}{g}
+\newcommand{\iYear}{y}
+\newcommand{\iYearTerminal}{\overline{\iYear}}
+\newcommand{\iYearStart}{\underline{\iYear}}
+\newcommand{\iYearAlias}{j}
+\newcommand{\iScenario}{s}
+\newcommand{\iScenarioAlias}{m}
+\newcommand{\iInterval}{t}
+\newcommand{\iIntervalAlias}{k}
+\newcommand{\iIntervalTerminal}{\overline{\iInterval}}
+\newcommand{\iIntervalStart}{\underline{\iInterval}}
+
+
+\newcommand{\iZone}{z}
+\newcommand{\iRegion}{r}
+%\newcommand{\iInvestmentSizeOption}{n}
+\newcommand{\iLink}{l}
+
+% Parameters
+\newcommand{\cOperatingCost}[1][\iYear,\iScenario]{\mathrm{OP}_{#1}}
+\newcommand{\cOperatingCostThermal}[1][\iYear,\iScenario]{\mathrm{OP}^{\mathrm{T}}_{#1}}
+\newcommand{\cOperatingCostHydro}[1][\iYear,\iScenario]{\mathrm{OP}^{\mathrm{H}}_{#1}}
+\newcommand{\cOperatingCostWind}[1][\iYear,\iScenario]{\mathrm{OP}^{\mathrm{W}}_{#1}}
+\newcommand{\cOperatingCostSolar}[1][\iYear,\iScenario]{\mathrm{OP}^{\mathrm{S}}_{#1}}
+\newcommand{\cOperatingCostStorage}[1][\iYear,\iScenario]{\mathrm{OP}^{\mathrm{Q}}_{#1}}
+\newcommand{\cFixedOperationsMaintenanceCost}[1][\iYear]{\mathrm{FOM}_{#1}}
+\newcommand{\cFixedOperationsMaintenanceCostGenerator}[1][\iGenerator]{C^{\mathrm{FOM}}_{#1}}
+\newcommand{\cScenarioDuration}[1][\iYear,\iScenario]{\rho_{#1}}
+\newcommand{\cMarginalCost}[1][\iGenerator,\iYear]{C^{\mathrm{MC}}_{#1}}
+%\newcommand{\cStartupCost}[1][\iGenerator]{C^{\mathrm{SU}}_{#1}}
+%\newcommand{\cShutdownCost}[1][\iGenerator]{C^{\mathrm{SD}}_{#1}}
+\newcommand{\cEmissionsIntensity}[1][\iGenerator]{E_{#1}}
+\newcommand{\cPowerOutputMax}[1][\iGenerator,\iYear]{\overline{P}_{#1}}
+\newcommand{\cAmortisationRate}[1][\iGenerator]{\gamma_{#1}}
+\newcommand{\cCandidateInvestmentCost}[1][\iGenerator,\iYear]{I^{\mathrm{C}}_{#1}}
+\newcommand{\cInvestmentCost}[1][\iYear]{\mathrm{INV}_{#1}}
+\newcommand{\cInterestRate}{i}
+\newcommand{\cAssetLifetime}[1][\iGenerator]{A_{#1}}
+\newcommand{\cTotalPresentValue}[1][]{\mathrm{TPV}_{#1}}
+%\newcommand{\cInvestmentSize}{X^{\mathrm{C,T}}_{\iGenerator,\iInvestmentSizeOption}}
+\newcommand{\cBuildLimitWind}{B^{\mathrm{C,\mathrm{W}}}_{\iZone}}
+\newcommand{\cBuildLimitSolar}{B^{\mathrm{C,\mathrm{S}}}_{\iZone}}
+\newcommand{\cBuildLimitStorage}{B^{\mathrm{C,\mathrm{Q}}}_{\iZone}}
+\newcommand{\cReserveUpRequirement}[1][\iRegion]{D^{+}_{#1}}
+%\newcommand{\cUpTimeMin}[1][\iGenerator]{TU_{#1}}
+%\newcommand{\cDownTimeMin}[1][\iGenerator]{TD_{#1}}
+\newcommand{\cRampRateUp}[1][\iGenerator]{RU_{#1}}
+\newcommand{\cRampRateDown}[1][\iGenerator]{RD_{#1}}
+\newcommand{\cPowerOutputMin}[1][\iGenerator]{\underline{P}_{#1}}
+%\newcommand{\cStartupDuration}[1][\iGenerator]{SU_{#1}^{\mathrm{D}}}
+%\newcommand{\cStartupTrajectory}[1][\iGenerator,\iIntervalAlias]{P^{\mathrm{SU}}_{#1}}
+%\newcommand{\cShutdownDuration}[1][\iGenerator]{SD_{#1}^{\mathrm{D}}}
+%\newcommand{\cShutdownTrajectory}[1][\iGenerator,\iIntervalAlias]{P^{\mathrm{SD}}_{#1}}
+\newcommand{\cCapacityFactorWind}[1][\iGenerator,\iYear,\iScenario,\iInterval]{Q_{#1}^{\mathrm{W}}}
+\newcommand{\cCapacityFactorSolar}[1][\iGenerator,\iYear,\iScenario,\iInterval]{Q_{#1}^{\mathrm{S}}}
+\newcommand{\cPowerChargingMax}[1][\iGenerator]{\overline{P}^{\mathrm{in}}_{#1}}
+\newcommand{\cPowerDischargingMax}[1][\iGenerator]{\overline{P}^{\mathrm{out}}_{#1}}
+\newcommand{\cStorageUnitEnergyMax}[1][\iGenerator]{\overline{Q}_{#1}}
+\newcommand{\cStorageUnitEnergyIntervalEndMax}[1][\iGenerator]{\overline{Q}^{\mathrm{end}}_{#1}}
+\newcommand{\cStorageUnitEnergyIntervalEndMin}[1][\iGenerator]{\underline{Q}^{\mathrm{end}}_{#1}}
+\newcommand{\cStorageUnitEfficiencyCharging}{\eta_{\iGenerator}^{\mathrm{in}}}
+\newcommand{\cStorageUnitEfficiencyDischarging}{\eta_{\iGenerator}^{\mathrm{out}}}
+\newcommand{\cDemand}[1][\iZone,\iYear,\iScenario,\iInterval]{D_{#1}}
+\newcommand{\cIncidenceMatrix}[1][\iZone,\iLink]{K_{#1}}
+\newcommand{\cOperatingCostLostLoad}[1][\iYear,\iScenario]{\mathrm{OP}^{\mathrm{L}}_{#1}}
+\newcommand{\cPowerFlowMin}{\underline{P}_{\iLink}^{L}}
+\newcommand{\cPowerFlowMax}{\overline{P}_{\iLink}^{L}}
+\newcommand{\cEmmissionsCumulativeTarget}{\overline{E}}
+\newcommand{\cSchemeRevenueCumulativeTarget}{\overline{R}}
+\newcommand{\cLostLoadCost}{C^{\mathrm{L}}}
+%\newcommand{\cReserveUpViolationPenalty}{C^{\mathrm{R}}}
+%\newcommand{\cOperatingCostReserveUpViolation}[1][\iYear,\iScenario]{\mathrm{OP}^{\mathrm{R}}_{#1}}
+%\newcommand{\cPowerOutputMinProportion}{\cPowerOutputMin^{\mathrm{f}}}
+\newcommand{\cEmissionsTargetViolationPenalty}{C^{\mathrm{E}}}
+\newcommand{\cEmissionsViolationTotalCost}{\mathrm{PEN}}
+\newcommand{\cObjectiveFunction}{\mathrm{COST}}
+\newcommand{\cOperatingCostScenario}[1][\iYear,\iScenario]{\mathrm{SCEN}_{#1}}
+\newcommand{\cRetirementIndicator}[1][\iGenerator,\iYear]{F_{#1}}
+\newcommand{\cEmissionsTotal}{E^{\mathrm{TOT}}}
+%\newcommand{\cRampRateStartup}[1][\iGenerator]{SU_{#1}}
+%\newcommand{\cRampRateShutdown}[1][\iGenerator]{SD_{#1}}
+\newcommand{\cPowerOutputHydro}[1][\iGenerator,\iYear,\iScenario,\iInterval]{P^{\mathrm{H}}_{#1}}
+\newcommand{\cDiscountRate}[1][\iYear]{\delta_{#1}}
+\newcommand{\cPowerInitial}[1][\iGenerator,\iYear,\iScenario]{P_{#1}^{0}}
+\newcommand{\cPowerOutInitial}[1][\iGenerator,\iYear,\iScenario]{\hat{P}_{#1}^{\mathrm{out}}}
+\newcommand{\cStorageEnergyInitial}[1][\iGenerator,\iYear,\iScenario]{Q_{#1}^{0}}
+\newcommand{\cLostLoadPowerInitial}[1][\iZone,\iYear,\iScenario]{P_{#1}^{\mathrm{V}}}
+\newcommand{\cPowerInInitial}[1][\iGenerator,\iYear,\iScenario]{\hat{P}_{#1}^{\mathrm{in}}}
+
+% Variables
+\newcommand{\vBaseline}[1][\iYear]{\phi_{#1}}
+\newcommand{\vPermitPrice}[1][\iYear]{\tau_{#1}}
+\newcommand{\vEnergy}[1][\iGenerator,\iYear,\iScenario,\iInterval]{e_{#1}}
+%\newcommand{\vStartupIndicator}[1][\iGenerator,\iYear,\iScenario,\iInterval]{v_{#1}}
+%\newcommand{\vShutdownIndicator}[1][\iGenerator,\iYear,\iScenario,\iInterval]{w_{#1}}
+\newcommand{\vInstalledCapacity}[1][\iGenerator,\iYear]{x^{\mathrm{C}}_{#1}}
+%\newcommand{\vInvestmentSizeIndicator}[1][\iGenerator,\iYear,\iInvestmentSizeOption]{d_{#1}}
+\newcommand{\vReserveUp}[1][\iGenerator,\iYear,\iScenario,\iInterval]{r^{+}_{#1}}
+\newcommand{\vReserveUpViolation}[1][\iRegion,\iYear,\iScenario,\iInterval]{r^{\mathrm{V}}_{#1}}
+%\newcommand{\vOnIndicator}[1][\iGenerator,\iYear,\iScenario,\iInterval]{u_{#1}}
+\newcommand{\vPower}[1][\iGenerator,\iYear,\iScenario,\iInterval]{p_{#1}}
+\newcommand{\vPowerTotal}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\hat{p}_{#1}}
+\newcommand{\vPowerIn}[1][\iGenerator,\iYear,\iScenario,\iInterval]{p^{\mathrm{in}}_{#1}}
+\newcommand{\vPowerOut}[1][\iGenerator,\iYear,\iScenario,\iInterval]{p^{\mathrm{out}}_{#1}}
+\newcommand{\vStorageUnitEnergy}[1][\iGenerator,\iYear,\iScenario,\iInterval]{q_{#1}}
+\newcommand{\vPowerFlow}[1][\iLink,\iYear,\iScenario,\iInterval]{p^{\sLinks}_{#1}}
+\newcommand{\vLostLoadEnergy}[1][\iZone,\iYear,\iScenario,\iInterval]{e^{\mathrm{V}}_{#1}}
+\newcommand{\vLostLoadPower}[1][\iZone,\iYear,\iScenario,\iInterval]{p^{\mathrm{V}}_{#1}}
+\newcommand{\vEmissionsTargetViolation}{f^{\mathrm{E}}}
+\newcommand{\vInstalledCapacityTotal}[1][\iGenerator,\iYear]{a_{#1}}
+%\newcommand{\vInstalledCapacityTotalScenario}[1][\iGenerator,\iYear,\iScenario]{b_{#1}}
+%\newcommand{\vInstalledCapacityOnStateAux}[1][\iGenerator,\iYear,\iScenario,\iInterval]{x_{#1}}
+%\newcommand{\vInstalledCapacityStartupStateAux}[1][\iGenerator,\iYear,\iScenario,\iInterval]{y_{#1}}
+%\newcommand{\vInstalledCapacityShutdownStateAux}[1][\iGenerator,\iYear,\iScenario,\iInterval]{z_{#1}}
+\newcommand{\vFixedCapacityDual}[1][\iGenerator,\iYear,\iScenario]{\psi_{#1}}
+
+
+
+\newcommand{\vEmissionsTotal}{E^{\mathrm{TOT}}_{\iYear}}
+\newcommand{\cEmissionsTarget}{E^{\mathrm{TAR}}_{\iYear}}
+\newcommand{\dPriceMetric}[1][\iYear]{\lambda^{\mathrm{R}}_{#1}}
+\newcommand{\cMinimumSchemeRevenue}{\underline{R}}
+\newcommand{\cEndOfHorizonCost}{\mathrm{EOH}}
+
+% Investment problem - inequality constraint dual variables
+\newcommand{\dNonNegativeCandidateCapacity}[1][\iGenerator,\iYear]{\mu_{#1}^{1}}
+\newcommand{\dSolarBuildLimit}[1][\iZone,\iYear]{\mu_{#1}^{2}}
+\newcommand{\dWindBuildLimit}[1][\iZone,\iYear]{\mu_{#1}^{3}}
+\newcommand{\dStorageBuildLimit}[1][\iZone,\iYear]{\mu_{#1}^{4}}
+
+% Investment problem - equality constraint dual variables
+\newcommand{\dTotalInstallCapacity}[1][\iGenerator,\iYear]{\nu_{#1}^{1}}
+
+% Operating scenario - inequality constraint dual variables
+\newcommand{\dMinPowerOutput}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{1}}
+\newcommand{\dMaxPowerOutputExistingThermal}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{2}}
+\newcommand{\dMaxPowerOutputCandidateThermal}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{3}}
+\newcommand{\dMaxPowerOutputWindExisting}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{4}}
+\newcommand{\dMaxPowerOutputWindCandidate}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{5}}
+\newcommand{\dMaxPowerOutputSolarExisting}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{6}}
+\newcommand{\dMaxPowerOutputSolarCandidate}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{7}}
+\newcommand{\dMaxPowerOutputHydro}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{8}}
+\newcommand{\dNonNegativeCharging}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{9}}
+\newcommand{\dNonNegativeDischarging}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{10}}
+\newcommand{\dMaxChargingRateExisting}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{11}}
+\newcommand{\dMaxChargingRateCandidate}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{12}}
+\newcommand{\dMaxDischargingRateExisting}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{13}}
+\newcommand{\dMaxDischargingRateCandidate}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{14}}
+\newcommand{\dNonNegativeStorageEnergy}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{15}}
+\newcommand{\dMaxStorageEnergyExisting}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{16}}
+\newcommand{\dMaxStorageEnergyCandidate}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{17}}
+\newcommand{\dMinStorageEnergyIntervalEnd}[1][\iGenerator,\iYear,\iScenario]{\sigma_{#1}^{18}}
+\newcommand{\dMaxStorageEnergyIntervalEnd}[1][\iGenerator,\iYear,\iScenario]{\sigma_{#1}^{19}}
+\newcommand{\dRampRateUp}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{20}}
+\newcommand{\dRampRateUpStorageCharging}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{21}}
+\newcommand{\dRampRateUpStorageDischarging}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{22}}
+\newcommand{\dRampRateDown}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{23}}
+\newcommand{\dRampRateDownStorageCharging}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{24}}
+\newcommand{\dRampRateDownStorageDischarging}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{25}}
+\newcommand{\dNonNegativeLostLoad}[1][\iZone,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{26}}
+\newcommand{\dMinPowerFlow}[1][\iLink,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{27}}
+\newcommand{\dMaxPowerFlow}[1][\iLink,\iYear,\iScenario,\iInterval]{\sigma_{#1}^{28}}
+
+
+
+
+% Operating scenario - equality constraint dual variables
+\newcommand{\dPowerBalance}[1][\iZone,\iYear,\iScenario,\iInterval]{\lambda_{#1}}
+\newcommand{\dStorageEnergyTransition}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\zeta_{#1}^{1}}
+\newcommand{\dGeneratorEnergyOutput}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\zeta_{#1}^{2}}
+\newcommand{\dStorageEnergyOutput}[1][\iGenerator,\iYear,\iScenario,\iInterval]{\zeta_{#1}^{3}}
+\newcommand{\dLostLoadEnergy}[1][\iZone,\iYear,\iScenario,\iInterval]{\zeta_{#1}^{4}}
+
+
+\let\oldnorm\norm   % <-- Store original \norm as \oldnorm
+\let\norm\undefined % <-- "Undefine" \norm
+\DeclarePairedDelimiter\norm{\lVert}{\rVert}
+
+% Operators
+\DeclareMathOperator*{\minimise}{minimise}
+\DeclareMathOperator*{\maximise}{maximise}
+
+\newcommand{\sScenarioSets}{\quad \forall \iYear \in \sYears \quad \forall \iScenario \in \sScenarios \quad \forall \iInterval \in \sIntervals}
+
+\begin{document}
+	\maketitle
+	
+	\section{Notation}
+	\renewcommand*{\arraystretch}{1.3}
+	\begin{longtable}{ p{.09\textwidth}  p{.75\textwidth}}
+		\textbf{Symbol} & \textbf{Description}\\
+		\hline\hline
+		\multicolumn{2}{l}{\textbf{Indices}}\\
+		$\iGenerator$ & Generator\\ 
+		$\iYear$ & Year\\
+		$\iYearAlias$ & Year alias\\
+		$\iYearTerminal$ & Final year in model horizon\\
+		$\iScenario$ & Scenario\\
+		$\iScenarioAlias$ & Scenario alias\\
+		$\iInterval$ & Interval\\
+		$\iIntervalAlias$ & Interval alias\\
+		$\iIntervalTerminal$ & Final interval\\
+		$\iZone$ & NEM zone\\
+		$\iRegion$ & NEM region\\
+		$\iLink$ & Link connecting adjacent NEM zones\\
+		& \\
+		\multicolumn{2}{l}{\textbf{Sets}}\\
+		$\sGenerators$ & All generators\\
+		$\sGeneratorsExisting$ & Existing generators\\
+		$\sGeneratorsExistingThermal$ & Existing thermal generators\\
+		$\sGeneratorsExistingWind$ & Existing wind units\\
+		$\sGeneratorsExistingSolar$ & Existing solar units\\
+		$\sGeneratorsCandidate$ & Candidate generators\\
+		$\sGeneratorsCandidateThermal$ & Candidate thermal generators\\
+		$\sGeneratorsCandidateWind$ & Candidate wind units\\
+		$\sGeneratorsCandidateSolar$ & Candidate solar units\\
+		$\sGeneratorsThermal$ & All thermal generators\\
+		$\sGeneratorsHydro$ & Hydro generators\\
+		$\sStorage$ & All storage units\\
+		$\sStorageExisting$ & Existing storage units\\
+		$\sStorageCandidate$ & Candidate storage units\\
+		$\sYears$ & Years in model horizon\\
+		$\sScenarios$ & Operating scenarios\\
+		$\sIntervals$ & Time intervals\\
+		$\sZones$ & NEM zones\\
+		$\sRegions$ & NEM regions\\
+		$\sLinks$ & Links connecting NEM zones\\
+		$\sScenariosYear$ & Operating scenarios constituting with year $\iYear$\\
+		& \\
+		\multicolumn{2}{l}{\textbf{Variables}}\\
+		$\vBaseline$ & Emissions intensity baseline [tCO$_{2}$/MWh]\\
+		$\vPermitPrice$ & Permit price [\$/tCO$_{2}$]\\
+		$\vPower$ & Generator power output [MW]\\
+		$\vPowerIn$ & Storage unit charging power [MW]\\
+		$\vPowerOut$ & Storage unit discharging power [MW]\\
+		$\vEnergy$ & Energy output [MWh]\\
+		$\vStorageUnitEnergy$ & Energy within storage unit [MWh]\\
+		$\vLostLoadPower$ & Lost load power [MW]\\
+		$\vLostLoadEnergy$ & Lost load energy [MWh]\\
+		$\vPowerFlow$ & Powerflow over link connecting adjacent NEM zones [MW]\\
+		$\vInstalledCapacity$ & Capacity installed in year $\iYear$ [MW]\\
+		$\vInstalledCapacityTotal$ & Total capacity available in year $\iYear$ [MW]\\
+		& \\
+		\multicolumn{2}{l}{\textbf{Parameters}}\\
+		$\cObjectiveFunction$ & Total cost over model horizon [\$]\\
+		$\cTotalPresentValue$ & Total present value of operating, investment, and FOM costs [\$]\\
+		$\cInvestmentCost$ & Total investment cost [\$]\\
+		$\cFixedOperationsMaintenanceCost$ & Total fixed operations and maintenance cost for year $\iYear$ [\$]\\
+		$\cEmissionsViolationTotalCost$ & Cost of violating emissions target [\$]\\
+		$\cOperatingCostScenario$ & Total cost for scenario $\iScenario$ in year $\iYear$ [\$]\\
+		$\cOperatingCost$ & Total operating cost for scenario $\iScenario$ in year $\iYear$ [\$]\\
+		$\cOperatingCostThermal$ & Cost to operate thermal units for scenario $\iScenario$ in year $\iYear$ [\$]\\
+		$\cOperatingCostHydro$ & Cost to operate hydro units for scenario $\iScenario$ in year $\iYear$ [\$]\\
+		$\cOperatingCostWind$ & Cost to operate wind units for scenario $\iScenario$ in year $\iYear$ [\$]\\
+		$\cOperatingCostSolar$ & Cost to operate solar units for scenario $\iScenario$ in year $\iYear$ [\$]\\
+		$\cOperatingCostStorage$ & Cost to operate storage units for scenario $\iScenario$ in year $\iYear$ [\$]\\
+		$\cOperatingCostLostLoad$ & Lost load cost [\$]\\
+		$\cCandidateInvestmentCost$ & Candidate unit investment cost [\$/MW]\\
+		$\cLostLoadCost$ & Lost load penalty [\$/MWh]\\
+		$\cFixedOperationsMaintenanceCostGenerator$ & Fixed operations and maintenance cost for generator $\iGenerator$ [\$]\\
+		$\cEmissionsTargetViolationPenalty$ & Emissions target violation penalty [\$/tCO$_{2}$]\\
+		$\cMarginalCost$ & Short-run marginal cost [\$/MWh]\\
+		$\cAmortisationRate$ & Amorisation rate [--]\\
+		$\cInterestRate$ & Interest rate (weighted average cost of capital) [--]\\
+		$\cAssetLifetime$ & Asset lifetime [years]\\
+		$\cScenarioDuration$ & Scenario duration [h]\\
+		$\cRetirementIndicator$ & Retirement indicator [--]\\
+		$\cEmissionsIntensity$ & Emissions intensity for generator $\iGenerator$\\
+		$\cPowerOutputMax$ & Maximum power output [MW]\\
+		$\cPowerOutputMin$ & Minimum power output [MW]\\
+		$\cPowerOutputHydro$ & Hydro power output [MW]\\
+		$\cRampRateUp$ & Ramp rate up (normal operation) [MW/h]\\
+		$\cRampRateDown$ & Ramp down up (normal operation) [MW/h]\\
+		$\cPowerChargingMax$ & Storage unit maximum charging power [MW]\\
+		$\cPowerDischargingMax$ & Storage unit maximum discharging power [MW]\\
+		$\cStorageUnitEnergyMax$ & Storage unit maximum energy capacity [MWh]\\
+		$\cStorageUnitEnergyIntervalEndMax$ & Storage unit maximum energy at end of operating scenario [MWh]\\
+		$\cStorageUnitEnergyIntervalEndMin$ & Storage unit minimum energy at end of operating scenario [MWh]\\
+		$\cStorageUnitEfficiencyCharging$ & Storage unit charging efficiency [--]\\
+		$\cStorageUnitEfficiencyDischarging$ & Storage unit discharging efficiency [--]\\
+		$\cDemand$ & Demand [MW]\\
+		$\cReserveUpRequirement$ & Minimum up reserve requirement [MW]\\
+		$\cCapacityFactorWind$ & Capacity factor for wind units [--]\\
+		$\cCapacityFactorSolar$ & Capacity factor for solar units [--]\\
+		$\cBuildLimitWind$ & Build limit for wind units in zone $\iZone$ [MW]\\
+		$\cBuildLimitSolar$ & Build limit for solar units in zone $\iZone$ [MW]\\
+		$\cBuildLimitStorage$ & Build limit for storage units in zone $\iZone$ [MW]\\
+		$\cIncidenceMatrix$ & Network incidence matrix [--]\\
+		$\cPowerFlowMin$ & Minimum powerflow over link $\iLink$ [MW]\\
+		$\cPowerFlowMax$ & Maximum powerflow over link $\iLink$ [MW]\\
+		$\cEmissionsTotal$ & Total emissions [tCO$_{2}$]\\
+		$\cEmmissionsCumulativeTarget$ & Cumulative emissions target [tCO$_{2}$]\\
+		$\cSchemeRevenueCumulativeTarget$ & Cumulative scheme revenue target [\$]\\
+		\hline
+		\caption{Notation}
+	\end{longtable}
+
+\section{Price setting algorithm}
+Price targeting objectives can be achieved by first identifying price setting generators, and which then allows nodal prices to be parametrised as a function of policy variables (namely the emissions intensity baseline). dispatch interval and NEM zone, the generator that sets the price for that zone is identified. This is accomplished by observing the price for that zone, given by the dual variable of the power balance constraint, and comparing this with the short-run marginal costs of all generators within the network. 
+
+\begin{equation}
+	\iGenerator^{\star}_{\iZone,\iYear,\iScenario,\iInterval} = \arg\min \left(\norm{\mathbf{c}(\mathbf{\iGenerator}, \iYear) - \dPowerBalance}_{1}\right)
+\end{equation}
+
+The marginal cost of each generator is given by:
+
+\begin{equation}
+	c(\iGenerator, \iYear) = A_{\iGenerator} + \left(\cEmissionsIntensity - \vBaseline\right) \vPermitPrice
+\end{equation}
+
+By knowing the price setting generator, the marginal price for a given zone and dispatch interval can be approximated based off of the price setting generator's marginal cost function.
+
+\begin{equation}
+	\hat{\dPowerBalance[]}_{\iZone,\iYear,\iScenario,\iInterval} = A_{\iGenerator^{\star}} + \left(\cEmissionsIntensity[\iGenerator^{\star}] - \vBaseline\right) \vPermitPrice
+\end{equation}
+
+Approximation for total revenue over all dispatch intervals in a given year:
+
+\begin{equation}
+	\mathrm{REVENUE}_{\iYear} = \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals}\sum\limits_{\iZone \in \sZones} \hat{\dPowerBalance[]}_{\iZone,\iYear,\iScenario,\iInterval} \cDemand
+\end{equation}
+
+Total demand in a given year:
+
+\begin{equation}
+\mathrm{DEMAND}_{\iYear} = \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals}\sum\limits_{\iZone \in \sZones} \cDemand
+\end{equation}
+
+Average price:
+
+\begin{equation}
+	\mathrm{PRICE}_{\iYear} = \frac{\mathrm{REVENUE}_{\iYear}}{\mathrm{DEMAND}_{\iYear}}
+\end{equation}
+
+Price targeting objective:
+\begin{equation}
+	\mathrm{OBJ} = \sum\limits_{\iYear \in \sYears} \norm{\mathrm{PRICE}_{\iYear-1} - \mathrm{PRICE}_{\iYear}}_{1}
+\end{equation}
+
+Note that in the first year $\iYear - 1$ is not defined. In this year $\mathrm{PRICE}_{\iYear-1}$ is set equal to the price arising in the first year of the model horizon under the business-as-usual case.
+
+Scheme revenue obtained for a given year. Note that power output is fixed to the value obtained in the carbon tax program. Changing the baseline's value should have no impact on the merit order, and by extension power output from individual generators:
+
+\begin{equation}
+	R_{\iYear} = \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGenerators} \left(\cEmissionsIntensity - \vBaseline \right) \vPermitPrice \hat{\vPower[]}_{\iGenerator,\iYear,\iScenario,\iInterval}
+\end{equation}
+
+Revenue neutrality constraint (entire model horizon):
+\begin{equation}
+	\sum\limits_{\iYear \in \sYears} R_{\iYear} = 0
+\end{equation}
+
+Revenue neutrality constraint (up to transition year):
+\begin{equation}
+	\sum\limits_{\iYear \in \bar{\sYears}} R_{\iYear} = 0
+\end{equation}
+
+Cumulative revenue constraint lower-bound:
+\begin{equation}
+	\sum\limits_{\iYear=\iYearStart}^{\iYearAlias} R_{\iYear} \geq \underline{R} \quad \forall \iYearAlias \in \left[\iYearStart, \iYearStart + 1, \ldots, \iYearTerminal \right] 
+\end{equation}
+
+\section{Cases}
+\subsection{Business-as-usual}
+This case serves as a benchmark. The permit price and baseline are set = 0 for all years.
+
+\subsection{Carbon tax}
+A carbon tax of 40 \$/MWh is imposed for all years of the model horizon. The baseline = 0 for all years.
+
+\subsection{Refunded Emissions Payment Scheme}
+A carbon price of 40 \$/MWh is imposed for all years of the model horizon. The revenue collected in each year is refunded to generators in proportion to their output. Operationally, this is the same as establishing an emissions intensity baseline equal to the average emissions intensity of energy falling under the scheme's remit. This case is solved first taking the carbon tax solution, and identifying the average emissions intensity from regulated generators. The baselines are then set equal to these emissions intensity values for each year in the model horizon. The primal program is re-solved. If the difference in installed capacity is sufficiently small between this new solution and the carbon tax case, then stop, else compute the new average emissions intensities, update the baselines and re-solve.
+
+\subsection{Price smoothing - revenue neutrality over entire horizon}
+A carbon price of 40 \$/MWh is imposed, with the baselines initially set equal to the average emissions intensities of regulated generators. Information from the primal program is used to solve an auxiliary program that calibrates the emissions intensity baseline. The baselines are updated and the model re-solved. If the max difference between the capacity sizing variable solution is sufficiently close to that obtained in the previous iteration, and the price setting generators have not changed, end, else repeat from the step where the auxiliary program is solved.
+
+\subsection{Price smoothing - revenue neutrality over entire horizon with lower cumulative revenue constraint}
+A carbon price of 40 \$/MWh is imposed. Scheme revenue is made to be neutral over the model horizon. Scheme revenue may be positive or negative in each year, but cumulative scheme revenue (as defined from the start of the horizon) may not fall below some lower limit. 
+
+
+\subsection{Price smoothing - revenue neutrality for transitional period}
+A carbon price of 40 \$/MWh is imposed. Revenue up until the transitional year may be positive or negative. From the transitional year onwards net scheme revenue = 0 in all years for the remainder of the model horizon.
+
+\section{Solution algorithm}
+
+\begin{figure}
+	\centering
+	\includegraphics{./price_setting_algorithm.pdf}
+	\caption{Solution algorithm}
+\end{figure}
+
+
+
+\end{document}

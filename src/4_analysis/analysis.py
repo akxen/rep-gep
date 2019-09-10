@@ -90,11 +90,14 @@ class AnalyseResults:
         # Demand scaled by scenario duration
         df_c['demand_scaled'] = df_c['demand'].mul(df_c['duration'])
 
-        # Average price for each scenario
-        df_c['average_price'] = df_c['revenue_scaled'].div(df_c['demand_scaled'])
+        # Average price for each scenario - discounted
+        df_c['average_price_discounted'] = df_c['revenue_scaled'].div(df_c['demand_scaled'])
 
         # Discount factor
         df_c['discount_factor'] = df_c.apply(lambda x: 1.06 ** (x.name[0] - 2016), axis=1)
+
+        # Average price for each scenario - discounted
+        df_c['average_price_real'] = df_c['average_price_discounted'].mul(df_c['discount_factor'])
 
         return df_c
 
