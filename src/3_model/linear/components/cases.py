@@ -703,6 +703,71 @@ class ModelCases:
 
         return results
 
+    def run_carbon_tax_fixed_capacity_case(self, output_dir, final_year, scenarios_per_year, permit_prices):
+        """
+        Run carbon tax case (baseline = 0 for all years in model horizon). After first run fix capacity variables
+        and re-solve. Gives updated prices
+        """
+
+        # Results to extract
+        result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
+                       'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'C_MC', 'ETA',
+                       'DELTA', 'RHO', 'EMISSIONS_RATE']
+
+        # Baselines = 0 for all years in model horizon
+        baselines = {y: float(0) for y in range(2016, final_year + 1)}
+
+        # Initialise object and model used to run primal model
+        primal = Primal(final_year, scenarios_per_year)
+        m = primal.construct_model()
+
+        # Fix permit prices and baselines
+        for y in m.Y:
+            m.permit_price[y].fix(permit_prices[y])
+            m.baseline[y].fix(baselines[y])
+
+        print('Solving primal - first run')
+        m, status = primal.solve_model(m)
+
+        print('Fixing capacity variables')
+        m.x_c.fix()
+
+        print('Re-solving with fixed capacity variables')
+        m, status = primal.solve_model(m)
+
+        # Model results
+        results = {k: self.extract_result(m, k) for k in result_keys}
+
+        # Map between dual variable names and their associated constraints in the primal program
+        dual_constraint_map = {'SIGMA_1': 'MIN_POWER_CONS',
+                               'SIGMA_2': 'MAX_POWER_EXISTING_THERMAL',
+                               'SIGMA_3': 'MAX_POWER_CANDIDATE_THERMAL',
+                               'SIGMA_4': 'MAX_POWER_EXISTING_WIND',
+                               'SIGMA_5': 'MAX_POWER_CANDIDATE_WIND',
+                               'SIGMA_6': 'MAX_POWER_EXISTING_SOLAR',
+                               'SIGMA_7': 'MAX_POWER_CANDIDATE_SOLAR',
+                               'SIGMA_8': 'MAX_POWER_EXISTING_HYDRO',
+                               'SIGMA_9': 'MIN_POWER_IN_STORAGE',
+                               'SIGMA_10': 'MIN_POWER_OUT_STORAGE',
+                               'SIGMA_11': 'MAX_POWER_IN_EXISTING_STORAGE',
+                               'SIGMA_12': 'MAX_POWER_IN_CANDIDATE_STORAGE',
+                               'SIGMA_13': 'MAX_POWER_OUT_EXISTING_STORAGE',
+                               'SIGMA_14': 'MAX_POWER_OUT_CANDIDATE_STORAGE',
+                               'SIGMA_20': 'RAMP_UP',
+                               'SIGMA_23': 'RAMP_DOWN',
+                               'ZETA_1': 'ENERGY_TRANSITION_STORAGE',
+                               'PRICES': 'POWER_BALANCE',
+                               }
+
+        # Extract dual variable values
+        for k, v in dual_constraint_map.items():
+            results[k] = {i: m.dual[m.__getattribute__(v)[i]] for i in m.__getattribute__(v).keys()}
+
+        # Save results
+        self.save_results(results, output_dir, 'carbon_tax_fixed_capacity_case.pickle')
+
+        return results
+
 
 if __name__ == '__main__':
     output_directory = '.'

@@ -7,20 +7,19 @@ sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.
 
 import pickle
 
-import numpy as np
-import pandas as pd
 from pyomo.environ import *
 from pyomo.util.infeasible import log_infeasible_constraints
 
-from base.components import CommonComponents
-
+from prices import PriceSetter
 from analysis import AnalyseResults
+from base.components import CommonComponents
 
 
 class BaselineUpdater:
-    def __init__(self, final_year, scenarios_per_year, results_dir):
+    def __init__(self, final_year, scenarios_per_year):
         self.common = CommonComponents(final_year, scenarios_per_year)
-        self.analysis = AnalyseResults(results_dir)
+        self.analysis = AnalyseResults()
+        self.prices = PriceSetter()
 
         # Solver options
         self.keepfiles = False
@@ -70,32 +69,32 @@ class BaselineUpdater:
 
         return m
 
-    def define_expressions(self, m, filename, use_cache):
+    def define_expressions(self, m, filename):
         """Define model expressions"""
 
         # Find price setting generators for each dispatch interval
         if use_cache:
-            with open(os.path.join(os.path.dirname(__file__), 'tmp', 'price_setters.pickle'), 'rb') as f:
-                price_setters = pickle.load(f)
+            with open(os.path.join(os.path.dirname(__file__), 'tmp', 'price_details.pickle'), 'rb') as f:
+                price_details = pickle.load(f)
 
         else:
             # Load perform computations to find price setting generators and save results
-            price_setters = self.get_price_setting_generators(m, filename)
-            with open(os.path.join(os.path.dirname(__file__), 'tmp', 'price_setters.pickle'), 'wb') as f:
-                pickle.dump(price_setters, f)
+            price_details = self.get_price_setting_generators(m, filename)
+            with open(os.path.join(os.path.dirname(__file__), 'tmp', 'price_details.pickle'), 'wb') as f:
+                pickle.dump(price_details, f)
 
         # Convert to dict for faster lookups
-        price_setters_dict = price_setters.to_dict()
+        price_setters_dict = price_details['price_setters'].to_dict()
 
         def approximate_price_rule(_m, z, y, s, t):
             """Approximated price from price setting generator"""
 
             # DUID of the price setting generator
-            g = price_setters_dict['generator'][(y, s, t, z)]
+            g = price_setters_dict['generator'][(y, s, z, t)]
 
             # Under load shedding changes to the baseline do not change marginal costs
             if g == 'LOAD-SHEDDING':
-                return float(price_setters_dict['price'][(y, s, t, z)])
+                return float(price_setters_dict['price'][(y, s, z, t)])
 
             # Eligible generators can receive a rebate / penalty
             elif g in m.G_ELIGIBLE:
@@ -255,7 +254,7 @@ class BaselineUpdater:
         m = self.define_variables(m)
 
         # Define expressions
-        m = self.define_expressions(m, filename, use_cache)
+        m = self.define_expressions(m, filename)
 
         # Define constraints
         m = self.define_constraints(m)
@@ -285,81 +284,6 @@ class BaselineUpdater:
 
         return m
 
-    def get_generator_cost_parameters(self, filename, eligible_gens):
-        """
-        Get parameters affecting generator marginal costs, and compute the net marginal cost for a given policy
-        """
-
-        # Model results
-        results = self.analysis.load_results(filename)
-
-        # Price setting algorithm
-        costs = pd.Series(results['C_MC']).rename_axis(['generator', 'year']).to_frame(name='marginal_cost')
-
-        # Add emissions intensity baseline
-        costs = costs.join(pd.Series(results['baseline']).rename_axis('year').to_frame(name='baseline'), how='left')
-
-        # Add permit price
-        costs = (costs.join(pd.Series(results['PERMIT_PRICE']).rename_axis('year')
-                            .to_frame(name='PERMIT_PRICE'), how='left'))
-
-        # Emissions intensities for existing and candidate units
-        existing_emissions = baseline.analysis.data.existing_units.loc[:, ('PARAMETERS', 'EMISSIONS')]
-        candidate_emissions = baseline.analysis.data.candidate_units.loc[:, ('PARAMETERS', 'EMISSIONS')]
-
-        # Combine emissions intensities into a single DataFrame
-        emission_intensities = (pd.concat([existing_emissions, candidate_emissions]).rename_axis('generator')
-                                .to_frame('emissions_intensity'))
-
-        # Join emissions intensities
-        costs = costs.join(emission_intensities, how='left')
-
-        # Total marginal cost (taking into account net cost under policy)
-        costs['net_marginal_cost'] = (costs['marginal_cost']
-                                      + (costs['emissions_intensity'] - costs['baseline']) * costs['PERMIT_PRICE'])
-
-        # Update costs so only eligible generators have new costs (ineligible generators have unchanged costs)
-        costs['net_marginal_cost'] = (costs.apply(lambda x: x['net_marginal_cost'] if x.name[0] in eligible_gens else x['marginal_cost'], axis=1))
-
-        return costs
-
-    def get_price_setting_generators(self, m, filename):
-        """Find price setting generators"""
-
-        # Prices
-        prices = self.analysis.parse_prices(filename)
-
-        # Generator SRMC and cost parameters (emissions intensities, baselines, permit prices)
-        generator_costs = self.get_generator_cost_parameters(filename, m.G_ELIGIBLE)
-
-        def get_price_setting_generator(row):
-            """Get price setting generator, price difference, and absolute real price"""
-
-            # Year and average real price for a given row
-            year, price = row.name[0], row['average_price_real']
-
-            # Absolute difference between price and all generator SRMCs
-            abs_price_difference = generator_costs.loc[(slice(None), year), 'net_marginal_cost'].subtract(price).abs()
-
-            # Price setting generator and absolute price difference for that generator
-            generator, difference = abs_price_difference.idxmin()[0], abs_price_difference.min()
-
-            # Generator SRMC
-            srmc = generator_costs.loc[(generator, year), 'net_marginal_cost']
-
-            # Update generator name to load shedding if price very high (indicative of load shedding)
-            if difference > 9000:
-                generator = 'LOAD-SHEDDING'
-                difference = np.nan
-                srmc = np.nan
-
-            return pd.Series({'generator': generator, 'difference': difference, 'price': price, 'srmc': srmc})
-
-        # Find price setting generators
-        price_setters = prices.apply(get_price_setting_generator, axis=1)
-
-        return price_setters
-
     def solve_model(self, m):
         """Solve model"""
 
@@ -380,17 +304,24 @@ if __name__ == '__main__':
     output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'local')
 
     # Results file to load
-    results_filename = 'carbon_tax_case.pickle'
+    results_filename = 'carbon_tax_fixed_capacity_case.pickle'
 
     # Object used to compute baseline trajectory
-    baseline = BaselineUpdater(final_year_model, scenarios_per_year_model, output_directory)
+    baseline = BaselineUpdater(final_year_model, scenarios_per_year_model)
+
+    # Model results
+    r = baseline.analysis.load_results(results_filename)
 
     # Construct model
-    model = baseline.construct_model(results_filename, use_cache=True)
+    model = baseline.construct_model(results_filename, use_cache=False)
 
-    # Update parameters
-    model = baseline.update_parameters(model, results_filename)
+    # Price setter details
+    with open(os.path.join(os.path.dirname(__file__), 'tmp', 'price_details.pickle'), 'rb') as f:
+        details = pickle.load(f)
 
-    # Solve model
-    model.REVENUE_NEUTRAL_HORIZON.activate()
-    model, status = baseline.solve_model(model)
+    # # Update parameters
+    # model = baseline.update_parameters(model, results_filename)
+    #
+    # # Solve model
+    # model.REVENUE_NEUTRAL_HORIZON.activate()
+    # model, status = baseline.solve_model(model)

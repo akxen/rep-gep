@@ -22,7 +22,9 @@ if __name__ == '__main__':
     permit_prices = {y: float(40) for y in range(start_year, final_year + 1)}
 
     # Business-as-usual case
-    bau_res = cases.run_bau_case(output_directory, final_year, scenarios_per_year, mode='primal')
+    # bau_res = cases.run_bau_case(output_directory, final_year, scenarios_per_year, mode='primal')
 
     # Carbon tax
-    carbon_tax_res = cases.run_carbon_tax_case(output_directory, final_year, scenarios_per_year, permit_prices)
+    # carbon_tax_res = cases.run_carbon_tax_case(output_directory, final_year, scenarios_per_year, permit_prices)
+    carbon_tax_res = cases.run_carbon_tax_fixed_capacity_case(output_directory, final_year, scenarios_per_year,
+                                                              permit_prices)

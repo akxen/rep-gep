@@ -14,27 +14,24 @@ from data import ModelData
 
 
 class AnalyseResults:
-    def __init__(self, results_dir):
+    def __init__(self):
         self.data = ModelData()
-        self.results_dir = results_dir
 
-    def load_results(self, filename):
+    @staticmethod
+    def load_results(results_dir, filename):
         """Load model results"""
 
-        # Path to model results
-        path = os.path.join(self.results_dir, filename)
-
         # Load results
-        with open(path, 'rb') as f:
+        with open(os.path.join(results_dir, filename), 'rb') as f:
             results = pickle.load(f)
 
         return results
 
-    def parse_prices(self, filename):
+    def parse_prices(self, results_dir, filename):
         """Get price information - keys will be different for primal and MPPDC models"""
 
         # Load results
-        results = self.load_results(filename)
+        results = self.load_results(results_dir, filename)
 
         if 'PRICES' in results.keys():
             # Extract price information
@@ -101,32 +98,32 @@ class AnalyseResults:
 
         return df_c
 
-    def get_year_system_emissions_intensities(self, filename):
+    def get_year_system_emissions_intensities(self, results_dir, filename):
         """Get yearly emissions intensities for they system"""
 
         # Results dictionary
-        results = self.load_results(filename)
+        results = self.load_results(results_dir, filename)
 
         # Emissions intensities for each year in model horizon
         df = pd.Series(results['YEAR_EMISSIONS_INTENSITY']).rename_axis('year').to_frame(name='emissions_intensity')
 
         return df
 
-    def plot_year_system_emissions_intensities(self, filename):
+    def plot_year_system_emissions_intensities(self, results_dir, filename):
         """Plot system emissions intensities for each year in model horizon"""
 
         # Get emissions intensities for each year in model horizon
-        df = self.get_year_system_emissions_intensities(filename)
+        df = self.get_year_system_emissions_intensities(results_dir, filename)
 
         # Plot emissions intensities
         df.plot()
         plt.show()
 
-    def get_installed_capacity(self, filename):
+    def get_installed_capacity(self, results_dir, filename):
         """Get installed capacity for each year of model horizon (candidate units)"""
 
         # Results dictionary
-        results = self.load_results(filename)
+        results = self.load_results(results_dir, filename)
 
         # Total installed candidate capacity for each year in model horizon
         df = (pd.Series(results['x_c']).rename_axis(['unit', 'year'])
@@ -134,21 +131,21 @@ class AnalyseResults:
 
         return df
 
-    def plot_installed_capacity(self, filename):
+    def plot_installed_capacity(self, results_dir, filename):
         """Plot installed capacity for each candidate unit"""
 
         # Total installed candidate capacity for each year in model horizon
-        df = self.get_installed_capacity(filename)
+        df = self.get_installed_capacity(results_dir, filename)
 
         # Plot of all candidate units with positive capacity installed over model horizon
         df.loc[:, ~df.eq(0).all(axis=0)].plot()
         plt.show()
 
-    def get_lost_load(self, filename):
+    def get_lost_load(self, results_dir, filename):
         """Analyse lost-load for given years in model horizon"""
 
         # Results dictionary
-        results = self.load_results(filename)
+        results = self.load_results(results_dir, filename)
 
         # Load lost
         df = pd.Series(results['p_V']).rename_axis(['zone', 'year', 'scenario', 'hour']).to_frame('lost_load')
@@ -172,11 +169,11 @@ class AnalyseResults:
 
         return self.data.input_traces.loc[year, trace].T.rename_axis(['zone', 'interval'])
 
-    def get_year_average_price(self, filename):
+    def get_year_average_price(self, results_dir, filename):
         """Compute average prices for each year"""
 
         # Get discounted and scaled prices for each scenario (with demand and duration)
-        prices = self.parse_prices(filename)
+        prices = self.parse_prices(results_dir, filename)
 
         # Average discounted prices
         df = (prices.groupby('year').apply(lambda x: x['revenue_scaled'].sum() / x['demand_scaled']
@@ -237,11 +234,11 @@ class AnalyseResults:
         ax.set_title(f'Demand duration curve - {year}')
         plt.show()
 
-    def get_interval_generator_output(self, filename):
+    def get_interval_generator_output(self, results_dir,  filename):
         """Get generator output for each interval along with capacity, zone, region, and fuel type information"""
 
         # Results from primal model
-        results = self.load_results(filename)
+        results = self.load_results(results_dir, filename)
 
         # Generator output
         df = pd.Series(results['p']).rename_axis(['generator', 'year', 'scenario', 'interval']).to_frame('output')
@@ -301,19 +298,19 @@ class AnalyseResults:
 
         return df_merged
 
-    def get_total_emissions(self, filename):
+    def get_total_emissions(self, results_dir, filename):
         """Compute total emissions over model horizon"""
 
         # Results from model
-        results = self.load_results(filename)
+        results = self.load_results(results_dir, filename)
 
         return sum(results['YEAR_EMISSIONS'].values())
 
-    def get_year_emissions(self, filename):
+    def get_year_emissions(self, results_dir, filename):
         """Get total emissions in each year of model horizon"""
 
         # Results from model
-        results = self.load_results(filename)
+        results = self.load_results(results_dir, filename)
 
         return results['YEAR_EMISSIONS']
 
@@ -323,10 +320,10 @@ if __name__ == '__main__':
     results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'local')
 
     # Object used to analyse results
-    analysis = AnalyseResults(results_directory)
+    analysis = AnalyseResults()
 
     # Average price
-    average_price = analysis.get_year_average_price('primal_bau_case.pickle')
+    average_price = analysis.get_year_average_price(results_directory, 'primal_bau_case.pickle')
 
     # lost_load = analysis.get_lost_load()
     # Output as a proportion of capacity available in each region
