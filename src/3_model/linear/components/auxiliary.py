@@ -69,38 +69,47 @@ class BaselineUpdater:
 
         return m
 
-    def define_expressions(self, m, filename):
+    def get_and_save_price_setting_generators(self, output_dir, filename):
+        """Find price setting generators for given case results"""
+
+        # Find price setting generators and save results
+        price_details = self.prices.get_price_setting_generators_from_model_results(output_dir, filename)
+
+        # Update name based on case file
+        new_name = f"{filename.split('.')[0]}_price_setting_generators.pickle"
+
+        # Save results
+        with open(os.path.join(output_dir, new_name), 'wb') as f:
+            pickle.dump(price_details, f)
+
+        return price_details
+
+    @staticmethod
+    def define_expressions(m, output_dir, filename):
         """Define model expressions"""
 
-        # Find price setting generators for each dispatch interval
-        if use_cache:
-            with open(os.path.join(os.path.dirname(__file__), 'tmp', 'price_details.pickle'), 'rb') as f:
-                price_details = pickle.load(f)
-
-        else:
-            # Load perform computations to find price setting generators and save results
-            price_details = self.get_price_setting_generators(m, filename)
-            with open(os.path.join(os.path.dirname(__file__), 'tmp', 'price_details.pickle'), 'wb') as f:
-                pickle.dump(price_details, f)
+        # Price setting generators for each dispatch interval
+        with open(os.path.join(output_dir, filename), 'rb') as f:
+            price_details = pickle.load(f)
 
         # Convert to dict for faster lookups
-        price_setters_dict = price_details['price_setters'].to_dict()
+        price_setters_dict = price_details.to_dict()
 
         def approximate_price_rule(_m, z, y, s, t):
             """Approximated price from price setting generator"""
 
             # DUID of the price setting generator
-            g = price_setters_dict['generator'][(y, s, z, t)]
+            g = price_setters_dict['generator'][(z, y, s, t)]
 
             # Under load shedding changes to the baseline do not change marginal costs
-            if g == 'LOAD-SHEDDING':
-                return float(price_setters_dict['price'][(y, s, z, t)])
+            if price_setters_dict['price_normalised'][(z, y, s, t)] >= 9000:
+                return float(price_setters_dict['price_normalised'][(z, y, s, t)])
 
-            # Eligible generators can receive a rebate / penalty
+            # Price as function of the marginal unit's cost function
             elif g in m.G_ELIGIBLE:
                 return m.C_MC[g, y] + (m.EMISSIONS_RATE[g] - m.baseline[y]) * m.PERMIT_PRICE[y]
 
-            # Ineligible generators have their marginal costs fixed
+            # Generator is ineligible to receive rebates
             else:
                 return m.C_MC[g, y]
 
@@ -232,7 +241,7 @@ class BaselineUpdater:
 
         return m
 
-    def construct_model(self, filename, use_cache):
+    def construct_model(self, output_dir, filename):
         """Construct baseline updating model"""
 
         # Initialise model object
@@ -253,8 +262,8 @@ class BaselineUpdater:
         # Define model variables
         m = self.define_variables(m)
 
-        # Define expressions
-        m = self.define_expressions(m, filename)
+        # Define expressions - expression based on model results. Therefore need to read from output_dir
+        m = self.define_expressions(m, output_dir, filename)
 
         # Define constraints
         m = self.define_constraints(m)
@@ -264,11 +273,11 @@ class BaselineUpdater:
 
         return m
 
-    def update_parameters(self, m, filename):
+    def update_parameters(self, m, output_dir, filename):
         """Update model parameters based on primal results"""
 
         # Primal results
-        results = self.analysis.load_results(filename)
+        results = self.analysis.load_results(output_dir, filename)
 
         # Common keys - eligible generators only
         common_keys = set(m.POWER.keys()) & set(results['p'].keys())
@@ -310,18 +319,19 @@ if __name__ == '__main__':
     baseline = BaselineUpdater(final_year_model, scenarios_per_year_model)
 
     # Model results
-    r = baseline.analysis.load_results(results_filename)
+    # price_setter_filename = 'carbon_tax_fixed_capacity_case_price_setting_generators.pickle'
+    # r = baseline.analysis.load_results(output_directory, price_setter_filename)
+
+    # Name of price setting file
+    price_setter_filename = f"{results_filename.split('.')[0]}_price_setting_generators.pickle"
+    # psg = baseline.get_and_save_price_setting_generators(output_directory, results_filename)
 
     # Construct model
-    model = baseline.construct_model(results_filename, use_cache=False)
+    model = baseline.construct_model(output_directory, price_setter_filename)
 
-    # Price setter details
-    with open(os.path.join(os.path.dirname(__file__), 'tmp', 'price_details.pickle'), 'rb') as f:
-        details = pickle.load(f)
+    # Update parameters
+    model = baseline.update_parameters(model, output_directory, results_filename)
 
-    # # Update parameters
-    # model = baseline.update_parameters(model, results_filename)
-    #
-    # # Solve model
-    # model.REVENUE_NEUTRAL_HORIZON.activate()
-    # model, status = baseline.solve_model(model)
+    # Solve model
+    model.REVENUE_NEUTRAL_HORIZON.activate()
+    model, status = baseline.solve_model(model)

@@ -225,82 +225,169 @@ class PriceSetter:
 
         return df
 
+    def get_constraint_body_existing_thermal(self, results_dir, filename):
+        """Get body of dual power output constraint for existing thermal generators"""
+
+        # Components of dual power output constraint
+        duals = self.get_dual_component_existing_thermal(results_dir, filename)
+
+        # Map between generators and zones
+        generators = duals.index.levels[0]
+        generator_zone_map = (pd.DataFrame.from_dict({g: self.k(g) for g in generators}, orient='index',
+                                                     columns=['zone']).rename_axis('generator'))
+
+        # Add NEM zone to index
+        duals = duals.join(generator_zone_map, how='left').set_index('zone', append=True)
+
+        # Power balance dual variables
+        var_index = ('zone', 'year', 'scenario', 'interval')
+        prices = self.convert_to_frame(results_dir, filename, var_index, 'PRICES')
+
+        # Merge price information
+        c = self.merge_generator_node_prices(duals, prices)
+
+        # Merge operating cost information
+        c = price_setter.merge_generator_cost_information(c, results_dir, filename)
+
+        return c
+
+    def evaluate_constraint_body_existing_thermal(self, results_dir, filename):
+        """Evaluate constraint body information for existing thermal units (should = 0)"""
+
+        # Get values of terms constituting the constraint
+        c = self.get_constraint_body_existing_thermal(results_dir, filename)
+
+        # Correct for all intervals excluding the last interval of each scenario
+        s_1 = (- c['SIGMA_1'].abs() + c['SIGMA_2'].abs() - c['PRICES'].abs()
+               + (c['DELTA'] * c['RHO'] * c['scaling_factor'] * (c['C_MC'] + (c['EMISSIONS_RATE'] - c['baseline'])
+                                                                 * c['permit_price']))
+               + c['SIGMA_20'].abs() - c['SIGMA_20_PLUS_1'].abs()
+               - c['SIGMA_23'].abs() + c['SIGMA_23_PLUS_1'].abs())
+
+        # Set last interval to NaN
+        s_1.loc[(slice(None), slice(None), slice(None), 24, slice(None))] = np.nan
+
+        # Last interval of each scenario
+        s_2 = (- c['SIGMA_1'].abs() + c['SIGMA_2'].abs() - c['PRICES'].abs()
+               + (c['DELTA'] * c['RHO'] * c['scaling_factor'] * (c['C_MC'] + (c['EMISSIONS_RATE'] - c['baseline'])
+                                                                 * c['permit_price']))
+               + c['SIGMA_20'].abs() - c['SIGMA_23'].abs())
+
+        # Update so corrected values for last interval are accounted for
+        s_3 = s_1.to_frame(name='body')
+        s_3.update(s_2.to_frame(name='body'), overwrite=False)
+
+        return s_3
+
+    def evaluate_constraint_dual_component_existing_thermal(self, results_dir, filename):
+        """Evaluate dual component of constraint"""
+
+        # Get values of terms constituting the constraint
+        c = self.get_constraint_body_existing_thermal(results_dir, filename)
+
+        # Dual component - correct for intervals excluding the last interval of each scenario
+        s_1 = (- c['SIGMA_1'].abs() + c['SIGMA_2'].abs() + c['SIGMA_20'].abs() - c['SIGMA_20_PLUS_1'].abs()
+               - c['SIGMA_23'].abs() + c['SIGMA_23_PLUS_1'].abs())
+
+        # Set last interval to NaN
+        s_1.loc[(slice(None), slice(None), slice(None), 24, slice(None))] = np.nan
+
+        # Dual component - correct for last interval of each scenario
+        s_2 = - c['SIGMA_1'].abs() + c['SIGMA_2'].abs() + c['SIGMA_20'].abs() - c['SIGMA_23'].abs()
+
+        # Combine components
+        s_3 = s_1.to_frame(name='body')
+        s_3.update(s_2.to_frame(name='body'), overwrite=False)
+
+        return s_3
+
+    def get_price_setting_generators_from_model_results(self, results_dir, filename):
+        """Find price setting generators"""
+
+        # Generators eligible for a rebate / penalty under the scheme
+        eligible_generators = self.get_eligible_generators()
+
+        # Generator costs
+        generator_costs = self.get_generator_cost_information(results_dir, filename)
+
+        # Get prices in each zone for each dispatch interval
+        index = ('zone', 'year', 'scenario', 'interval')
+        zone_price = self.convert_to_frame(results_dir, filename, index, 'PRICES')
+
+        def correct_permit_prices(row):
+            """Only eligible generators face a non-zero permit price"""
+
+            if row.name[1] in eligible_generators:
+                return row['permit_price']
+            else:
+                return 0
+
+        # Update permit prices
+        generator_costs['permit_price'] = generator_costs.apply(correct_permit_prices, axis=1)
+
+        # Net marginal costs
+        generator_costs['net_marginal_cost'] = (generator_costs['scaling_factor'] * generator_costs['DELTA']
+                                                * generator_costs['RHO'] * (generator_costs['C_MC']
+                                                                            + (generator_costs['EMISSIONS_RATE']
+                                                                               - generator_costs['baseline'])
+                                                                            * generator_costs['permit_price']))
+
+        def get_price_setter(row):
+            """Find generator whose marginal cost is closest to interval marginal cost"""
+
+            # Extract zone, year, scenario, and interval information
+            z, y, s, t = row.name
+
+            # Power balance constraint marginal cost for given interval (related to price)
+            p = abs(row['PRICES'])
+
+            # Net marginal costs of all generators for the given interval
+            generator_mc = generator_costs.loc[(y, slice(None), s), :]
+
+            # Scenario duration and discount factor (arbitrarily selecting YWPS4 to get a single row)
+            rho, delta = generator_costs.loc[(y, 'YWPS4', s), ['RHO', 'DELTA']].values
+
+            # Difference between marginal cost in given interval and all generator marginal costs for that interval
+            diff = generator_mc['net_marginal_cost'].subtract(p).abs()
+
+            # Extract generator ID and absolute cost difference
+            g, cost_diff = diff.idxmin(), diff.min()
+
+            # Details of the price setting generator
+            cols = ['EMISSIONS_RATE', 'baseline', 'permit_price', 'C_MC', 'net_marginal_cost', 'scaling_factor']
+            emissions_rate, baseline, permit_price, marginal_cost, net_marginal_cost, scaling_factor = generator_costs.loc[g, cols]
+
+            # Compute normalised price and cost differences
+            price_normalised = p / (delta * rho * scaling_factor)
+            cost_diff_normalised = cost_diff / (delta * rho)
+            net_marginal_cost_normalised = net_marginal_cost / (delta * rho * scaling_factor)
+
+            return (g[1], p, price_normalised, cost_diff, cost_diff_normalised, emissions_rate, baseline, permit_price,
+                    marginal_cost, net_marginal_cost, net_marginal_cost_normalised)
+
+        # Get price setting generator information
+        ps = zone_price.apply(get_price_setter, axis=1)
+
+        # Convert column of tuples to DataFrame with separate columns
+        columns = ['generator', 'price_abs', 'price_normalised', 'difference_abs', 'difference_normalised',
+                   'emissions_rate', 'baseline', 'permit_price', 'marginal_cost', 'net_marginal_cost',
+                   'net_marginal_cost_normalised']
+        ps = pd.DataFrame(ps.to_list(), columns=columns, index=zone_price.index)
+
+        return ps
+
 
 if __name__ == '__main__':
+    # Path and filename
     results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'local')
     results_filename = 'carbon_tax_fixed_capacity_case.pickle'
 
+    # Object used to parse model results and identify price setting generators
     price_setter = PriceSetter()
 
-    # Model results
-    r = price_setter.analysis.load_results(results_directory, results_filename)
+    # DataFrame of price setting generators
+    psg = price_setter.get_price_setting_generators_from_model_results(results_directory, results_filename)
 
-    # Generators eligible to receive a penalty / subsidy
-    eligible_gens = price_setter.get_eligible_generators()
-
-    # Find price setting generators and associated details
-    # price_details = price_setter.get_price_setting_generators(results_directory, results_filename, eligible_gens)
-
-    # with open(os.path.join(os.path.dirname(__file__), 'output', 'price_details.pickle'), 'wb') as f:
-    #     pickle.dump(price_details, f)
-
-    # Components of dual power output constraint
-    duals = price_setter.get_dual_component_existing_thermal(results_directory, results_filename)
-
-    # Map between generators and zones
-    generators = duals.index.levels[0]
-    generator_zone_map = (pd.DataFrame.from_dict({g: price_setter.k(g) for g in generators}, orient='index',
-                                                 columns=['zone']).rename_axis('generator'))
-
-    # Add NEM zone to index
-    duals = duals.join(generator_zone_map, how='left').set_index('zone', append=True)
-
-    # Power balance dual variables
-    var_index = ('zone', 'year', 'scenario', 'interval')
-    prices = price_setter.convert_to_frame(results_directory, results_filename, var_index, 'PRICES')
-
-    # Merge price information
-    df_b = price_setter.merge_generator_node_prices(duals, prices)
-
-    # Merge operating cost information
-    # df_b = price_setter.merge_generator_cost_information(df_b)
-    gen_cost = price_setter.get_generator_cost_information(results_directory, results_filename)
-
-    df_b = price_setter.merge_generator_cost_information(df_b, results_directory, results_filename)
-
-    # Correct for all intervals excluding the last interval of each scenario
-    s_1 = (- df_b['SIGMA_1'].abs() + df_b['SIGMA_2'].abs() - df_b['PRICES'].abs()
-           + (df_b['DELTA'] * df_b['RHO'] * df_b['scaling_factor'] * (df_b['C_MC']
-                                                                      + (df_b['EMISSIONS_RATE'] - df_b['baseline']) *
-                                                                      df_b['permit_price']))
-           + df_b['SIGMA_20'].abs() - df_b['SIGMA_20_PLUS_1'].abs()
-           - df_b['SIGMA_23'].abs() + df_b['SIGMA_23_PLUS_1'].abs())
-
-    # Set last interval to NaN
-    s_1.loc[(slice(None), slice(None), slice(None), 24, slice(None))] = np.nan
-
-    # Last interval of each scenario
-    s_2 = (- df_b['SIGMA_1'].abs() + df_b['SIGMA_2'].abs() - df_b['PRICES'].abs()
-           + (df_b['DELTA'] * df_b['RHO'] * df_b['scaling_factor'] * (df_b['C_MC']
-                                                                      + (df_b['EMISSIONS_RATE'] - df_b['baseline']) *
-                                                                      df_b['permit_price']))
-           + df_b['SIGMA_20'].abs() - df_b['SIGMA_23'].abs())
-
-    s_3 = s_1.to_frame(name='body')
-    s_3.update(s_2.to_frame(name='body'), overwrite=False)
-
-    # Dual component - correct for intervals excluding the last interval of each scenario
-    d_1 = (- df_b['SIGMA_1'].abs() + df_b['SIGMA_2'].abs()
-           + df_b['SIGMA_20'].abs() - df_b['SIGMA_20_PLUS_1'].abs()
-           - df_b['SIGMA_23'].abs() + df_b['SIGMA_23_PLUS_1'].abs())
-
-    # Set last interval to NaN
-    d_1.loc[(slice(None), slice(None), slice(None), 24, slice(None))] = np.nan
-
-    # Dual component - correct for last interval of each scenario
-    d_2 = (- df_b['SIGMA_1'].abs() + df_b['SIGMA_2'].abs()
-           + df_b['SIGMA_20'].abs() - df_b['SIGMA_23'].abs())
-
-    # Combine components
-    d_3 = d_1.to_frame(name='body')
-    d_3.update(d_2.to_frame(name='body'), overwrite=False)
+    # Save price setting generator results
+    with open(os.path.join(os.path.dirname(__file__), 'output', 'price_setting_generators.pickle'), 'wb') as f:
+        pickle.dump(psg, f)
