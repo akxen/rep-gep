@@ -29,11 +29,9 @@ class PriceSetter:
         # Model sets
         self.sets = self.get_model_sets()
 
-    def convert_to_frame(self, results_dir, filename, index_name, variable_name):
+    @staticmethod
+    def convert_to_frame(results, index_name, variable_name):
         """Convert dict to pandas DataFrame"""
-
-        # Load results dictionary
-        results = self.analysis.load_results(results_dir, filename)
 
         # Convert dictionary to DataFrame
         df = pd.Series(results[variable_name]).rename_axis(index_name).to_frame(name=variable_name)
@@ -143,7 +141,7 @@ class PriceSetter:
 
         return output
 
-    def get_dual_component_existing_thermal(self, results_dir, filename):
+    def get_dual_component_existing_thermal(self, results):
         """Get dual variable component of dual constraint for existing thermal units"""
 
         # def get_existing_thermal_unit_dual_information():
@@ -152,7 +150,7 @@ class PriceSetter:
         for v in ['SIGMA_1', 'SIGMA_2', 'SIGMA_20', 'SIGMA_23']:
             print(v)
             index = ('generator', 'year', 'scenario', 'interval')
-            dfs.append(self.convert_to_frame(results_dir, filename, index, v))
+            dfs.append(self.convert_to_frame(results, index, v))
 
         # Place all information in a single DataFrame
         df_c = pd.concat(dfs, axis=1).dropna()
@@ -190,16 +188,16 @@ class PriceSetter:
 
         return df
 
-    def get_generator_cost_information(self, results_dir, filename):
+    def get_generator_cost_information(self, results):
         """Merge generator cost information"""
 
         # Load results
-        delta = self.convert_to_frame(results_dir, filename, 'year', 'DELTA')
-        rho = self.convert_to_frame(results_dir, filename, ('year', 'scenario'), 'RHO')
-        emissions_rate = self.convert_to_frame(results_dir, filename, 'generator', 'EMISSIONS_RATE')
-        baseline = self.convert_to_frame(results_dir, filename, 'year', 'baseline')
-        permit_price = self.convert_to_frame(results_dir, filename, 'year', 'permit_price')
-        marginal_cost = self.convert_to_frame(results_dir, filename, ('generator', 'year'), 'C_MC')
+        delta = self.convert_to_frame(results, 'year', 'DELTA')
+        rho = self.convert_to_frame(results, ('year', 'scenario'), 'RHO')
+        emissions_rate = self.convert_to_frame(results, 'generator', 'EMISSIONS_RATE')
+        baseline = self.convert_to_frame(results, 'year', 'baseline')
+        permit_price = self.convert_to_frame(results, 'year', 'permit_price')
+        marginal_cost = self.convert_to_frame(results, ('generator', 'year'), 'C_MC')
 
         # Join information into single dataFrame
         df_c = marginal_cost.join(emissions_rate, how='left')
@@ -214,22 +212,22 @@ class PriceSetter:
 
         return df_c
 
-    def merge_generator_cost_information(self, df, results_dir, filename):
+    def merge_generator_cost_information(self, df, results):
         """Merge generator cost information from model"""
 
         # Get generator cost information
-        generator_cost_info = self.get_generator_cost_information(results_dir, filename)
+        generator_cost_info = self.get_generator_cost_information(results)
 
         df = (pd.merge(df.reset_index(), generator_cost_info.reset_index(), how='left')
               .set_index(['generator', 'year', 'scenario', 'interval', 'zone']))
 
         return df
 
-    def get_constraint_body_existing_thermal(self, results_dir, filename):
+    def get_constraint_body_existing_thermal(self, results):
         """Get body of dual power output constraint for existing thermal generators"""
 
         # Components of dual power output constraint
-        duals = self.get_dual_component_existing_thermal(results_dir, filename)
+        duals = self.get_dual_component_existing_thermal(results)
 
         # Map between generators and zones
         generators = duals.index.levels[0]
@@ -241,21 +239,21 @@ class PriceSetter:
 
         # Power balance dual variables
         var_index = ('zone', 'year', 'scenario', 'interval')
-        prices = self.convert_to_frame(results_dir, filename, var_index, 'PRICES')
+        prices = self.convert_to_frame(results, var_index, 'PRICES')
 
         # Merge price information
         c = self.merge_generator_node_prices(duals, prices)
 
         # Merge operating cost information
-        c = price_setter.merge_generator_cost_information(c, results_dir, filename)
+        c = price_setter.merge_generator_cost_information(c, results)
 
         return c
 
-    def evaluate_constraint_body_existing_thermal(self, results_dir, filename):
+    def evaluate_constraint_body_existing_thermal(self, results):
         """Evaluate constraint body information for existing thermal units (should = 0)"""
 
         # Get values of terms constituting the constraint
-        c = self.get_constraint_body_existing_thermal(results_dir, filename)
+        c = self.get_constraint_body_existing_thermal(results)
 
         # Correct for all intervals excluding the last interval of each scenario
         s_1 = (- c['SIGMA_1'].abs() + c['SIGMA_2'].abs() - c['PRICES'].abs()
@@ -279,11 +277,11 @@ class PriceSetter:
 
         return s_3
 
-    def evaluate_constraint_dual_component_existing_thermal(self, results_dir, filename):
+    def evaluate_constraint_dual_component_existing_thermal(self, results):
         """Evaluate dual component of constraint"""
 
         # Get values of terms constituting the constraint
-        c = self.get_constraint_body_existing_thermal(results_dir, filename)
+        c = self.get_constraint_body_existing_thermal(results)
 
         # Dual component - correct for intervals excluding the last interval of each scenario
         s_1 = (- c['SIGMA_1'].abs() + c['SIGMA_2'].abs() + c['SIGMA_20'].abs() - c['SIGMA_20_PLUS_1'].abs()
@@ -301,18 +299,18 @@ class PriceSetter:
 
         return s_3
 
-    def get_price_setting_generators_from_model_results(self, results_dir, filename):
+    def get_price_setting_generators_from_model_results(self, results):
         """Find price setting generators"""
 
         # Generators eligible for a rebate / penalty under the scheme
         eligible_generators = self.get_eligible_generators()
 
         # Generator costs
-        generator_costs = self.get_generator_cost_information(results_dir, filename)
+        generator_costs = self.get_generator_cost_information(results)
 
         # Get prices in each zone for each dispatch interval
         index = ('zone', 'year', 'scenario', 'interval')
-        zone_price = self.convert_to_frame(results_dir, filename, index, 'PRICES')
+        zone_price = self.convert_to_frame(results, index, 'PRICES')
 
         def correct_permit_prices(row):
             """Only eligible generators face a non-zero permit price"""
@@ -380,13 +378,17 @@ class PriceSetter:
 if __name__ == '__main__':
     # Path and filename
     results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'local')
-    results_filename = 'carbon_tax_fixed_capacity_case.pickle'
+    results_filename = 'carbon_tax_case.pickle'
+
+    # Load results
+    with open(os.path.join(results_directory, results_filename), 'rb') as f:
+        res = pickle.load(f)
 
     # Object used to parse model results and identify price setting generators
     price_setter = PriceSetter()
 
     # DataFrame of price setting generators
-    psg = price_setter.get_price_setting_generators_from_model_results(results_directory, results_filename)
+    psg = price_setter.get_price_setting_generators_from_model_results(res)
 
     # Save price setting generator results
     with open(os.path.join(os.path.dirname(__file__), 'output', 'price_setting_generators.pickle'), 'wb') as f:

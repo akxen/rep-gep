@@ -27,32 +27,21 @@ class AnalyseResults:
 
         return results
 
-    def parse_prices(self, results_dir, filename):
-        """Get price information - keys will be different for primal and MPPDC models"""
+    def parse_prices(self, prices, factor=-1):
+        """Get price information - keys will be different for primal and MPPDC models
 
-        # Load results
-        results = self.load_results(results_dir, filename)
+        Parameters
+        ----------
+        prices : dict
+            Prices for each zone, year, scenario and interval
 
-        if 'PRICES' in results.keys():
-            # Extract price information
-            prices = results['PRICES']
+        factor : int
+            Scale input prices by either 1 or -1 (depends if solver returns prices as negative values)
+        """
 
-            # Prices
-            df_p = (pd.Series(prices).rename_axis(['zone', 'year', 'scenario', 'interval'])
-                    .to_frame(name='price').mul(-1))
-
-        elif 'lamb' in results.keys():
-            # Load results
-            results = self.load_results('mppdc_bau_results.pickle')
-
-            # Extract price information
-            prices = results['lamb']
-
-            # Prices
-            df_p = pd.Series(prices).rename_axis(['zone', 'year', 'scenario', 'interval']).to_frame(name='price')
-
-        else:
-            raise Exception(f"""'PRICES' and 'lamb' not encountered: {filename}""")
+        # Prices
+        df_p = (pd.Series(prices).rename_axis(['zone', 'year', 'scenario', 'interval'])
+                .to_frame(name='price').mul(factor))
 
         # Demand
         df_d = (self.data.input_traces['DEMAND'].stack().stack().rename_axis(['year', 'scenario', 'interval', 'zone'])
@@ -127,7 +116,7 @@ class AnalyseResults:
 
         # Total installed candidate capacity for each year in model horizon
         df = (pd.Series(results['x_c']).rename_axis(['unit', 'year'])
-                .reset_index(name='capacity').pivot(index='year', columns='unit', values='capacity').cumsum())
+              .reset_index(name='capacity').pivot(index='year', columns='unit', values='capacity').cumsum())
 
         return df
 
@@ -169,15 +158,15 @@ class AnalyseResults:
 
         return self.data.input_traces.loc[year, trace].T.rename_axis(['zone', 'interval'])
 
-    def get_year_average_price(self, results_dir, filename):
+    def get_year_average_price(self, prices, factor=-1):
         """Compute average prices for each year"""
 
         # Get discounted and scaled prices for each scenario (with demand and duration)
-        prices = self.parse_prices(results_dir, filename)
+        parsed_prices = self.parse_prices(prices, factor=factor)
 
         # Average discounted prices
-        df = (prices.groupby('year').apply(lambda x: x['revenue_scaled'].sum() / x['demand_scaled']
-                                           .sum()).to_frame(name='average_price_discounted'))
+        df = (parsed_prices.groupby('year').apply(lambda x: x['revenue_scaled'].sum() / x['demand_scaled']
+                                                  .sum()).to_frame(name='average_price_discounted'))
 
         # Discount factor
         df['discount_factor'] = df.apply(lambda x: 1.06 ** (x.name - 2016), axis=1)
@@ -234,7 +223,7 @@ class AnalyseResults:
         ax.set_title(f'Demand duration curve - {year}')
         plt.show()
 
-    def get_interval_generator_output(self, results_dir,  filename):
+    def get_interval_generator_output(self, results_dir, filename):
         """Get generator output for each interval along with capacity, zone, region, and fuel type information"""
 
         # Results from primal model

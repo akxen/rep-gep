@@ -46,7 +46,7 @@ class BaselineUpdater:
         m.PERMIT_PRICE = Param(m.Y, initialize=0, mutable=True)
 
         # Year after which a Refunded Emissions Payment scheme is enforced
-        m.TRANSITION_YEAR = Param(initialize=0, mutable=True)
+        m.TRANSITION_YEAR = Param(initialize=2020, mutable=True)
 
         # Lower bound for cumulative scheme revenue. Prevents cumulative scheme revenue from going below this bound.
         m.REVENUE_LOWER_BOUND = Param(initialize=float(-1e9), mutable=True)
@@ -69,31 +69,27 @@ class BaselineUpdater:
 
         return m
 
-    def get_and_save_price_setting_generators(self, output_dir, filename):
-        """Find price setting generators for given case results"""
-
-        # Find price setting generators and save results
-        price_details = self.prices.get_price_setting_generators_from_model_results(output_dir, filename)
-
-        # Update name based on case file
-        new_name = f"{filename.split('.')[0]}_price_setting_generators.pickle"
-
-        # Save results
-        with open(os.path.join(output_dir, new_name), 'wb') as f:
-            pickle.dump(price_details, f)
-
-        return price_details
-
     @staticmethod
-    def define_expressions(m, output_dir, filename):
-        """Define model expressions"""
+    def define_expressions(m, psg_results):
+        """
+        Define model expressions
 
-        # Price setting generators for each dispatch interval
-        with open(os.path.join(output_dir, filename), 'rb') as f:
-            price_details = pickle.load(f)
+        Parameters
+        ----------
+        m : pyomo model
+            Pyomo model object to which expressions will be attached
+
+        psg_results : pandas DataFrame
+            Price setting generator results
+
+        Returns
+        -------
+        m : pyomo model
+            Pyomo model object with expressions attached
+        """
 
         # Convert to dict for faster lookups
-        price_setters_dict = price_details.to_dict()
+        price_setters_dict = psg_results.to_dict()
 
         def approximate_price_rule(_m, z, y, s, t):
             """Approximated price from price setting generator"""
@@ -181,14 +177,14 @@ class BaselineUpdater:
         m.REVENUE_NEUTRAL_HORIZON = Constraint(rule=revenue_neutral_horizon_rule)
         m.REVENUE_NEUTRAL_HORIZON.deactivate()
 
-        # def revenue_neutral_transition_rule(_m):
-        #     """Scheme is revenue neutral up until a transition year"""
-        #
-        #     return sum(m.YEAR_SCHEME_REVENUE[j] for j in m.Y if j <= m.TRANSITION_YEAR.value) == 0
-        #
-        # # Enforce revenue neutrality up until transition year
-        # m.REVENUE_NEUTRAL_TRANSITION = Constraint(rule=revenue_neutral_transition_rule)
-        # m.REVENUE_NEUTRAL_TRANSITION.deactivate()
+        def revenue_neutral_transition_rule(_m):
+            """Scheme is revenue neutral up until a transition year"""
+
+            return sum(m.YEAR_SCHEME_REVENUE[j] for j in m.Y if j <= m.TRANSITION_YEAR.value) == 0
+
+        # Enforce revenue neutrality up until transition year
+        m.REVENUE_NEUTRAL_TRANSITION = Constraint(rule=revenue_neutral_transition_rule)
+        m.REVENUE_NEUTRAL_TRANSITION.deactivate()
 
         def revenue_neutral_year_rule(_m, y):
             """Enforce scheme is revenue neutral for a given year"""
@@ -241,8 +237,20 @@ class BaselineUpdater:
 
         return m
 
-    def construct_model(self, output_dir, filename):
-        """Construct baseline updating model"""
+    def construct_model(self, psg_results):
+        """
+        Construct baseline updating model
+
+        Parameters
+        ----------
+        psg_results : pandas DataFrame
+            Price setting generator results
+
+        Returns
+        -------
+        m : pyomo model
+            Pyomo model object used to solve auxiliary price targeting program
+        """
 
         # Initialise model object
         m = ConcreteModel()
@@ -263,7 +271,7 @@ class BaselineUpdater:
         m = self.define_variables(m)
 
         # Define expressions - expression based on model results. Therefore need to read from output_dir
-        m = self.define_expressions(m, output_dir, filename)
+        m = self.define_expressions(m, psg_results)
 
         # Define constraints
         m = self.define_constraints(m)
@@ -273,11 +281,9 @@ class BaselineUpdater:
 
         return m
 
-    def update_parameters(self, m, output_dir, filename):
+    @staticmethod
+    def update_parameters(m, results):
         """Update model parameters based on primal results"""
-
-        # Primal results
-        results = self.analysis.load_results(output_dir, filename)
 
         # Common keys - eligible generators only
         common_keys = set(m.POWER.keys()) & set(results['p'].keys())
@@ -313,25 +319,26 @@ if __name__ == '__main__':
     output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'local')
 
     # Results file to load
-    results_filename = 'carbon_tax_fixed_capacity_case.pickle'
+    results_filename = 'carbon_tax_case.pickle'
 
     # Object used to compute baseline trajectory
     baseline = BaselineUpdater(final_year_model, scenarios_per_year_model)
 
     # Model results
-    # price_setter_filename = 'carbon_tax_fixed_capacity_case_price_setting_generators.pickle'
-    # r = baseline.analysis.load_results(output_directory, price_setter_filename)
+    r_carbon_tax = baseline.analysis.load_results(output_directory, results_filename)
 
-    # Name of price setting file
-    price_setter_filename = f"{results_filename.split('.')[0]}_price_setting_generators.pickle"
-    # psg = baseline.get_and_save_price_setting_generators(output_directory, results_filename)
+    # Get price setting generator results
+    psg = baseline.prices.get_price_setting_generators_from_model_results(r_carbon_tax)
 
     # Construct model
-    model = baseline.construct_model(output_directory, price_setter_filename)
+    model = baseline.construct_model(psg)
 
     # Update parameters
-    model = baseline.update_parameters(model, output_directory, results_filename)
+    model = baseline.update_parameters(model, r_carbon_tax)
 
     # Solve model
-    model.REVENUE_NEUTRAL_HORIZON.activate()
+    model.REVENUE_NEUTRAL_TRANSITION.activate()
+    model.TRANSITION_YEAR = 2020
+    for y in range(model.TRANSITION_YEAR.value, final_year_model + 1):
+        model.REVENUE_NEUTRAL_YEAR[y].activate()
     model, status = baseline.solve_model(model)
