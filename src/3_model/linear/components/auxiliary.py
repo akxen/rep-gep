@@ -52,8 +52,8 @@ class BaselineUpdater:
         m.REVENUE_LOWER_BOUND = Param(initialize=float(-1e9), mutable=True)
 
         # Initial average price in year prior to model start
-        m.INITIAL_AVERAGE_PRICE = Param(initialize=float(40), mutable=True)
-
+        m.YEAR_AVERAGE_PRICE_0 = Param(initialize=float(40), mutable=True)
+        
         return m
 
     @staticmethod
@@ -162,6 +162,13 @@ class BaselineUpdater:
         # Absolute price difference between consecutive years
         m.YEAR_ABSOLUTE_PRICE_DIFFERENCE = Expression(m.Y, rule=year_absolute_price_difference_rule)
 
+        # Total absolute price difference
+        m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[y] for y in m.Y))
+
+        # Weighted total absolute difference
+        m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[y]
+                                                                         * m.PRICE_WEIGHTS[y] for y in m.Y))
+
         return m
 
     @staticmethod
@@ -208,7 +215,7 @@ class BaselineUpdater:
             """Constraints used to compute absolute difference in average prices between successive years"""
 
             if y == m.Y.first():
-                return m.z_1[y] >= m.YEAR_AVERAGE_PRICE[y] - m.INITIAL_AVERAGE_PRICE
+                return m.z_1[y] >= m.YEAR_AVERAGE_PRICE[y] - m.YEAR_AVERAGE_PRICE_0
             else:
                 return m.z_1[y] >= m.YEAR_AVERAGE_PRICE[y] - m.YEAR_AVERAGE_PRICE[y - 1]
 
@@ -219,12 +226,46 @@ class BaselineUpdater:
             """Constraints used to compute absolute difference in average prices between successive years"""
 
             if y == m.Y.first():
-                return m.z_2[y] >= m.INITIAL_AVERAGE_PRICE - m.YEAR_AVERAGE_PRICE[y]
+                return m.z_2[y] >= m.YEAR_AVERAGE_PRICE_0 - m.YEAR_AVERAGE_PRICE[y]
             else:
                 return m.z_2[y] >= m.YEAR_AVERAGE_PRICE[y - 1] - m.YEAR_AVERAGE_PRICE[y]
 
         # Price difference dummy constraints
         m.PRICE_DIFFERENCE_CONS_2 = Constraint(m.Y, rule=price_difference_2_rule)
+
+        # def price_difference_weighted_1_rule(_m, y):
+        #     """Constraints used to compute absolute difference in average prices between successive years"""
+        #
+        #     return m.z_1[y] >= (m.YEAR_AVERAGE_PRICE[y] - m.YEAR_AVERAGE_PRICE_0) * m.PRICE_WEIGHTS[y]
+        #
+        # # Price difference dummy constraints
+        # m.PRICE_DIFFERENCE_WEIGHTED_CONS_1 = Constraint(m.Y, rule=price_difference_weighted_1_rule)
+        #
+        # def price_difference_weighted_2_rule(_m, y):
+        #     """Constraints used to compute absolute difference in average prices between successive years"""
+        #
+        #     return m.z_2[y] >= (m.YEAR_AVERAGE_PRICE_0 - m.YEAR_AVERAGE_PRICE[y]) * m.PRICE_WEIGHTS[y]
+        #
+        # # Price difference dummy constraints
+        # m.PRICE_DIFFERENCE_WEIGHTED_CONS_2 = Constraint(m.Y, rule=price_difference_weighted_2_rule)
+
+        def scheme_revenue_upper_envelope_rule(_m, y):
+            """Ensure scheme revenue is less than or equal to upper envelope"""
+
+            return m.YEAR_CUMULATIVE_SCHEME_REVENUE[y] <= m.SCHEME_REVENUE_ENVELOPE_UP[y]
+
+        # Ensure scheme revenue less than or equal to upper envelope
+        m.SCHEME_REVENUE_ENVELOPE_UP_CONS = Constraint(m.Y, rule=scheme_revenue_upper_envelope_rule)
+        m.SCHEME_REVENUE_ENVELOPE_UP_CONS.deactivate()
+
+        def scheme_revenue_lower_envelope_rule(_m, y):
+            """Ensure scheme revenue is greater than or equal to lower envelope"""
+
+            return m.YEAR_CUMULATIVE_SCHEME_REVENUE[y] >= m.SCHEME_REVENUE_ENVELOPE_LO[y]
+
+        # Ensure scheme revenue less than or equal to upper envelope
+        m.SCHEME_REVENUE_ENVELOPE_LO_CONS = Constraint(m.Y, rule=scheme_revenue_lower_envelope_rule)
+        m.SCHEME_REVENUE_ENVELOPE_LO_CONS.deactivate()
 
         return m
 
@@ -233,7 +274,7 @@ class BaselineUpdater:
         """Define objective function"""
 
         # Minimise price difference between consecutive years
-        m.OBJECTIVE = Objective(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[y] for y in m.Y), sense=minimize)
+        m.OBJECTIVE = Objective(expr=m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED, sense=minimize)
 
         return m
 

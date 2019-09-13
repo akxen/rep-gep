@@ -3,6 +3,7 @@
 import os
 import json
 
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -10,9 +11,9 @@ from analysis import AnalyseResults
 
 
 class Targets:
-    def __init__(self, results_dir):
+    def __init__(self):
         # Object used to analyse results
-        self.analysis = AnalyseResults(results_dir)
+        self.analysis = AnalyseResults()
 
     @staticmethod
     def get_year_emission_intensity_target(initial_emissions_intensity, half_life, year, start_year):
@@ -142,13 +143,22 @@ class Targets:
 
         return results['INTERIM_EMISSIONS_CAP_CONS_DUAL']
 
+    @staticmethod
+    def get_envelope(n_0, half_life, first_year, year):
+        """Get revenue envelope level for a given year"""
+
+        # Year with first year = 0
+        t = year - first_year
+
+        return n_0 * np.power(0.5, (t / half_life))
+
 
 if __name__ == '__main__':
     # Directory containing model results
     results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote')
 
     # Object used to get model targets
-    targets = Targets(results_directory)
+    targets = Targets()
 
     # # Cumulative emissions target - based on fraction of BAU emissions
     # f = 'primal_bau_results.pickle'
@@ -184,5 +194,28 @@ if __name__ == '__main__':
     # # Check that average price in first year of BAU scenario loads correctly
     # first_year_average_bau_price = load_first_year_average_bau_price('first_year_average_price.json')
 
-    cumulative_cap_carbon_price = targets.get_cumulative_emissions_cap_carbon_price()
-    interim_cap_carbon_price = targets.get_interim_emissions_cap_carbon_price()
+    # cumulative_cap_carbon_price = targets.get_cumulative_emissions_cap_carbon_price()
+    # interim_cap_carbon_price = targets.get_interim_emissions_cap_carbon_price()
+
+    # def get_revenue_envelopes(self, n_0, half_life, start_year, end_year):
+    #     """Get upper and lower revenue envelopes"""
+    #
+
+    # Initial revenue and halflife
+    r_0, halflife = float(100e6), 4
+
+    # First and final years in model horizon
+    start_year, end_year = 2016, 2040
+
+    rev_env_up = {y: targets.get_envelope(r_0, halflife, start_year, y) for y in range(start_year, end_year + 1)}
+    rev_env_lo = {y: -targets.get_envelope(r_0, halflife, start_year, y) for y in range(start_year, end_year + 1)}
+    price_weights = {y: targets.get_envelope(1, halflife, start_year, y) for y in range(start_year, end_year + 1)}
+
+    # fig, ax = plt.subplots()
+    # ax.plot(rev_env_up)
+    # ax.plot(rev_env_lo)
+    # plt.show()
+    #
+    # fig, ax = plt.subplots()
+    # ax.plot(price_weights)
+    # plt.show()

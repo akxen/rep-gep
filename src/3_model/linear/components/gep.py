@@ -296,6 +296,14 @@ class Primal:
         # Year scheme revenue
         m.YEAR_SCHEME_REVENUE = Expression(m.Y, rule=year_scheme_revenue_rule)
 
+        def year_cumulative_scheme_revenue_rule(_m, y):
+            """Cumulative scheme revenue"""
+
+            return sum(m.YEAR_SCHEME_REVENUE[j] for j in m.Y if j <= y)
+
+        # Cumulative scheme revenue for each year
+        m.YEAR_CUMULATIVE_SCHEME_REVENUE = Expression(m.Y, rule=year_cumulative_scheme_revenue_rule)
+
         def total_scheme_revenue_rule(_m):
             """Total scheme revenue over model horizon"""
 
@@ -1824,7 +1832,7 @@ class MPPDCModel:
         m.FIXED_PERMIT_PRICE = Param(m.Y, initialize=0, mutable=True)
 
         # Average price in year prior to model start
-        m.YEAR_AVERAGE_PRICE_0 = Param(initialize=40, mutable=True)
+        m.YEAR_AVERAGE_PRICE_0 = Param(initialize=100, mutable=True)
 
         # Strong duality constraint violation penalty
         m.STRONG_DUALITY_VIOLATION_PENALTY = Param(initialize=float(1e6))
@@ -1858,8 +1866,20 @@ class MPPDCModel:
     def define_expressions(m):
         """Define MPPDC expressions"""
 
+        def year_absolute_price_difference_rule(_m, y):
+            """Absolute price difference for a given year"""
+
+            return m.z_p1[y] + m.z_p2[y]
+
         # Change in price between successive intervals
-        m.AVERAGE_PRICE_DIFFERENCE = Expression(expr=sum(m.z_p1[y] + m.z_p2[y] for y in m.Y))
+        m.YEAR_ABSOLUTE_PRICE_DIFFERENCE = Expression(m.Y, rule=year_absolute_price_difference_rule)
+
+        # Total absolute price difference
+        m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[y] for y in m.Y))
+
+        # Weighted total absolute difference
+        m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[y]
+                                                                         * m.PRICE_WEIGHTS[y] for y in m.Y))
 
         # Strong duality constraint violation
         m.STRONG_DUALITY_VIOLATION_COST = Expression(expr=(m.sd_1 + m.sd_2) * m.STRONG_DUALITY_VIOLATION_PENALTY)
@@ -1882,10 +1902,10 @@ class MPPDCModel:
             """Constraint computing absolute difference between prices in successive years"""
 
             if y == m.Y.first():
-                return m.z_p1[y] >= (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])) - m.YEAR_AVERAGE_PRICE_0
+                return m.z_p1[y] >= ((m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])) - m.YEAR_AVERAGE_PRICE_0)
             else:
-                return m.z_p1[y] >= (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])) - (
-                            m.YEAR_AVERAGE_PRICE[y - 1] * (1 / m.DELTA[y - 1]))
+                return m.z_p1[y] >= ((m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y]))
+                                     - (m.YEAR_AVERAGE_PRICE[y - 1] * (1 / m.DELTA[y - 1])))
 
         # Emissions intensity deviation - 1
         m.PRICE_TARGET_DEV_1 = Constraint(m.Y, rule=price_target_deviation_1_rule)
@@ -1894,13 +1914,31 @@ class MPPDCModel:
             """Constraint computing absolute difference between prices in successive years"""
 
             if y == m.Y.first():
-                return m.z_p2[y] >= m.YEAR_AVERAGE_PRICE_0 - (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y]))
+                return m.z_p2[y] >= (m.YEAR_AVERAGE_PRICE_0 - (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])))
             else:
-                return m.z_p2[y] >= (m.YEAR_AVERAGE_PRICE[y - 1] * (1 / m.DELTA[y - 1])) - (
-                            m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y]))
+                return m.z_p2[y] >= ((m.YEAR_AVERAGE_PRICE[y - 1] * (1 / m.DELTA[y - 1]))
+                                     - (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])))
 
         # Emissions intensity deviation - 2
         m.PRICE_TARGET_DEV_2 = Constraint(m.Y, rule=price_target_deviation_2_rule)
+
+        # def price_target_deviation_weighted_1_rule(_m, y):
+        #     """Constraint computing absolute difference between prices in successive years"""
+        #
+        #     return (m.z_p1[y] >= ((m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])) - m.YEAR_AVERAGE_PRICE_0)
+        #             * m.PRICE_WEIGHTS[y])
+        #
+        # # Weighted price target - with reference to BAU price in first year of model horizon
+        # m.PRICE_TARGET_WEIGHTED_DEV_1 = Constraint(m.Y, rule=price_target_deviation_weighted_1_rule)
+        #
+        # def price_target_deviation_weighted_2_rule(_m, y):
+        #     """Constraint computing absolute difference between prices in successive years"""
+        #
+        #     return (m.z_p2[y] >= (m.YEAR_AVERAGE_PRICE_0 - (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])))
+        #             * m.PRICE_WEIGHTS[y])
+        #
+        # # Weighted price target - with reference to BAU price in first year of model horizon
+        # m.PRICE_TARGET_WEIGHTED_DEV_2 = Constraint(m.Y, rule=price_target_deviation_weighted_2_rule)
 
         def total_scheme_revenue_non_negative_rule(_m):
             """Ensure that net scheme revenue is greater than 0 over model horizon"""
@@ -1949,6 +1987,25 @@ class MPPDCModel:
 
         # Enforce net scheme revenue over transitional period = 0
         m.TRANSITION_NET_SCHEME_REVENUE_NEUTRAL_CONS = Constraint(rule=transition_net_scheme_revenue_neutral_rule)
+        m.TRANSITION_NET_SCHEME_REVENUE_NEUTRAL_CONS.deactivate()
+
+        def scheme_revenue_upper_envelope_rule(_m, y):
+            """Ensure scheme revenue is less than or equal to upper envelope"""
+
+            return m.YEAR_CUMULATIVE_SCHEME_REVENUE[y] <= m.SCHEME_REVENUE_ENVELOPE_UP[y]
+
+        # Ensure scheme revenue less than or equal to upper envelope
+        m.SCHEME_REVENUE_ENVELOPE_UP_CONS = Constraint(m.Y, rule=scheme_revenue_upper_envelope_rule)
+        m.SCHEME_REVENUE_ENVELOPE_UP_CONS.deactivate()
+
+        def scheme_revenue_lower_envelope_rule(_m, y):
+            """Ensure scheme revenue is greater than or equal to lower envelope"""
+
+            return m.YEAR_CUMULATIVE_SCHEME_REVENUE[y] >= m.SCHEME_REVENUE_ENVELOPE_LO[y]
+
+        # Ensure scheme revenue less than or equal to upper envelope
+        m.SCHEME_REVENUE_ENVELOPE_LO_CONS = Constraint(m.Y, rule=scheme_revenue_lower_envelope_rule)
+        m.SCHEME_REVENUE_ENVELOPE_LO_CONS.deactivate()
 
         return m
 
@@ -1957,7 +2014,8 @@ class MPPDCModel:
         """MPPDC objective function"""
 
         # Price targeting objective
-        m.OBJECTIVE = Objective(expr=m.AVERAGE_PRICE_DIFFERENCE + m.STRONG_DUALITY_VIOLATION_COST, sense=minimize)
+        m.OBJECTIVE = Objective(expr=m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED + m.STRONG_DUALITY_VIOLATION_COST,
+                                sense=minimize)
 
         return m
 
@@ -2006,12 +2064,22 @@ class MPPDCModel:
         return m
 
     @staticmethod
-    def fix_variables(m, fixed_variables):
+    def fix_variables(m, variables):
         """Fix model variables given dict of variables with corresponding values"""
 
-        for var_name, values in fixed_variables.items():
+        for var_name, values in variables.items():
             for var_index, var_value in values.items():
                 m.__getattribute__(var_name)[var_index].fix(var_value)
+
+        return m
+
+    @staticmethod
+    def unfix_variables(m, variables):
+        """Fix model variables given dict of variables with corresponding values"""
+
+        for var_name, values in variables.items():
+            for var_index, var_value in values.items():
+                m.__getattribute__(var_name)[var_index].unfix(var_value)
 
         return m
 

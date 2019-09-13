@@ -9,7 +9,9 @@ import logging
 sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir, '4_analysis'))
 
 from pyomo.environ import *
+import matplotlib.pyplot as plt
 
+from targets import Targets
 from gep import MPPDCModel, Primal, Dual
 from auxiliary import BaselineUpdater
 from analysis import AnalyseResults
@@ -21,7 +23,11 @@ class ModelCases:
                             format='%(asctime)s %(name)s %(levelname)s %(message)s',
                             datefmt='%Y-%m-%d %H:%M:%S', level=logging.DEBUG)
 
+        # Used to parse prices and analyse results
         self.analysis = AnalyseResults()
+
+        # Get scheme targets
+        self.targets = Targets()
 
     @staticmethod
     def algorithm_logger(function, message, print_message=False):
@@ -56,6 +62,9 @@ class ModelCases:
 
         elif type(model_component) == pyomo.core.base.param.IndexedParam:
             return {k: v for k, v in model_component.items()}
+
+        elif type(model_component) == pyomo.core.base.param.SimpleParam:
+            return model_component.value
 
         else:
             raise Exception(f'Unexpected model component: {component_name}')
@@ -151,7 +160,8 @@ class ModelCases:
         # Results to extract
         result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'q', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
                        'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'C_MC', 'ETA',
-                       'DELTA', 'RHO', 'EMISSIONS_RATE', 'YEAR_SCHEME_EMISSIONS_INTENSITY']
+                       'DELTA', 'RHO', 'EMISSIONS_RATE', 'YEAR_SCHEME_EMISSIONS_INTENSITY',
+                       'YEAR_CUMULATIVE_SCHEME_REVENUE']
 
         # First run carbon tax case
         baselines = {y: float(0) for y in range(first_year, final_year + 1)}
@@ -168,17 +178,45 @@ class ModelCases:
         # Update baselines so they = emissions intensity of output from participating generators
         rep_baselines = carbon_tax_results['YEAR_SCHEME_EMISSIONS_INTENSITY']
 
-        # Re-run model with new baselines
-        m, status = self.run_fixed_policy(final_year, scenarios_per_year, permit_prices, rep_baselines)
+        # Container for iteration results
+        iteration_results = {}
 
-        # Model results
-        rep_results = {k: self.extract_result(m, k) for k in result_keys}
+        # Flag used to terminate loop if stopping criterion met
+        stop_flag = False
 
-        # Add dual variable from power balance constraint
-        rep_results['PRICES'] = {k: m.dual[m.POWER_BALANCE[k]] for k in m.POWER_BALANCE.keys()}
+        # Iteration counter
+        i = 1
+
+        # Initialise result input to carbon tax scenario for first iteration (used to check stopping criterion)
+        result_input = carbon_tax_results
+
+        while not stop_flag:
+
+            # Re-run model with new baselines
+            m, status = self.run_fixed_policy(final_year, scenarios_per_year, permit_prices, rep_baselines)
+
+            # Model results
+            rep_results = {k: self.extract_result(m, k) for k in result_keys}
+
+            # Add dual variable from power balance constraint
+            rep_results['PRICES'] = {k: m.dual[m.POWER_BALANCE[k]] for k in m.POWER_BALANCE.keys()}
+
+            # Add results to iteration results container
+            iteration_results[i] = copy.deepcopy(rep_results)
+
+            # Check if stop criterion satisfied
+            cap_diff = max([abs(result_input['x_c'][k] - rep_results['x_c'][k]) for k in result_input['x_c'].keys()])
+            print(f'{i}: Maximum capacity difference = {cap_diff} MW')
+            if cap_diff < 5:
+                stop_flag = True
+
+            # Update input results (used to check stopping criterion in next iteration)
+            result_input = copy.deepcopy(rep_results)
+
+            i += 1
 
         # Combine results into single dictionary
-        results = {'stage_1_carbon_tax': carbon_tax_results, 'stage_2_rep': rep_results}
+        results = {'stage_1_carbon_tax': carbon_tax_results, 'stage_2_rep': iteration_results}
 
         # Save results
         filename = 'rep_case.pickle'
@@ -186,20 +224,27 @@ class ModelCases:
 
         return results
 
-    def run_price_smoothing_heuristic_case(self, output_dir, rep_filename, transition_year):
+    def run_price_smoothing_heuristic_case(self, output_dir, rep_filename, parameters):
         """Smooth prices over entire model horizon using approximated price functions"""
 
         # Results to extract
         result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
                        'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'C_MC', 'ETA',
-                       'DELTA', 'RHO', 'EMISSIONS_RATE', 'YEAR_SCHEME_EMISSIONS_INTENSITY']
+                       'DELTA', 'RHO', 'EMISSIONS_RATE', 'YEAR_CUMULATIVE_SCHEME_REVENUE',
+                       'YEAR_SCHEME_EMISSIONS_INTENSITY']
+
+        # Results to extract from baseline targeting model
+        baseline_keys = ['YEAR_AVERAGE_PRICE', 'YEAR_AVERAGE_PRICE_0', 'YEAR_ABSOLUTE_PRICE_DIFFERENCE']
 
         # Load REP results - used as starting point for heuristic and MPPDC solution methods
         with open(os.path.join(output_directory, rep_filename), 'rb') as f:
-            rep_results = pickle.load(f)
+            results = pickle.load(f)
 
         # Carbon tax and REP results
-        carbon_tax_results, rep_results = rep_results['stage_1_carbon_tax'], rep_results['stage_2_rep']
+        carbon_tax_results, rep_iteration_results = results['stage_1_carbon_tax'], results['stage_2_rep']
+
+        # Get results for final REP solution iteration
+        rep_results = rep_iteration_results[max(rep_iteration_results.keys())]
 
         # Extract permit prices
         permit_prices = rep_results['permit_price']
@@ -212,6 +257,12 @@ class ModelCases:
 
         # Get BAU initial price
         initial_price = self.get_bau_initial_price(output_dir, first_year)
+
+        # Get upper and lower revenue envelopes, and price weights
+        revenue_envelope_up, revenue_envelope_lo = parameters['revenue_envelope_up'], parameters['revenue_envelope_lo']
+
+        # Get price targets
+        price_weights = parameters['price_weights']
 
         # Baseline updater
         baseline = BaselineUpdater(final_year, scenarios_per_year)
@@ -238,16 +289,16 @@ class ModelCases:
             baseline_model = baseline.update_parameters(baseline_model, result_input)
 
             # Update initial price (set to BAU price in first year)
-            baseline_model.INITIAL_AVERAGE_PRICE = float(initial_price)
+            baseline_model.YEAR_AVERAGE_PRICE_0 = float(initial_price)
 
-            # Activate constraints corresponding to different cases
-            # baseline_model.REVENUE_NEUTRAL_HORIZON.activate()
-            baseline_model.REVENUE_NEUTRAL_TRANSITION.activate()
-            baseline_model.TRANSITION_YEAR = transition_year
-            baseline_model.reconstruct()
+            # Update revenue envelope targets
+            baseline_model.SCHEME_REVENUE_ENVELOPE_UP.store_values(revenue_envelope_up)
+            baseline_model.SCHEME_REVENUE_ENVELOPE_LO.store_values(revenue_envelope_lo)
+            baseline_model.PRICE_WEIGHTS.store_values(price_weights)
 
-            for y in range(baseline_model.TRANSITION_YEAR.value, final_year + 1):
-                baseline_model.REVENUE_NEUTRAL_YEAR[y].activate()
+            # Activate constraints
+            baseline_model.SCHEME_REVENUE_ENVELOPE_UP_CONS.activate()
+            baseline_model.SCHEME_REVENUE_ENVELOPE_LO_CONS.activate()
 
             # Solve model
             baseline_model, status = baseline.solve_model(baseline_model)
@@ -257,15 +308,20 @@ class ModelCases:
 
             # Re-solve primal program with updated baselines
             m, status = self.run_fixed_policy(final_year, scenarios_per_year, permit_prices, pt_baselines)
+            print('Heuristic', m.baseline.values)
 
             # Get results
             pt_results = copy.deepcopy({k: self.extract_result(m, k) for k in result_keys})
+            print(pt_results['baseline'])
+
+            # Baseline results
+            baseline_results = copy.deepcopy({k: self.extract_result(baseline_model, k) for k in baseline_keys})
 
             # Add dual variable from power balance constraint
             pt_results['PRICES'] = copy.deepcopy({k: m.dual[m.POWER_BALANCE[k]] for k in m.POWER_BALANCE.keys()})
 
             # Add results to iteration results container
-            iteration_results[i] = pt_results
+            iteration_results[i] = {**pt_results, **baseline_results}
 
             # Check if stop criterion satisfied
             cap_diff = max([abs(result_input['x_c'][k] - pt_results['x_c'][k]) for k in result_input['x_c'].keys()])
@@ -276,7 +332,7 @@ class ModelCases:
             i += 1
 
         # Combine results into single dictionary
-        results = {'stage_1_carbon_tax': carbon_tax_results, 'stage_2_rep': rep_results,
+        results = {'stage_1_carbon_tax': carbon_tax_results, 'stage_2_rep': rep_iteration_results,
                    'stage_3_price_targeting': iteration_results}
 
         # Rename file
@@ -285,20 +341,24 @@ class ModelCases:
 
         return results
 
-    def run_price_smoothing_mppdc_case(self, output_dir, rep_filename, transition_year):
+    def run_price_smoothing_mppdc_case(self, output_dir, rep_filename, parameters):
         """Run case to smooth prices over model horizon, subject to total revenue constraint"""
 
         # Results to extract
         result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'q', 'baseline', 'permit_price', 'lamb',
                        'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_EMISSIONS_INTENSITY',
-                       'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE']
+                       'YEAR_SCHEME_REVENUE', 'YEAR_CUMULATIVE_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE',
+                       'YEAR_ABSOLUTE_PRICE_DIFFERENCE', 'YEAR_AVERAGE_PRICE_0', 'YEAR_AVERAGE_PRICE']
 
         # Load REP results
         with open(os.path.join(output_dir, rep_filename), 'rb') as f:
             results = pickle.load(f)
 
         # Carbon tax and REP results
-        carbon_tax_results, rep_results = results['stage_1_carbon_tax'], results['stage_2_rep']
+        carbon_tax_results, rep_iteration_results = results['stage_1_carbon_tax'], results['stage_2_rep']
+
+        # Get results corresponding to last iteration of REP solution
+        rep_results = rep_iteration_results[max(rep_iteration_results.keys())]
 
         # Extract permit prices
         permit_prices = rep_results['permit_price']
@@ -327,6 +387,15 @@ class ModelCases:
         # Set average price in year prior to model start (assume same first year average price in BAU case)
         mppdc_model.YEAR_AVERAGE_PRICE_0 = float(initial_price)
 
+        # Define revenue envelopes and price weights
+        mppdc_model.SCHEME_REVENUE_ENVELOPE_LO.store_values(parameters['revenue_envelope_lo'])
+        mppdc_model.SCHEME_REVENUE_ENVELOPE_UP.store_values(parameters['revenue_envelope_up'])
+        mppdc_model.PRICE_WEIGHTS.store_values(parameters['price_weights'])
+
+        # Activate revenue envelope constraints
+        mppdc_model.SCHEME_REVENUE_ENVELOPE_UP_CONS.activate()
+        mppdc_model.SCHEME_REVENUE_ENVELOPE_LO_CONS.activate()
+
         # Primal variables to fix. Set equal to results obtained from REP case in first iteration.
         primal_variables = ['x_c', 'p', 'p_in', 'p_out', 'q', 'p_V', 'p_L', 'permit_price']
         fixed_variables = {k: rep_results[k] for k in primal_variables}
@@ -335,37 +404,35 @@ class ModelCases:
             # Fix MPPDC variables
             mppdc_model = mppdc.fix_variables(mppdc_model, fixed_variables)
 
-            # Set the transition year
-            mppdc_model.TRANSITION_YEAR = transition_year
-
-            # Activate year revenue neutrality requirement for all years
-            mppdc_model.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS.activate()
-
-            # Deactivate year revenue neutrality requirement for years before transition year
-            for y in range(2016, transition_year):
-                mppdc_model.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS[y].deactivate()
-
-            # Reconstruct and enforce revenue neutrality over the transition period
-            mppdc_model.TRANSITION_NET_SCHEME_REVENUE_NEUTRAL_CONS.reconstruct()
-            mppdc_model.TRANSITION_NET_SCHEME_REVENUE_NEUTRAL_CONS.activate()
-
             # Solve model
             mppdc_model, solve_status = mppdc.solve_model(mppdc_model)
-
+            print('MPPDC', mppdc_model.baseline.get_values())
             # Get results
             pt_results = copy.deepcopy({k: self.extract_result(mppdc_model, k) for k in result_keys})
 
             # Extract model results
             iteration_results[i] = pt_results
 
+            # Run primal
+            baselines = pt_results['baseline']
+            primal_model, primal_status = self.run_fixed_policy(final_year, scenarios_per_year, permit_prices,
+                                                                baselines)
+
+            # Extract results
+            primal_results = copy.deepcopy({k: self.extract_result(primal_model, k) for k in primal_variables})
+            primal_results['PRICES'] = copy.deepcopy({k: primal_model.dual[primal_model.POWER_BALANCE[k]]
+                                                      for k in primal_model.POWER_BALANCE.keys()})
+            iteration_results[i]['primal'] = primal_results
+
             # Check if stop criterion satisfied
-            cap_diff = max([abs(fixed_variables['x_c'][k] - pt_results['x_c'][k]) for k in fixed_variables['x_c'].keys()])
+            cap_diff = max([abs(fixed_variables['x_c'][k] - primal_results['x_c'][k])
+                            for k in fixed_variables['x_c'].keys()])
             print(f'{i}: Maximum capacity difference = {cap_diff} MW')
             if cap_diff < 5:
                 stop_flag = True
 
             # Update dictionary of fixed variables to be used in next iteration
-            fixed_variables = {k: pt_results[k] for k in primal_variables}
+            fixed_variables = {k: primal_results[k] for k in primal_variables}
 
         # Combine results into a single dictionary
         combined_results = {**results, 'stage_3_price_targeting': iteration_results}
@@ -396,29 +463,47 @@ if __name__ == '__main__':
     # Object used to run model cases
     cases = ModelCases(output_directory, log_file_name)
 
-    # Common model parameters
-    start_year = 2016
-    end_year = 2026
-    scenarios = 5
-    scheme_transition_year = 2022
+    targets = Targets()
 
-    # Run business-as-usual case
-    r_bau = cases.run_bau_case(output_directory, start_year, end_year, scenarios)
+    # Common model parameters
+    start = 2016
+    end = 2020
+    scenarios = 3
 
     # Permit prices for carbon pricing scenarios
-    permit_prices_model = {y: float(40) for y in range(start_year, end_year + 1)}
+    permit_prices_model = {y: float(40) for y in range(start, end + 1)}
+
+    # Scheme revenue envelope in first year
+    r_0 = float(100e6)
+
+    # Revenue envelope half-life
+    halflife = 4
+
+    # Upper and lower revenue envelopes
+    rev_envelope_up = {y: targets.get_envelope(r_0, halflife, start, y) for y in range(start, end + 1)}
+    rev_envelope_lo = {y: -targets.get_envelope(r_0, halflife, start, y) for y in range(start, end + 1)}
+
+    # Price weights
+    price_target_weights = {y: targets.get_envelope(1, halflife, start, y) for y in range(start, end + 1)}
+
+    # Parameters to be used in price targeting models
+    price_targeting_parameters = {'revenue_envelope_up': rev_envelope_up, 'revenue_envelope_lo': rev_envelope_lo,
+                                  'price_weights': price_target_weights}
+
+    # Run business-as-usual case
+    r_bau = cases.run_bau_case(output_directory, start, end, scenarios)
 
     # Run carbon tax case
     # r_ct = cases.run_carbon_tax_case(output_directory, start_year, end_year, scenarios, permit_prices_model)
 
     # Run Refunded Emissions Payment Scheme
-    r_rep = cases.run_rep_case(output_directory, start_year, end_year, scenarios, permit_prices_model)
+    r_rep = cases.run_rep_case(output_directory, start, end, scenarios, permit_prices_model)
 
     # Price targeting heuristic case over whole model horizon
-    r_pth = cases.run_price_smoothing_heuristic_case(output_directory, 'rep_case.pickle', scheme_transition_year)
+    r_pth = cases.run_price_smoothing_heuristic_case(output_directory, 'rep_case.pickle', price_targeting_parameters)
 
     # Price targeting MPPDC model
-    r_ptm = cases.run_price_smoothing_mppdc_case(output_directory, 'rep_case.pickle', scheme_transition_year)
+    r_ptm = cases.run_price_smoothing_mppdc_case(output_directory, 'rep_case.pickle', price_targeting_parameters)
 
     # # Load results
     # with open(os.path.join(output_directory, 'price_targeting_heuristic_case.pickle'), 'rb') as f:
@@ -427,3 +512,15 @@ if __name__ == '__main__':
     # # Load results
     # with open(os.path.join(output_directory, 'price_targeting_mppdc_case.pickle'), 'rb') as f:
     #     r_ptm = pickle.load(f)
+
+    fig, ax = plt.subplots()
+    ax.plot(list(r_pth['stage_3_price_targeting'][1]['baseline'].values()))
+    ax.plot(list(r_ptm['stage_3_price_targeting'][1]['baseline'].values()))
+    plt.show()
+
+    fig, ax = plt.subplots()
+    ax.plot(list(r_pth['stage_3_price_targeting'][1]['YEAR_CUMULATIVE_SCHEME_REVENUE'].values()))
+    ax.plot(list(r_ptm['stage_3_price_targeting'][1]['YEAR_CUMULATIVE_SCHEME_REVENUE'].values()))
+    ax.plot(list(rev_envelope_lo.values()))
+    ax.plot(list(rev_envelope_up.values()))
+    plt.show()
