@@ -2096,11 +2096,11 @@ class MPPDCModel:
 
 
 class CheckSolution:
-    def __init__(self):
+    def __init__(self, final_year=2018, scenarios_per_year=2):
         # Objects used to construct primal, dual, and MPPDC models
-        self.primal = Primal(final_year=2018, scenarios_per_year=2)
-        self.dual = Dual(final_year=2018, scenarios_per_year=2)
-        self.mppdc = MPPDCModel(final_year=2018, scenarios_per_year=2)
+        self.primal = Primal(final_year=final_year, scenarios_per_year=scenarios_per_year)
+        self.dual = Dual(final_year=final_year, scenarios_per_year=scenarios_per_year)
+        self.mppdc = MPPDCModel(final_year=final_year, scenarios_per_year=scenarios_per_year)
         self.utilities = Utilities()
 
         # Construct models
@@ -2291,8 +2291,19 @@ class CheckSolution:
             print(f"Max absolute difference: {max_abs_diff}")
             print(f"Non-zero diff: {non_zero_diff}")
 
-    def check_primal_and_mppdc_solutions(self):
+    def check_primal_and_mppdc_solutions(self, permit_prices=None, baselines=None):
         """Compare primal and MPPDC solution elements"""
+
+        # Update permit prices and baselines
+        if permit_prices is not None:
+            for y in permit_prices.keys():
+                self.m_p.permit_price[y].fix(permit_prices[y])
+                self.m_m.permit_price[y].fix(permit_prices[y])
+
+        if baselines is not None:
+            for y in permit_prices.keys():
+                self.m_p.baseline[y].fix(baselines[y])
+                self.m_m.baseline[y].fix(baselines[y])
 
         # Solve primal and MPPDC models
         self.primal.solve_model(self.m_p)
@@ -2357,16 +2368,22 @@ class CheckSolution:
 if __name__ == '__main__':
     # Setup model parameters
     output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'local')
-    final_model_year = 2018
-    scenarios_per_model_year = 2
+    final_model_year = 2020
+    scenarios_per_model_year = 3
 
-    # # Check model solution
-    # check = CheckSolution()
-    #
-    # # Check primal and dual solution - primal and dual elements should be the same for prices and power output
+    # Check model solution
+    check = CheckSolution(final_year=final_model_year, scenarios_per_year=scenarios_per_model_year)
+
+    # Check primal and dual solution - primal and dual elements should be the same for prices and power output
     # check.check_primal_and_dual_solutions()
-    # check.check_primal_and_mppdc_solutions()
+
+    # Permit prices
+    permit_price = {2016: 40.0, 2017: 40.0, 2018: 40.0, 2019: 40.0, 2020: 40.0}
+    baseline = {2016: 0.9979464507243393, 2017: 1.0153153056565962, 2018: 1.0323371086829316, 2019: 0.9870038442889452,
+                2020: 1.0269914600598047}
+
+    check.check_primal_and_mppdc_solutions(permit_prices=permit_price, baselines=baseline)
     # check.check_dual_and_mppdc_solutions()
 
-    primal = Primal(2040, 5)
-    primal_model = primal.construct_model()
+    # primal = Primal(2040, 5)
+    # primal_model = primal.construct_model()

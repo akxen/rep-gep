@@ -6,6 +6,7 @@ import copy
 import pickle
 import logging
 
+# sys.setrecursionlimit(1000)
 sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir, '4_analysis'))
 
 from pyomo.environ import *
@@ -77,7 +78,35 @@ class ModelCases:
             pickle.dump(results, f)
 
     @staticmethod
-    def run_fixed_policy(final_year, scenarios_per_year, permit_prices, baselines):
+    def run_mppdc_fixed_policy(final_year, scenarios_per_year, permit_prices, baselines,
+                               include_primal_constraints=True):
+        """Run MPPDC model with fixed policy parameters"""
+
+        # Initialise object and model used to run MPPDC model
+        mppdc = MPPDCModel(final_year, scenarios_per_year)
+        m = mppdc.construct_model(include_primal_constraints=include_primal_constraints)
+
+        # Fix permit prices and baselines
+        for y in m.Y:
+            m.permit_price[y].fix(permit_prices[y])
+            m.baseline[y].fix(baselines[y])
+
+        # Solve MPPDC model with fixed policy parameters
+        m, status = mppdc.solve_model(m)
+
+        # # Fix capacity variables
+        # m.x_c.fix()
+        #
+        # # Re-solve to obtain correct prices
+        # m, status = mppdc.solve_model(m)
+        #
+        # # Unfix capacity variables. Ready for next solve.
+        # m.x_c.unfix()
+
+        return m, status
+
+    @staticmethod
+    def run_primal_fixed_policy(final_year, scenarios_per_year, permit_prices, baselines):
         """Run primal model with fixed policy parameters"""
 
         # Initialise object and model used to run primal model
@@ -92,12 +121,12 @@ class ModelCases:
         # Solve primal model with fixed policy parameters
         m, status = primal.solve_model(m)
 
-        # Fix investment decisions - re-solve to obtain correct prices
-        m.x_c.fix()
-        m, status = primal.solve_model(m)
-
-        # Unfix investment decisions (in case following solve required)
-        m.x_c.unfix()
+        # # Fix investment decisions - re-solve to obtain correct prices
+        # m.x_c.fix()
+        # m, status = primal.solve_model(m)
+        #
+        # # Unfix investment decisions (in case following solve required)
+        # m.x_c.unfix()
 
         return m, status
 
@@ -224,11 +253,35 @@ class ModelCases:
 
         return results
 
-    def run_price_smoothing_heuristic_case(self, output_dir, rep_filename, parameters):
+    def run_price_smoothing_heuristic_case(self, params, output_dir):
         """Smooth prices over entire model horizon using approximated price functions"""
 
-        # Results to extract
-        result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
+        # Model parameters
+        rep_filename = params['rep_filename']
+
+        # Load REP results
+        with open(os.path.join(output_dir, rep_filename), 'rb') as f:
+            rep_results = pickle.load(f)
+
+        # Get results corresponding to last iteration of REP solution
+        rep_iteration = rep_results['stage_2_rep'][max(rep_results['stage_2_rep'].keys())]
+
+        # Extract parameters from last iteration of REP program results
+        permit_prices = rep_iteration['permit_price']
+        first_year = min(permit_prices.keys())
+        final_year = max(permit_prices.keys())
+        bau_initial_price = self.get_bau_initial_price(output_dir, first_year)
+        scenarios_per_year = len([s for y, s in rep_iteration['RHO'].keys() if y == final_year])
+
+        # Classes used to construct and run primal and MPPDC programs
+        primal = Primal(final_year, scenarios_per_year)
+        baseline = BaselineUpdater(final_year, scenarios_per_year)
+
+        # Construct primal program
+        m_p = primal.construct_model()
+
+        # Results to extract from primal program
+        primal_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
                        'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'C_MC', 'ETA',
                        'DELTA', 'RHO', 'EMISSIONS_RATE', 'YEAR_CUMULATIVE_SCHEME_REVENUE',
                        'YEAR_SCHEME_EMISSIONS_INTENSITY']
@@ -236,211 +289,173 @@ class ModelCases:
         # Results to extract from baseline targeting model
         baseline_keys = ['YEAR_AVERAGE_PRICE', 'YEAR_AVERAGE_PRICE_0', 'YEAR_ABSOLUTE_PRICE_DIFFERENCE']
 
-        # Load REP results - used as starting point for heuristic and MPPDC solution methods
-        with open(os.path.join(output_directory, rep_filename), 'rb') as f:
-            results = pickle.load(f)
-
-        # Carbon tax and REP results
-        carbon_tax_results, rep_iteration_results = results['stage_1_carbon_tax'], results['stage_2_rep']
-
-        # Get results for final REP solution iteration
-        rep_results = rep_iteration_results[max(rep_iteration_results.keys())]
-
-        # Extract permit prices
-        permit_prices = rep_results['permit_price']
-
-        # Final year in model horizon
-        first_year, final_year = min(permit_prices.keys()), max(permit_prices.keys())
-
-        # Extract scenarios per year
-        scenarios_per_year = len([s for y, s in rep_results['RHO'].keys() if y == final_year])
-
-        # Get BAU initial price
-        initial_price = self.get_bau_initial_price(output_dir, first_year)
-
-        # Get upper and lower revenue envelopes, and price weights
-        revenue_envelope_up, revenue_envelope_lo = parameters['revenue_envelope_up'], parameters['revenue_envelope_lo']
-
-        # Get price targets
-        price_weights = parameters['price_weights']
-
-        # Baseline updater
-        baseline = BaselineUpdater(final_year, scenarios_per_year)
-
-        # Container for iteration results
         iteration_results = {}
-
         stop_flag = False
+        counter = 1
 
-        # Iteration counter
-        i = 1
-
-        # Results to input into price targeting model. Set to REP results for first iteration.
-        result_input = rep_results
+        # Initialise price setting generator input as results obtained from final REP iteration
+        psg_input = rep_iteration
 
         while not stop_flag:
             # Identify price setting generators
-            psg = baseline.prices.get_price_setting_generators_from_model_results(result_input)
+            psg = baseline.prices.get_price_setting_generators_from_model_results(psg_input)
 
             # Construct model
-            baseline_model = baseline.construct_model(psg)
+            m_b = baseline.construct_model(psg)
 
             # Update parameters
-            baseline_model = baseline.update_parameters(baseline_model, result_input)
-
-            # Update initial price (set to BAU price in first year)
-            baseline_model.YEAR_AVERAGE_PRICE_0 = float(initial_price)
-
-            # Update revenue envelope targets
-            baseline_model.SCHEME_REVENUE_ENVELOPE_UP.store_values(revenue_envelope_up)
-            baseline_model.SCHEME_REVENUE_ENVELOPE_LO.store_values(revenue_envelope_lo)
-            baseline_model.PRICE_WEIGHTS.store_values(price_weights)
+            m_b = baseline.update_parameters(m_b, psg_input)
+            m_b.YEAR_AVERAGE_PRICE_0 = float(bau_initial_price)
+            m_b.SCHEME_REVENUE_ENVELOPE_UP.store_values(params['revenue_envelope_lo'])
+            m_b.SCHEME_REVENUE_ENVELOPE_LO.store_values(params['revenue_envelope_up'])
+            m_b.PRICE_WEIGHTS.store_values(params['price_weights'])
 
             # Activate constraints
-            baseline_model.SCHEME_REVENUE_ENVELOPE_UP_CONS.activate()
-            baseline_model.SCHEME_REVENUE_ENVELOPE_LO_CONS.activate()
+            m_b.SCHEME_REVENUE_ENVELOPE_UP_CONS.activate()
+            m_b.SCHEME_REVENUE_ENVELOPE_LO_CONS.activate()
 
             # Solve model
-            baseline_model, status = baseline.solve_model(baseline_model)
+            m_b, m_b_status = baseline.solve_model(m_b)
+            r_b = copy.deepcopy({k: self.extract_result(m_b, k) for k in baseline_keys})
 
-            # Price targeting baselines
-            pt_baselines = baseline_model.baseline.get_values()
+            # Update baselines and permit prices in primal model
+            for y in m_p.Y:
+                m_p.baseline[y].fix(m_b.baseline[y].value)
+                m_p.permit_price[y].fix(m_b.PERMIT_PRICE[y])
 
-            # Re-solve primal program with updated baselines
-            m, status = self.run_fixed_policy(final_year, scenarios_per_year, permit_prices, pt_baselines)
-            print('Heuristic', m.baseline.values)
+            # Solve primal program
+            m_p, m_p_status = primal.solve_model(m_p)
 
-            # Get results
-            pt_results = copy.deepcopy({k: self.extract_result(m, k) for k in result_keys})
-            print(pt_results['baseline'])
+            # TODO: Need to fix recursion depth problem
+            r_p = copy.deepcopy({v: self.extract_result(m_p, v) for v in primal_keys})
+            # r_p = {v: self.extract_result(m_p, v) for v in primal_keys}
+            r_p['PRICES'] = copy.deepcopy({k: m_p.dual[m_p.POWER_BALANCE[k]] for k in m_p.POWER_BALANCE.keys()})
+            iteration_results[counter] = {'primal': r_p, 'auxiliary': r_b}
 
-            # Baseline results
-            baseline_results = copy.deepcopy({k: self.extract_result(baseline_model, k) for k in baseline_keys})
+            # Max difference in capacity sizing decision between iterations
+            max_cap_difference = max(abs(psg_input['x_c'][k] - m_p.x_c[k].value) for k in m_p.x_c.keys())
+            print(f'Max capacity difference: {max_cap_difference} MW')
 
-            # Add dual variable from power balance constraint
-            pt_results['PRICES'] = copy.deepcopy({k: m.dual[m.POWER_BALANCE[k]] for k in m.POWER_BALANCE.keys()})
-
-            # Add results to iteration results container
-            iteration_results[i] = {**pt_results, **baseline_results}
-
-            # Check if stop criterion satisfied
-            cap_diff = max([abs(result_input['x_c'][k] - pt_results['x_c'][k]) for k in result_input['x_c'].keys()])
-            print(f'{i}: Maximum capacity difference = {cap_diff} MW')
-            if cap_diff < 5:
+            # Check if capacity variables have changed
+            if max_cap_difference < 5:
                 stop_flag = True
 
-            i += 1
+            else:
+                # Update dictionary of price setting generator program inputs
+                psg_input = r_p
 
-        # Combine results into single dictionary
-        results = {'stage_1_carbon_tax': carbon_tax_results, 'stage_2_rep': rep_iteration_results,
-                   'stage_3_price_targeting': iteration_results}
+            counter += 1
 
-        # Rename file
-        filename = f'price_targeting_heuristic_case.pickle'
-        self.save_results(results, output_dir, filename)
+            # Combine results into a single dictionary
+        combined_results = {**rep_results, 'stage_3_price_targeting': iteration_results}
 
-        return results
+        # Save results
+        self.save_results(combined_results, output_dir, f'price_targeting_heuristic_case.pickle')
 
-    def run_price_smoothing_mppdc_case(self, output_dir, rep_filename, parameters):
+        return m_b, m_b_status, m_p, m_p_status, combined_results
+
+    def run_price_smoothing_mppdc_case(self, params, output_dir):
         """Run case to smooth prices over model horizon, subject to total revenue constraint"""
 
-        # Results to extract
-        result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'q', 'baseline', 'permit_price', 'lamb',
-                       'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_EMISSIONS_INTENSITY',
-                       'YEAR_SCHEME_REVENUE', 'YEAR_CUMULATIVE_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE',
-                       'YEAR_ABSOLUTE_PRICE_DIFFERENCE', 'YEAR_AVERAGE_PRICE_0', 'YEAR_AVERAGE_PRICE']
+        # Model parameters
+        rep_filename = params['rep_filename']
 
         # Load REP results
         with open(os.path.join(output_dir, rep_filename), 'rb') as f:
-            results = pickle.load(f)
-
-        # Carbon tax and REP results
-        carbon_tax_results, rep_iteration_results = results['stage_1_carbon_tax'], results['stage_2_rep']
+            rep_results = pickle.load(f)
 
         # Get results corresponding to last iteration of REP solution
-        rep_results = rep_iteration_results[max(rep_iteration_results.keys())]
+        rep_iteration = rep_results['stage_2_rep'][max(rep_results['stage_2_rep'].keys())]
 
-        # Extract permit prices
-        permit_prices = rep_results['permit_price']
+        # Extract parameters from last iteration of REP program results
+        permit_prices = rep_iteration['permit_price']
+        first_year = min(permit_prices.keys())
+        final_year = max(permit_prices.keys())
+        bau_initial_price = self.get_bau_initial_price(output_dir, first_year)
+        scenarios_per_year = len([s for y, s in rep_iteration['RHO'].keys() if y == final_year])
 
-        # First and final year in model horizon
-        first_year, final_year = min(permit_prices.keys()), max(permit_prices.keys())
+        # Classes used to construct and run primal and MPPDC programs
+        mppdc = MPPDCModel(final_year, scenarios_per_year)
+        primal = Primal(final_year, scenarios_per_year)
 
-        # Get BAU initial price
-        initial_price = self.get_bau_initial_price(output_dir, first_year)
+        # Construct MPPDC
+        m_m = mppdc.construct_model(include_primal_constraints=True)
 
-        # Extract scenarios per year
-        scenarios_per_year = len([s for y, s in rep_results['RHO'].keys() if y == final_year])
+        # Construct primal model
+        m_p = primal.construct_model()
+
+        # Update MPPDC model parameters
+        m_m.YEAR_AVERAGE_PRICE_0 = float(bau_initial_price)
+        m_m.SCHEME_REVENUE_ENVELOPE_LO.store_values(params['revenue_envelope_lo'])
+        m_m.SCHEME_REVENUE_ENVELOPE_UP.store_values(params['revenue_envelope_up'])
+        m_m.PRICE_WEIGHTS.store_values(params['price_weights'])
+
+        # Activate necessary constraints
+        m_m.SCHEME_REVENUE_ENVELOPE_UP_CONS.activate()
+        m_m.SCHEME_REVENUE_ENVELOPE_LO_CONS.activate()
+
+        # Primal variables
+        primal_vars = ['x_c', 'p', 'p_in', 'p_out', 'q', 'p_V', 'p_L', 'permit_price']
+        fixed_vars = {v: rep_iteration[v] for v in primal_vars}
+
+        # Results to extract from MPPDC model
+        mppdc_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'q', 'baseline', 'permit_price', 'lamb',
+                      'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_EMISSIONS_INTENSITY',
+                      'YEAR_SCHEME_REVENUE', 'YEAR_CUMULATIVE_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE',
+                      'YEAR_ABSOLUTE_PRICE_DIFFERENCE', 'YEAR_AVERAGE_PRICE_0', 'YEAR_AVERAGE_PRICE']
+
+        # Stop flag and iteration counter
+        stop_flag = False
+        counter = 1
 
         # Container for iteration results
         iteration_results = {}
 
-        stop_flag = False
-
-        # Iteration counter
-        i = 1
-
-        # Construct MPPDC
-        mppdc = MPPDCModel(final_year, scenarios_per_year)
-        mppdc_model = mppdc.construct_model(include_primal_constraints=False)
-
-        # Set average price in year prior to model start (assume same first year average price in BAU case)
-        mppdc_model.YEAR_AVERAGE_PRICE_0 = float(initial_price)
-
-        # Define revenue envelopes and price weights
-        mppdc_model.SCHEME_REVENUE_ENVELOPE_LO.store_values(parameters['revenue_envelope_lo'])
-        mppdc_model.SCHEME_REVENUE_ENVELOPE_UP.store_values(parameters['revenue_envelope_up'])
-        mppdc_model.PRICE_WEIGHTS.store_values(parameters['price_weights'])
-
-        # Activate revenue envelope constraints
-        mppdc_model.SCHEME_REVENUE_ENVELOPE_UP_CONS.activate()
-        mppdc_model.SCHEME_REVENUE_ENVELOPE_LO_CONS.activate()
-
-        # Primal variables to fix. Set equal to results obtained from REP case in first iteration.
-        primal_variables = ['x_c', 'p', 'p_in', 'p_out', 'q', 'p_V', 'p_L', 'permit_price']
-        fixed_variables = {k: rep_results[k] for k in primal_variables}
-
         while not stop_flag:
             # Fix MPPDC variables
-            mppdc_model = mppdc.fix_variables(mppdc_model, fixed_variables)
+            m_m = mppdc.fix_variables(m_m, fixed_vars)
 
-            # Solve model
-            mppdc_model, solve_status = mppdc.solve_model(mppdc_model)
-            print('MPPDC', mppdc_model.baseline.get_values())
-            # Get results
-            pt_results = copy.deepcopy({k: self.extract_result(mppdc_model, k) for k in result_keys})
+            # Solve MPPDC
+            m_m, m_m_status = mppdc.solve_model(m_m)
 
-            # Extract model results
-            iteration_results[i] = pt_results
+            # Results from MPPDC program
+            r_m = copy.deepcopy({v: self.extract_result(m_m, v) for v in mppdc_keys})
+            iteration_results[counter] = r_m
 
-            # Run primal
-            baselines = pt_results['baseline']
-            primal_model, primal_status = self.run_fixed_policy(final_year, scenarios_per_year, permit_prices,
-                                                                baselines)
+            # Update primal program with baselines and permit prices obtained from MPPDC model
+            for y in m_p.Y:
+                m_p.baseline[y].fix(m_m.baseline[y].value)
+                m_p.permit_price[y].fix(m_m.permit_price[y].value)
 
-            # Extract results
-            primal_results = copy.deepcopy({k: self.extract_result(primal_model, k) for k in primal_variables})
-            primal_results['PRICES'] = copy.deepcopy({k: primal_model.dual[primal_model.POWER_BALANCE[k]]
-                                                      for k in primal_model.POWER_BALANCE.keys()})
-            iteration_results[i]['primal'] = primal_results
+            # Solve primal model
+            m_p, m_p_status = primal.solve_model(m_p)
 
-            # Check if stop criterion satisfied
-            cap_diff = max([abs(fixed_variables['x_c'][k] - primal_results['x_c'][k])
-                            for k in fixed_variables['x_c'].keys()])
-            print(f'{i}: Maximum capacity difference = {cap_diff} MW')
-            if cap_diff < 5:
+            # Results from primal program
+            p_r = copy.deepcopy({v: self.extract_result(m_p, v) for v in primal_vars})
+            p_r['PRICES'] = copy.deepcopy({k: m_p.dual[m_p.POWER_BALANCE[k]] for k in m_p.POWER_BALANCE.keys()})
+            iteration_results[counter]['primal'] = p_r
+
+            # Max difference in capacity sizing decision between MPPDC and primal program
+            max_cap_difference = max(abs(m_m.x_c[k].value - m_p.x_c[k].value) for k in m_m.x_c.keys())
+            print(f'Max capacity difference: {max_cap_difference} MW')
+
+            # Check if capacity variables have changed
+            if max_cap_difference < 5:
                 stop_flag = True
 
-            # Update dictionary of fixed variables to be used in next iteration
-            fixed_variables = {k: primal_results[k] for k in primal_variables}
+            else:
+                # Update dictionary of fixed variables to be used in next iteration
+                fixed_vars = {v: p_r[v] for v in primal_vars}
 
-        # Combine results into a single dictionary
-        combined_results = {**results, 'stage_3_price_targeting': iteration_results}
+            counter += 1
+
+            # Combine results into a single dictionary
+        combined_results = {**rep_results, 'stage_3_price_targeting': iteration_results}
 
         # Save results
         self.save_results(combined_results, output_dir, f'price_targeting_mppdc_case.pickle')
 
-        return combined_results
+        return m_m, m_m_status, m_p, m_p_status, combined_results
 
     def get_bau_initial_price(self, output_dir, first_year):
         """Get BAU price in first year"""
@@ -463,64 +478,32 @@ if __name__ == '__main__':
     # Object used to run model cases
     cases = ModelCases(output_directory, log_file_name)
 
-    targets = Targets()
-
     # Common model parameters
-    start = 2016
-    end = 2020
-    scenarios = 3
+    start, end, scenarios = 2016, 2020, 3
 
     # Permit prices for carbon pricing scenarios
     permit_prices_model = {y: float(40) for y in range(start, end + 1)}
+    baselines_model = {y: float(0.5) for y in range(start, end + 1)}
+    scheme_revenue_envelope_lo = {y: float(-1e9) for y in range(start, end + 1)}
+    scheme_revenue_envelope_up = {y: float(1e9) for y in range(start, end + 1)}
+    scheme_price_weights = {y: float(0) for y in range(start, end + 1)}
 
-    # Scheme revenue envelope in first year
-    r_0 = float(100e6)
+    # Define case parameters and run model
+    case_params = {'rep_filename': 'rep_case.pickle',
+                   'revenue_envelope_lo': scheme_revenue_envelope_lo,
+                   'revenue_envelope_up': scheme_revenue_envelope_up,
+                   'price_weights': scheme_price_weights}
 
-    # Revenue envelope half-life
-    halflife = 4
+    # Run price case targeting model using MPPDC model
+    mo_m, mo_m_status, mo_p, mo_p_status, r_ptm = cases.run_price_smoothing_mppdc_case(case_params, output_directory)
 
-    # Upper and lower revenue envelopes
-    rev_envelope_up = {y: targets.get_envelope(r_0, halflife, start, y) for y in range(start, end + 1)}
-    rev_envelope_lo = {y: -targets.get_envelope(r_0, halflife, start, y) for y in range(start, end + 1)}
+    # Run price case targeting model using auxiliary model
+    mo_b, mo_b_status, mo_ph, mo_ph_status, r_pth = cases.run_price_smoothing_heuristic_case(case_params, output_directory)
 
-    # Price weights
-    price_target_weights = {y: targets.get_envelope(1, halflife, start, y) for y in range(start, end + 1)}
+    # Check prices
+    p_m = mo_m.lamb.get_values()
+    p_p = {k: mo_p.dual[mo_p.POWER_BALANCE[k]] for k in mo_p.POWER_BALANCE.keys()}
 
-    # Parameters to be used in price targeting models
-    price_targeting_parameters = {'revenue_envelope_up': rev_envelope_up, 'revenue_envelope_lo': rev_envelope_lo,
-                                  'price_weights': price_target_weights}
-
-    # Run business-as-usual case
-    r_bau = cases.run_bau_case(output_directory, start, end, scenarios)
-
-    # Run carbon tax case
-    # r_ct = cases.run_carbon_tax_case(output_directory, start_year, end_year, scenarios, permit_prices_model)
-
-    # Run Refunded Emissions Payment Scheme
-    r_rep = cases.run_rep_case(output_directory, start, end, scenarios, permit_prices_model)
-
-    # Price targeting heuristic case over whole model horizon
-    r_pth = cases.run_price_smoothing_heuristic_case(output_directory, 'rep_case.pickle', price_targeting_parameters)
-
-    # Price targeting MPPDC model
-    r_ptm = cases.run_price_smoothing_mppdc_case(output_directory, 'rep_case.pickle', price_targeting_parameters)
-
-    # # Load results
-    # with open(os.path.join(output_directory, 'price_targeting_heuristic_case.pickle'), 'rb') as f:
-    #     r_pth = pickle.load(f)
-    #
-    # # Load results
-    # with open(os.path.join(output_directory, 'price_targeting_mppdc_case.pickle'), 'rb') as f:
-    #     r_ptm = pickle.load(f)
-
-    fig, ax = plt.subplots()
-    ax.plot(list(r_pth['stage_3_price_targeting'][1]['baseline'].values()))
-    ax.plot(list(r_ptm['stage_3_price_targeting'][1]['baseline'].values()))
-    plt.show()
-
-    fig, ax = plt.subplots()
-    ax.plot(list(r_pth['stage_3_price_targeting'][1]['YEAR_CUMULATIVE_SCHEME_REVENUE'].values()))
-    ax.plot(list(r_ptm['stage_3_price_targeting'][1]['YEAR_CUMULATIVE_SCHEME_REVENUE'].values()))
-    ax.plot(list(rev_envelope_lo.values()))
-    ax.plot(list(rev_envelope_up.values()))
-    plt.show()
+    # Absolute price difference, and max difference
+    p_diff = {k: abs(abs(p_m[k]) - abs(p_p[k])) for k in p_m.keys()}
+    p_diff_max = max(p_diff.values())

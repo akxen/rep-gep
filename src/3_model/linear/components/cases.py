@@ -83,14 +83,21 @@ class ModelCases:
         m = mppdc.construct_model()
 
         # Fix permit prices and baselines
-        m.permit_price.store_values(permit_prices)
-        m.permit_price.fix()
-
-        m.baseline.store_values(baselines)
-        m.baseline.fix()
+        for y in permit_prices.keys():
+            m.permit_price[y].fix(permit_prices[y])
+            m.baseline[y].fix(baselines[y])
 
         # Solve MPPDC model with fixed policy parameters
         m, status = mppdc.solve_model(m)
+
+        # Fix capacity variables
+        m.x_c.fix()
+
+        # Re-solve to obtain correct prices
+        m, status = mppdc.solve_model(m)
+
+        # Unfix capacity variables. Ready for next solve.
+        m.x_c.unfix()
 
         # Model results
         results = {k: self.extract_result(m, k) for k in result_keys}
