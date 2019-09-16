@@ -193,14 +193,14 @@ class BaselineUpdater:
         m.REVENUE_NEUTRAL_TRANSITION = Constraint(rule=revenue_neutral_transition_rule)
         m.REVENUE_NEUTRAL_TRANSITION.deactivate()
 
-        def revenue_neutral_year_rule(_m, y):
+        def year_net_scheme_revenue_neutral_rule(_m, y):
             """Enforce scheme is revenue neutral for a given year"""
 
             return m.YEAR_SCHEME_REVENUE[y] == 0
 
         # Enforce revenue neutrality for a given year
-        m.REVENUE_NEUTRAL_YEAR = Constraint(m.Y, rule=revenue_neutral_year_rule)
-        m.REVENUE_NEUTRAL_YEAR.deactivate()
+        m.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS = Constraint(m.Y, rule=year_net_scheme_revenue_neutral_rule)
+        m.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS.deactivate()
 
         def cumulative_revenue_lower_bound_rule(_m, y):
             """Ensure revenue never falls below a given lower bound for any year in model horizon"""

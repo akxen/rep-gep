@@ -317,6 +317,10 @@ class ModelCases:
             # m_b.SCHEME_REVENUE_ENVELOPE_UP_CONS.activate()
             m_b.SCHEME_REVENUE_ENVELOPE_LO_CONS.activate()
 
+            for y in m_b.Y:
+                if y >= params['transition_year']:
+                    m_b.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS[y].activate()
+
             # Solve model
             m_b, m_b_status = baseline.solve_model(m_b)
             r_b = copy.deepcopy({k: self.extract_result(m_b, k) for k in baseline_keys})
@@ -395,6 +399,10 @@ class ModelCases:
         # Activate necessary constraints
         # m_m.SCHEME_REVENUE_ENVELOPE_UP_CONS.activate()
         m_m.SCHEME_REVENUE_ENVELOPE_LO_CONS.activate()
+
+        for y in m_m.Y:
+            if y >= params['transition_year']:
+                m_m.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS[y].activate()
 
         # Primal variables
         primal_vars = ['x_c', 'p', 'p_in', 'p_out', 'q', 'p_V', 'p_L', 'permit_price']
@@ -497,13 +505,14 @@ if __name__ == '__main__':
     case_params = {'rep_filename': 'rep_case.pickle',
                    'revenue_envelope_lo': scheme_revenue_envelope_lo,
                    'revenue_envelope_up': scheme_revenue_envelope_up,
-                   'price_weights': scheme_price_weights}
+                   'price_weights': scheme_price_weights,
+                   'transition_year': 2021}
 
     # Run BAU case
-    mo_bau, mo_bau_status = cases.run_bau_case(start, end, scenarios, output_directory)
+    # mo_bau, mo_bau_status = cases.run_bau_case(start, end, scenarios, output_directory)
 
     # Run REP case
-    mo_rep, mo_rep_status = cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
+    # mo_rep, mo_rep_status = cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
 
     # Run price case targeting model using MPPDC model
     mo_m, mo_m_status, mo_p, mo_p_status, r_ptm = cases.run_price_smoothing_mppdc_case(case_params, output_directory)
