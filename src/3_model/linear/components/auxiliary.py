@@ -249,15 +249,6 @@ class BaselineUpdater:
         # # Price difference dummy constraints
         # m.PRICE_DIFFERENCE_WEIGHTED_CONS_2 = Constraint(m.Y, rule=price_difference_weighted_2_rule)
 
-        def scheme_revenue_upper_envelope_rule(_m, y):
-            """Ensure scheme revenue is less than or equal to upper envelope"""
-
-            return m.YEAR_CUMULATIVE_SCHEME_REVENUE[y] <= m.SCHEME_REVENUE_ENVELOPE_UP[y]
-
-        # Ensure scheme revenue less than or equal to upper envelope
-        m.SCHEME_REVENUE_ENVELOPE_UP_CONS = Constraint(m.Y, rule=scheme_revenue_upper_envelope_rule)
-        m.SCHEME_REVENUE_ENVELOPE_UP_CONS.deactivate()
-
         def scheme_revenue_lower_envelope_rule(_m, y):
             """Ensure scheme revenue is greater than or equal to lower envelope"""
 

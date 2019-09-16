@@ -1989,15 +1989,6 @@ class MPPDCModel:
         m.TRANSITION_NET_SCHEME_REVENUE_NEUTRAL_CONS = Constraint(rule=transition_net_scheme_revenue_neutral_rule)
         m.TRANSITION_NET_SCHEME_REVENUE_NEUTRAL_CONS.deactivate()
 
-        def scheme_revenue_upper_envelope_rule(_m, y):
-            """Ensure scheme revenue is less than or equal to upper envelope"""
-
-            return m.YEAR_CUMULATIVE_SCHEME_REVENUE[y] <= m.SCHEME_REVENUE_ENVELOPE_UP[y]
-
-        # Ensure scheme revenue less than or equal to upper envelope
-        m.SCHEME_REVENUE_ENVELOPE_UP_CONS = Constraint(m.Y, rule=scheme_revenue_upper_envelope_rule)
-        m.SCHEME_REVENUE_ENVELOPE_UP_CONS.deactivate()
-
         def scheme_revenue_lower_envelope_rule(_m, y):
             """Ensure scheme revenue is greater than or equal to lower envelope"""
 

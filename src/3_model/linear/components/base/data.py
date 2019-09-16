@@ -127,7 +127,7 @@ class ModelData:
         """Load input traces"""
 
         # Input traces for model horizon
-        df = pd.read_pickle(os.path.join(self.input_traces_dir, 'centroids_5.pickle'))
+        df = pd.read_pickle(os.path.join(self.input_traces_dir, 'centroids.pickle'))
 
         # Scenario index is 0-based. Want to increment each scenario index by 1.
         df.index.set_levels([i + 1 for i in df.index.levels[1]], level=1, inplace=True)
