@@ -6,9 +6,9 @@ import copy
 import pickle
 import logging
 
-# sys.setrecursionlimit(1000)
 sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir, '4_analysis'))
 
+import numpy as np
 from pyomo.environ import *
 import matplotlib.pyplot as plt
 
@@ -130,7 +130,7 @@ class ModelCases:
 
         return m, status
 
-    def run_bau_case(self, output_dir, first_year, final_year, scenarios_per_year):
+    def run_bau_case(self, first_year, final_year, scenarios_per_year, output_dir):
         """Run business-as-usual case"""
 
         # Permit prices and emissions intensity baselines for BAU case (all 0)
@@ -138,7 +138,7 @@ class ModelCases:
         baselines = {y: float(0) for y in range(first_year, final_year + 1)}
 
         # Run model
-        m, status = self.run_fixed_policy(final_year, scenarios_per_year, permit_prices, baselines)
+        m, status = self.run_primal_fixed_policy(final_year, scenarios_per_year, permit_prices, baselines)
 
         # Results to extract
         result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
@@ -155,7 +155,7 @@ class ModelCases:
         filename = 'bau_case.pickle'
         self.save_results(results, output_dir, filename)
 
-        return results
+        return m, status
 
     def run_carbon_tax_case(self, output_dir, first_year, final_year, scenarios_per_year, permit_prices):
         """Run carbon tax scenario"""
@@ -183,7 +183,7 @@ class ModelCases:
 
         return results
 
-    def run_rep_case(self, output_dir, first_year, final_year, scenarios_per_year, permit_prices):
+    def run_rep_case(self, first_year, final_year, scenarios_per_year, permit_prices, output_dir):
         """Run carbon tax scenario"""
 
         # Results to extract
@@ -196,7 +196,7 @@ class ModelCases:
         baselines = {y: float(0) for y in range(first_year, final_year + 1)}
 
         # Run model (carbon tax case)
-        m, status = self.run_fixed_policy(final_year, scenarios_per_year, permit_prices, baselines)
+        m, status = self.run_primal_fixed_policy(final_year, scenarios_per_year, permit_prices, baselines)
 
         # Model results
         carbon_tax_results = {k: self.extract_result(m, k) for k in result_keys}
@@ -222,7 +222,7 @@ class ModelCases:
         while not stop_flag:
 
             # Re-run model with new baselines
-            m, status = self.run_fixed_policy(final_year, scenarios_per_year, permit_prices, rep_baselines)
+            m, status = self.run_primal_fixed_policy(final_year, scenarios_per_year, permit_prices, rep_baselines)
 
             # Model results
             rep_results = {k: self.extract_result(m, k) for k in result_keys}
@@ -241,6 +241,9 @@ class ModelCases:
 
             # Update input results (used to check stopping criterion in next iteration)
             result_input = copy.deepcopy(rep_results)
+
+            # Update baselines to be used in next iteration
+            rep_baselines = result_input['YEAR_SCHEME_EMISSIONS_INTENSITY']
 
             i += 1
 
@@ -306,12 +309,12 @@ class ModelCases:
             # Update parameters
             m_b = baseline.update_parameters(m_b, psg_input)
             m_b.YEAR_AVERAGE_PRICE_0 = float(bau_initial_price)
-            m_b.SCHEME_REVENUE_ENVELOPE_UP.store_values(params['revenue_envelope_lo'])
-            m_b.SCHEME_REVENUE_ENVELOPE_LO.store_values(params['revenue_envelope_up'])
+            m_b.SCHEME_REVENUE_ENVELOPE_UP.store_values(params['revenue_envelope_up'])
+            m_b.SCHEME_REVENUE_ENVELOPE_LO.store_values(params['revenue_envelope_lo'])
             m_b.PRICE_WEIGHTS.store_values(params['price_weights'])
 
             # Activate constraints
-            m_b.SCHEME_REVENUE_ENVELOPE_UP_CONS.activate()
+            # m_b.SCHEME_REVENUE_ENVELOPE_UP_CONS.activate()
             m_b.SCHEME_REVENUE_ENVELOPE_LO_CONS.activate()
 
             # Solve model
@@ -321,14 +324,13 @@ class ModelCases:
             # Update baselines and permit prices in primal model
             for y in m_p.Y:
                 m_p.baseline[y].fix(m_b.baseline[y].value)
-                m_p.permit_price[y].fix(m_b.PERMIT_PRICE[y])
+                m_p.permit_price[y].fix(m_b.PERMIT_PRICE[y].value)
 
             # Solve primal program
             m_p, m_p_status = primal.solve_model(m_p)
 
-            # TODO: Need to fix recursion depth problem
+            # Get results
             r_p = copy.deepcopy({v: self.extract_result(m_p, v) for v in primal_keys})
-            # r_p = {v: self.extract_result(m_p, v) for v in primal_keys}
             r_p['PRICES'] = copy.deepcopy({k: m_p.dual[m_p.POWER_BALANCE[k]] for k in m_p.POWER_BALANCE.keys()})
             iteration_results[counter] = {'primal': r_p, 'auxiliary': r_b}
 
@@ -391,7 +393,7 @@ class ModelCases:
         m_m.PRICE_WEIGHTS.store_values(params['price_weights'])
 
         # Activate necessary constraints
-        m_m.SCHEME_REVENUE_ENVELOPE_UP_CONS.activate()
+        # m_m.SCHEME_REVENUE_ENVELOPE_UP_CONS.activate()
         m_m.SCHEME_REVENUE_ENVELOPE_LO_CONS.activate()
 
         # Primal variables
@@ -478,21 +480,30 @@ if __name__ == '__main__':
     # Object used to run model cases
     cases = ModelCases(output_directory, log_file_name)
 
+    # Object used to assist in calculation of target trajectories (e.g. price weights)
+    targets = Targets()
+
     # Common model parameters
-    start, end, scenarios = 2016, 2020, 3
+    start, end, scenarios = 2016, 2026, 4
 
     # Permit prices for carbon pricing scenarios
     permit_prices_model = {y: float(40) for y in range(start, end + 1)}
     baselines_model = {y: float(0.5) for y in range(start, end + 1)}
-    scheme_revenue_envelope_lo = {y: float(-1e9) for y in range(start, end + 1)}
-    scheme_revenue_envelope_up = {y: float(1e9) for y in range(start, end + 1)}
-    scheme_price_weights = {y: float(0) for y in range(start, end + 1)}
+    scheme_revenue_envelope_up = {y: float(100e9) for y in range(start, end + 1)}
+    scheme_revenue_envelope_lo = {y: targets.get_envelope(-100e6, 4, start, y) for y in range(start, end + 1)}
+    scheme_price_weights = {y: targets.get_envelope(1, 4, start, y) for y in range(start, end + 1)}
 
     # Define case parameters and run model
     case_params = {'rep_filename': 'rep_case.pickle',
                    'revenue_envelope_lo': scheme_revenue_envelope_lo,
                    'revenue_envelope_up': scheme_revenue_envelope_up,
                    'price_weights': scheme_price_weights}
+
+    # Run BAU case
+    mo_bau, mo_bau_status = cases.run_bau_case(start, end, scenarios, output_directory)
+
+    # Run REP case
+    mo_rep, mo_rep_status = cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
 
     # Run price case targeting model using MPPDC model
     mo_m, mo_m_status, mo_p, mo_p_status, r_ptm = cases.run_price_smoothing_mppdc_case(case_params, output_directory)
@@ -507,3 +518,9 @@ if __name__ == '__main__':
     # Absolute price difference, and max difference
     p_diff = {k: abs(abs(p_m[k]) - abs(p_p[k])) for k in p_m.keys()}
     p_diff_max = max(p_diff.values())
+
+    # Check baselines from both plots. Include lower scheme revenue envelope
+    fig, ax = plt.subplots()
+    ax.plot(list(mo_m.baseline.get_values().values()))
+    ax.plot(list(mo_b.baseline.get_values().values()))
+    plt.show()
