@@ -306,13 +306,31 @@ class AnalyseResults:
 
 if __name__ == '__main__':
     # Path where results can be found
-    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'local')
+    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote')
 
     # Object used to analyse results
     analysis = AnalyseResults()
 
+    with open(os.path.join(results_directory, 'price_targeting_mppdc_case.pickle'), 'rb') as f:
+        r_m = pickle.load(f)
+
+    p_m = analysis.get_year_average_price(r_m['stage_3_price_targeting'][1]['lamb'], factor=1)
+    b_m = pd.Series(r_m['stage_3_price_targeting'][1]['baseline'])
+
+    with open(os.path.join(results_directory, 'price_targeting_heuristic_case.pickle'), 'rb') as f:
+        r_h = pickle.load(f)
+
+    p_h = analysis.get_year_average_price(r_h['stage_3_price_targeting'][1]['primal']['PRICES'], factor=-1)
+    b_h = pd.Series(r_h['stage_3_price_targeting'][1]['primal']['baseline'])
+
     # Average price
-    average_price = analysis.get_year_average_price(results_directory, 'primal_bau_case.pickle')
+    # average_price = analysis.get_year_average_price(results_directory, 'primal_bau_case.pickle')
+
+    # # Check baselines from both plots. Include lower scheme revenue envelope
+    # fig, ax = plt.subplots()
+    # ax.plot(list(mo_m.baseline.get_values().values()))
+    # ax.plot(list(mo_b.baseline.get_values().values()))
+    # plt.show()
 
     # lost_load = analysis.get_lost_load()
     # Output as a proportion of capacity available in each region

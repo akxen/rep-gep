@@ -18,9 +18,9 @@ from base.utils import Utilities
 
 
 class Primal:
-    def __init__(self, final_year, scenarios_per_year):
+    def __init__(self, start_year, final_year, scenarios_per_year):
         self.data = ModelData()
-        self.components = CommonComponents(final_year, scenarios_per_year)
+        self.components = CommonComponents(start_year, final_year, scenarios_per_year)
         self.utilities = Utilities()
 
         # Solver options
@@ -780,9 +780,9 @@ class Primal:
 
 
 class Dual:
-    def __init__(self, final_year, scenarios_per_year):
+    def __init__(self, start_year, final_year, scenarios_per_year):
         self.data = ModelData()
-        self.components = CommonComponents(final_year, scenarios_per_year)
+        self.components = CommonComponents(start_year, final_year, scenarios_per_year)
         self.utilities = Utilities()
 
         # Solver options
@@ -1801,10 +1801,10 @@ class Dual:
 
 
 class MPPDCModel:
-    def __init__(self, final_year, scenarios_per_year):
-        self.components = CommonComponents(final_year, scenarios_per_year)
-        self.primal = Primal(final_year, scenarios_per_year)
-        self.dual = Dual(final_year, scenarios_per_year)
+    def __init__(self, start_year, final_year, scenarios_per_year):
+        self.components = CommonComponents(start_year, final_year, scenarios_per_year)
+        self.primal = Primal(start_year, final_year, scenarios_per_year)
+        self.dual = Dual(start_year, final_year, scenarios_per_year)
         self.utilities = Utilities()
 
         # Solver options
@@ -2087,11 +2087,11 @@ class MPPDCModel:
 
 
 class CheckSolution:
-    def __init__(self, final_year=2018, scenarios_per_year=2):
+    def __init__(self, start_year=2016, final_year=2018, scenarios_per_year=2):
         # Objects used to construct primal, dual, and MPPDC models
-        self.primal = Primal(final_year=final_year, scenarios_per_year=scenarios_per_year)
-        self.dual = Dual(final_year=final_year, scenarios_per_year=scenarios_per_year)
-        self.mppdc = MPPDCModel(final_year=final_year, scenarios_per_year=scenarios_per_year)
+        self.primal = Primal(start_year=start_year, final_year=final_year, scenarios_per_year=scenarios_per_year)
+        self.dual = Dual(start_year=start_year, final_year=final_year, scenarios_per_year=scenarios_per_year)
+        self.mppdc = MPPDCModel(start_year=start_year, final_year=final_year, scenarios_per_year=scenarios_per_year)
         self.utilities = Utilities()
 
         # Construct models

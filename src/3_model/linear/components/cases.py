@@ -105,11 +105,11 @@ class ModelCases:
         return m, status
 
     @staticmethod
-    def run_primal_fixed_policy(final_year, scenarios_per_year, permit_prices, baselines):
+    def run_primal_fixed_policy(start_year, final_year, scenarios_per_year, permit_prices, baselines):
         """Run primal model with fixed policy parameters"""
 
         # Initialise object and model used to run primal model
-        primal = Primal(final_year, scenarios_per_year)
+        primal = Primal(start_year, final_year, scenarios_per_year)
         m = primal.construct_model()
 
         # Fix permit prices and baselines to specified levels
@@ -137,7 +137,7 @@ class ModelCases:
         baselines = {y: float(0) for y in range(first_year, final_year + 1)}
 
         # Run model
-        m, status = self.run_primal_fixed_policy(final_year, scenarios_per_year, permit_prices, baselines)
+        m, status = self.run_primal_fixed_policy(first_year, final_year, scenarios_per_year, permit_prices, baselines)
 
         # Results to extract
         result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
@@ -163,7 +163,7 @@ class ModelCases:
         baselines = {y: float(0) for y in range(first_year, final_year + 1)}
 
         # Run model
-        m, status = self.run_fixed_policy(final_year, scenarios_per_year, permit_prices, baselines)
+        m, status = self.run_fixed_policy(first_year, final_year, scenarios_per_year, permit_prices, baselines)
 
         # Results to extract
         result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
@@ -195,7 +195,7 @@ class ModelCases:
         baselines = {y: float(0) for y in range(first_year, final_year + 1)}
 
         # Run model (carbon tax case)
-        m, status = self.run_primal_fixed_policy(final_year, scenarios_per_year, permit_prices, baselines)
+        m, status = self.run_primal_fixed_policy(first_year, final_year, scenarios_per_year, permit_prices, baselines)
 
         # Model results
         carbon_tax_results = {k: self.extract_result(m, k) for k in result_keys}
@@ -221,7 +221,8 @@ class ModelCases:
         while not stop_flag:
 
             # Re-run model with new baselines
-            m, status = self.run_primal_fixed_policy(final_year, scenarios_per_year, permit_prices, rep_baselines)
+            m, status = self.run_primal_fixed_policy(first_year, final_year, scenarios_per_year, permit_prices,
+                                                     rep_baselines)
 
             # Model results
             rep_results = {k: self.extract_result(m, k) for k in result_keys}
@@ -253,7 +254,7 @@ class ModelCases:
         filename = 'rep_case.pickle'
         self.save_results(results, output_dir, filename)
 
-        return results
+        return m, status, results
 
     def run_price_smoothing_heuristic_case(self, params, output_dir):
         """Smooth prices over entire model horizon using approximated price functions"""
@@ -276,8 +277,8 @@ class ModelCases:
         scenarios_per_year = len([s for y, s in rep_iteration['RHO'].keys() if y == final_year])
 
         # Classes used to construct and run primal and MPPDC programs
-        primal = Primal(final_year, scenarios_per_year)
-        baseline = BaselineUpdater(final_year, scenarios_per_year)
+        primal = Primal(first_year, final_year, scenarios_per_year)
+        baseline = BaselineUpdater(first_year, final_year, scenarios_per_year)
 
         # Construct primal program
         m_p = primal.construct_model()
@@ -378,8 +379,8 @@ class ModelCases:
         scenarios_per_year = len([s for y, s in rep_iteration['RHO'].keys() if y == final_year])
 
         # Classes used to construct and run primal and MPPDC programs
-        mppdc = MPPDCModel(final_year, scenarios_per_year)
-        primal = Primal(final_year, scenarios_per_year)
+        mppdc = MPPDCModel(first_year, final_year, scenarios_per_year)
+        primal = Primal(first_year, final_year, scenarios_per_year)
 
         # Construct MPPDC
         m_m = mppdc.construct_model(include_primal_constraints=True)
@@ -508,7 +509,7 @@ if __name__ == '__main__':
     mo_bau, mo_bau_status = cases.run_bau_case(start, end, scenarios, output_directory)
 
     # Run REP case
-    mo_rep, mo_rep_status = cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
+    mo_rep, mo_rep_status, r_rep = cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
 
     # Run price case targeting model using MPPDC model
     mo_m, mo_m_status, mo_p, mo_p_status, r_ptm = cases.run_price_smoothing_mppdc_case(case_params, output_directory)

@@ -18,13 +18,14 @@ from components import CommonComponents
 
 
 class PriceSetter:
-    def __init__(self, final_year=2040, scenarios_per_year=5):
-        self.dual = Dual(final_year, scenarios_per_year)
+    def __init__(self, first_year=2016, final_year=2040, scenarios_per_year=5):
+        self.dual = Dual(first_year, final_year, scenarios_per_year)
         self.data = ModelData()
         self.analysis = AnalyseResults()
 
         # Common model components. May need to update these values
-        self.common = CommonComponents(final_year=final_year, scenarios_per_year=scenarios_per_year)
+        self.common = CommonComponents(first_year=first_year, final_year=final_year,
+                                       scenarios_per_year=scenarios_per_year)
 
         # Model sets
         self.sets = self.get_model_sets()

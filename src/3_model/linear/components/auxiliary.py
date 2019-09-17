@@ -16,8 +16,8 @@ from base.components import CommonComponents
 
 
 class BaselineUpdater:
-    def __init__(self, final_year, scenarios_per_year):
-        self.common = CommonComponents(final_year, scenarios_per_year)
+    def __init__(self, first_year, final_year, scenarios_per_year):
+        self.common = CommonComponents(first_year, final_year, scenarios_per_year)
         self.analysis = AnalyseResults()
         self.prices = PriceSetter()
 
@@ -345,7 +345,7 @@ class BaselineUpdater:
 
 if __name__ == '__main__':
     # Model horizon and scenarios per year
-    final_year_model, scenarios_per_year_model = 2040, 5
+    first_year_model, final_year_model, scenarios_per_year_model = 2016, 2040, 5
 
     # Output directory
     output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'local')
@@ -354,7 +354,7 @@ if __name__ == '__main__':
     results_filename = 'carbon_tax_case.pickle'
 
     # Object used to compute baseline trajectory
-    baseline = BaselineUpdater(final_year_model, scenarios_per_year_model)
+    baseline = BaselineUpdater(first_year_model, final_year_model, scenarios_per_year_model)
 
     # Model results
     r_carbon_tax = baseline.analysis.load_results(output_directory, results_filename)

@@ -12,7 +12,7 @@ from targets import Targets
 
 if __name__ == '__main__':
     log_file_name = 'case_logger'
-    output_directory = os.path.join(os.path.dirname(__file__), 'output', 'remote')
+    output_directory = os.path.join(os.path.dirname(__file__), 'output', 'local')
 
     # Object used to run model cases
     cases = ModelCases(output_directory, log_file_name)
@@ -21,10 +21,10 @@ if __name__ == '__main__':
     targets = Targets()
 
     # Common model parameters
-    start, end, scenarios = 2016, 2040, 5
+    start, end, scenarios = 2018, 2028, 5
 
     # Year when scheme transitions to a Refunded Emissions Payment (REP) scheme
-    transition_year = 2026
+    transition_year = 2023
 
     # Permit prices for carbon pricing scenarios
     permit_prices_model = {y: float(40) for y in range(start, end + 1)}
@@ -46,7 +46,7 @@ if __name__ == '__main__':
     mo_bau, mo_bau_status = cases.run_bau_case(start, end, scenarios, output_directory)
 
     # Run REP case
-    mo_rep, mo_rep_status = cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
+    mo_rep, mo_rep_status, r_rep = cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
 
     # Run price case targeting model using MPPDC model
     mo_m, mo_m_status, mo_p, mo_p_status, r_ptm = cases.run_price_smoothing_mppdc_case(case_params, output_directory)

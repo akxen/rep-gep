@@ -9,9 +9,12 @@ from data import ModelData
 
 class CommonComponents:
 
-    def __init__(self, final_year, scenarios_per_year):
+    def __init__(self, start_year, final_year, scenarios_per_year):
         # Model data
         self.data = ModelData()
+
+        # First year in model horizon (min is 2016)
+        self.start_year = start_year
 
         # Default final year (max is 2050)
         self.final_year = final_year
@@ -92,7 +95,7 @@ class CommonComponents:
         m.G = m.G_E.union(m.G_C)
 
         # All years in model horizon
-        m.Y = RangeSet(2016, self.final_year)
+        m.Y = RangeSet(self.start_year, self.final_year)
 
         # Operating scenarios for each year
         m.S = RangeSet(1, self.scenarios_per_year)
