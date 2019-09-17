@@ -21,7 +21,7 @@ if __name__ == '__main__':
     targets = Targets()
 
     # Common model parameters
-    start, end, scenarios = 2016, 2040, 10
+    start, end, scenarios = 2016, 2040, 5
 
     # Year when scheme transitions to a Refunded Emissions Payment (REP) scheme
     transition_year = 2026
