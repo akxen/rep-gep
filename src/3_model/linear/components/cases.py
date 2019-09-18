@@ -154,7 +154,10 @@ class ModelCases:
         filename = 'bau_case.pickle'
         self.save_results(results, output_dir, filename)
 
-        return m, status
+        # Combine output in dictionary. To be returned by method.
+        output = {'results': results, 'model': m, 'status': status}
+
+        return output
 
     def run_carbon_tax_case(self, output_dir, first_year, final_year, scenarios_per_year, permit_prices):
         """Run carbon tax scenario"""
@@ -254,7 +257,10 @@ class ModelCases:
         filename = 'rep_case.pickle'
         self.save_results(results, output_dir, filename)
 
-        return m, status, results
+        # Dictionary to be returned by method
+        output = {'results': results, 'model': m, 'status': status}
+
+        return output
 
     def run_price_smoothing_heuristic_case(self, params, output_dir):
         """Smooth prices over entire model horizon using approximated price functions"""
@@ -356,7 +362,11 @@ class ModelCases:
         # Save results
         self.save_results(combined_results, output_dir, f'price_targeting_heuristic_case.pickle')
 
-        return m_b, m_b_status, m_p, m_p_status, combined_results
+        # Combine method output
+        output = {'auxiliary_model': m_b, 'auxiliary_status': m_b_status, 'primal_model': m_p,
+                  'primal_status': m_p_status, 'results': combined_results}
+
+        return output
 
     def run_price_smoothing_mppdc_case(self, params, output_dir):
         """Run case to smooth prices over model horizon, subject to total revenue constraint"""
@@ -461,7 +471,11 @@ class ModelCases:
         # Save results
         self.save_results(combined_results, output_dir, f'price_targeting_mppdc_case.pickle')
 
-        return m_m, m_m_status, m_p, m_p_status, combined_results
+        # Method output
+        output = {'mppdc_model': m_m, 'mppdc_status': m_m_status, 'primal_model': m_p, 'primal_status': m_p_status,
+                  'results': combined_results}
+
+        return output
 
     def get_bau_initial_price(self, output_dir, first_year):
         """Get BAU price in first year"""
@@ -506,21 +520,21 @@ if __name__ == '__main__':
                    'transition_year': transition_year}
 
     # Run BAU case
-    mo_bau, mo_bau_status = cases.run_bau_case(start, end, scenarios, output_directory)
+    r_bau = cases.run_bau_case(start, end, scenarios, output_directory)
 
     # Run REP case
-    mo_rep, mo_rep_status, r_rep = cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
+    r_rep = cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
 
     # Run price case targeting model using MPPDC model
-    mo_m, mo_m_status, mo_p, mo_p_status, r_ptm = cases.run_price_smoothing_mppdc_case(case_params, output_directory)
+    r_ptm = cases.run_price_smoothing_mppdc_case(case_params, output_directory)
 
     # Run price case targeting model using auxiliary model
-    mo_b, mo_b_status, mo_ph, mo_ph_status, r_pth = cases.run_price_smoothing_heuristic_case(case_params,
-                                                                                             output_directory)
+    r_pth = cases.run_price_smoothing_heuristic_case(case_params, output_directory)
 
     # Check prices
-    p_m = mo_m.lamb.get_values()
-    p_p = {k: mo_p.dual[mo_p.POWER_BALANCE[k]] for k in mo_p.POWER_BALANCE.keys()}
+    p_m = r_ptm['mppdc_model'].lamb.get_values()
+    p_p = {k: r_ptm['primal_model'].dual[r_ptm['primal_model'].POWER_BALANCE[k]]
+           for k in r_ptm['primal_model'].POWER_BALANCE.keys()}
 
     # Absolute price difference, and max difference
     p_diff = {k: abs(abs(p_m[k]) - abs(p_p[k])) for k in p_m.keys()}
@@ -528,6 +542,6 @@ if __name__ == '__main__':
 
     # Check baselines from both plots. Include lower scheme revenue envelope
     fig, ax = plt.subplots()
-    ax.plot(list(mo_m.baseline.get_values().values()))
-    ax.plot(list(mo_b.baseline.get_values().values()))
+    ax.plot(list(r_ptm['mppdc_model'].baseline.get_values().values()))
+    ax.plot(list(r_pth['auxiliary_model'].baseline.get_values().values()))
     plt.show()

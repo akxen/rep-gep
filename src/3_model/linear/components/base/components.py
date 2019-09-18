@@ -9,12 +9,12 @@ from data import ModelData
 
 class CommonComponents:
 
-    def __init__(self, start_year, final_year, scenarios_per_year):
+    def __init__(self, first_year, final_year, scenarios_per_year):
         # Model data
         self.data = ModelData()
 
         # First year in model horizon (min is 2016)
-        self.start_year = start_year
+        self.first_year = first_year
 
         # Default final year (max is 2050)
         self.final_year = final_year
@@ -95,7 +95,7 @@ class CommonComponents:
         m.G = m.G_E.union(m.G_C)
 
         # All years in model horizon
-        m.Y = RangeSet(self.start_year, self.final_year)
+        m.Y = RangeSet(self.first_year, self.final_year)
 
         # Operating scenarios for each year
         m.S = RangeSet(1, self.scenarios_per_year)
@@ -640,7 +640,7 @@ class CommonComponents:
         def lost_load_cost_rule(_m, z):
             """Return cost for lost-load power in each NEM zone"""
 
-            return float(1e5 + random.uniform(0, 100))
+            return float(1e4 + random.uniform(0, 100))
 
         # Lost load cost for each NEM zone
         random.seed(10)
