@@ -27,7 +27,7 @@ class AnalyseResults:
 
         return results
 
-    def parse_prices(self, prices, factor=-1):
+    def parse_prices(self, prices, factor):
         """Get price information - keys will be different for primal and MPPDC models
 
         Parameters
@@ -306,10 +306,17 @@ class AnalyseResults:
 
 if __name__ == '__main__':
     # Path where results can be found
-    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote')
+    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'local')
 
     # Object used to analyse results
     analysis = AnalyseResults()
+
+    # # Load results
+    # with open(os.path.join(results_directory, 'rep_case.pickle'), 'rb') as f:
+    #     r_rep = pickle.load(f)
+    #
+    # p_ct = analysis.get_year_average_price(r_rep['stage_1_carbon_tax']['PRICES'], factor=-1)
+    # p_r = analysis.get_year_average_price(r_rep['stage_2_rep'][max(r_rep['stage_2_rep'].keys())]['PRICES'], factor=-1)
 
     with open(os.path.join(results_directory, 'price_targeting_mppdc_case.pickle'), 'rb') as f:
         r_m = pickle.load(f)
@@ -319,44 +326,20 @@ if __name__ == '__main__':
 
     with open(os.path.join(results_directory, 'price_targeting_heuristic_case.pickle'), 'rb') as f:
         r_h = pickle.load(f)
+    #
+    # p_h = analysis.get_year_average_price(r_h['stage_3_price_targeting'][1]['primal']['PRICES'], factor=-1)
+    # b_h = pd.Series(r_h['stage_3_price_targeting'][1]['primal']['baseline'])
 
-    p_h = analysis.get_year_average_price(r_h['stage_3_price_targeting'][1]['primal']['PRICES'], factor=-1)
-    b_h = pd.Series(r_h['stage_3_price_targeting'][1]['primal']['baseline'])
+    # Check baselines from both plots. Include lower scheme revenue envelope
+    fig, ax = plt.subplots()
+    b_m.plot(ax=ax)
+    b_h.plot(ax=ax)
+    plt.show()
 
-    # Average price
-    # average_price = analysis.get_year_average_price(results_directory, 'primal_bau_case.pickle')
-
-    # # Check baselines from both plots. Include lower scheme revenue envelope
-    # fig, ax = plt.subplots()
-    # ax.plot(list(mo_m.baseline.get_values().values()))
-    # ax.plot(list(mo_b.baseline.get_values().values()))
-    # plt.show()
-
-    # lost_load = analysis.get_lost_load()
-    # Output as a proportion of capacity available in each region
-    # df_m_fossil = df_m.loc[df_m['fuel'] == 'FOSSIL', :]
-    # capacity_proportion = df_m_fossil.groupby('region').apply(lambda x: x['output'].sum() / x['capacity'].sum())
-
-    # Results from primal model
-    # generator_output = analysis.get_generator_interval_output()
-
-    # f = 'primal_bau_results.pickle'
-    # f = 'cumulative_emissions_cap_results.pickle'
-    # f = 'interim_emissions_cap_results.pickle'
-    # f = 'carbon_tax_results.pickle'
-
-    # r = analysis.get_year_system_emissions_intensities(f)
-    # analysis.plot_year_system_emissions_intensities('cumulative_emissions_cap_results.pickle')
-    # analysis.plot_year_system_emissions_intensities('carbon_tax_results.pickle')
-
-    # r = analysis.get_installed_capacity(f)
-    # analysis.plot_installed_capacity(f)
-
-    # r = analysis.get_lost_load(f)
-    # r = analysis.get_year_input_traces(2016, 'WIND')
-    # r = analysis.get_year_average_price(f)
-    # analysis.plot_demand_duration_curve(2016)
-    # r = analysis.get_interval_generator_output(f)
-    # r = analysis.get_total_emissions(f)
-    # r = analysis.get_year_emissions(f)
-    # r = analysis.load_results(f)
+    # Check prices
+    fig, ax = plt.subplots()
+    p_m['average_price_real'].plot(ax=ax)
+    p_h['average_price_real'].plot(ax=ax)
+    p_ct['average_price_real'].plot(ax=ax)
+    p_r['average_price_real'].plot(ax=ax)
+    plt.show()

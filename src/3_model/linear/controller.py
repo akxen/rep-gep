@@ -2,6 +2,7 @@
 
 import os
 import sys
+import pickle
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'components'))
 sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, '4_analysis'))
@@ -14,7 +15,7 @@ import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
     log_file_name = 'case_logger'
-    output_directory = os.path.join(os.path.dirname(__file__), 'output', 'remote')
+    output_directory = os.path.join(os.path.dirname(__file__), 'output', 'local')
 
     # Object used to run model cases
     cases = ModelCases(output_directory, log_file_name)
@@ -23,7 +24,7 @@ if __name__ == '__main__':
     targets = Targets()
 
     # Common model parameters
-    start, end, scenarios = 2016, 2040, 5
+    start, end, scenarios = 2016, 2026, 5
 
     # Year when scheme transitions to a Refunded Emissions Payment (REP) scheme
     transition_year = 2021
@@ -36,7 +37,7 @@ if __name__ == '__main__':
                                   for y in range(start, end + 1)}
 
     # Price weights
-    scheme_price_weights = {y: targets.get_envelope(1, 2, start, y) if y <= transition_year else 0
+    scheme_price_weights = {y: targets.get_envelope(100, 1, start, y) if y <= transition_year else 0
                             for y in range(start, end + 1)}
 
     # Define case parameters and run model
@@ -46,36 +47,54 @@ if __name__ == '__main__':
                    'transition_year': transition_year}
 
     # Run BAU case
-    # r_bau = cases.run_bau_case(start, end, scenarios, output_directory)
-    cases.run_bau_case(start, end, scenarios, output_directory)
+    r_bau = cases.run_bau_case(start, end, scenarios, output_directory)
+    # cases.run_bau_case(start, end, scenarios, output_directory)
 
     # Run REP case
-    # r_rep = cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
-    cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
+    r_rep = cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
+    # cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
 
     # Run price case targeting model using MPPDC model
-    # r_ptm = cases.run_price_smoothing_mppdc_case(case_params, output_directory)
-    cases.run_price_smoothing_mppdc_case(case_params, output_directory)
+    r_ptm = cases.run_price_smoothing_mppdc_case(case_params, output_directory)
+    # cases.run_price_smoothing_mppdc_case(case_params, output_directory)
 
     # Run price case targeting model using auxiliary model
-    # r_pth = cases.run_price_smoothing_heuristic_case(case_params, output_directory)
-    cases.run_price_smoothing_heuristic_case(case_params, output_directory)
+    r_pth = cases.run_price_smoothing_heuristic_case(case_params, output_directory)
+    # cases.run_price_smoothing_heuristic_case(case_params, output_directory)
 
-    # # BAU prices
-    # p_bau = cases.analysis.get_year_average_price(r_bau['results']['PRICES'], factor=-1)
+    # with open(os.path.join(output_directory, 'bau_case.pickle'), 'rb') as f:
+    #     r_bau = pickle.load(f)
     #
-    # # Carbon tax prices
-    # p_ct = cases.analysis.get_year_average_price(r_rep['results']['stage_1_carbon_tax']['PRICES'], factor=-1)
+    # with open(os.path.join(output_directory, 'rep_case.pickle'), 'rb') as f:
+    #     r_rep = pickle.load(f)
     #
-    # # MPPDC price targeting prices
-    # p_m = cases.analysis.get_year_average_price(r_ptm['results']['stage_3_price_targeting'][1]['lamb'], factor=1)
+    # with open(os.path.join(output_directory, 'price_targeting_mppdc_case.pickle'), 'rb') as f:
+    #     r_ptm = pickle.load(f)
     #
-    # # Heuristic price targeting prices
-    # p_h = cases.analysis.get_year_average_price(r_pth['results']['stage_3_price_targeting'][1]['primal']['PRICES'],
-    #                                             factor=-1)
-    #
-    # # Baselines
-    # fig, ax = plt.subplots()
-    # ax.plot(list(r_ptm['mppdc_model'].baseline.get_values().values()))
-    # ax.plot(list(r_pth['auxiliary_model'].baseline.get_values().values()))
-    # plt.show()
+    # with open(os.path.join(output_directory, 'price_targeting_heuristic_case.pickle'), 'rb') as f:
+    #     r_pth = pickle.load(f)
+
+    # BAU prices
+    p_bau = cases.analysis.get_year_average_price(r_bau['results']['PRICES'], factor=-1)
+    # p_bau = cases.analysis.get_year_average_price(r_bau['PRICES'], factor=-1)
+
+    # Carbon tax prices
+    p_ct = cases.analysis.get_year_average_price(r_rep['results']['stage_1_carbon_tax']['PRICES'], factor=-1)
+    # p_ct = cases.analysis.get_year_average_price(r_rep['stage_1_carbon_tax']['PRICES'], factor=-1)
+
+    # MPPDC price targeting prices
+    p_m = cases.analysis.get_year_average_price(r_ptm['results']['stage_3_price_targeting'][1]['lamb'], factor=1)
+    # p_m = cases.analysis.get_year_average_price(r_ptm['stage_3_price_targeting'][1]['lamb'], factor=1)
+
+    # Heuristic price targeting prices
+    p_h = cases.analysis.get_year_average_price(r_pth['results']['stage_3_price_targeting'][1]['primal']['PRICES'],
+                                                factor=-1)
+    # p_h = cases.analysis.get_year_average_price(r_pth['stage_3_price_targeting'][1]['primal']['PRICES'], factor=-1)
+
+    # Baselines
+    fig, ax = plt.subplots()
+    ax.plot(list(r_ptm['mppdc_model'].baseline.get_values().values()))
+    # ax.plot(list(r_ptm['stage_3_price_targeting'][max(r_ptm['stage_3_price_targeting'].keys())]['baseline'].values()))
+    ax.plot(list(r_pth['auxiliary_model'].baseline.get_values().values()))
+    # ax.plot(list(r_pth['stage_3_price_targeting'][max(r_pth['stage_3_price_targeting'].keys())]['primal']['baseline'].values()))
+    plt.show()

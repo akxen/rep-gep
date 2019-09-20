@@ -1898,14 +1898,34 @@ class MPPDCModel:
         # Strong duality constraint (primal objective = dual objective at optimality)
         m.STRONG_DUALITY = Constraint(rule=strong_duality_rule)
 
-        def price_target_deviation_1_rule(_m, y):
-            """Constraint computing absolute difference between prices in successive years"""
+        # def price_target_deviation_1_rule(_m, y):
+        #     """Constraint computing absolute difference between prices in successive years"""
+        #
+        #     if y == m.Y.first():
+        #         return m.z_p1[y] >= ((m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])) - m.YEAR_AVERAGE_PRICE_0)
+        #     else:
+        #         return m.z_p1[y] >= ((m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y]))
+        #                              - (m.YEAR_AVERAGE_PRICE[y - 1] * (1 / m.DELTA[y - 1])))
+        #
+        # # Emissions intensity deviation - 1
+        # m.PRICE_TARGET_DEV_1 = Constraint(m.Y, rule=price_target_deviation_1_rule)
+        #
+        # def price_target_deviation_2_rule(_m, y):
+        #     """Constraint computing absolute difference between prices in successive years"""
+        #
+        #     if y == m.Y.first():
+        #         return m.z_p2[y] >= (m.YEAR_AVERAGE_PRICE_0 - (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])))
+        #     else:
+        #         return m.z_p2[y] >= ((m.YEAR_AVERAGE_PRICE[y - 1] * (1 / m.DELTA[y - 1]))
+        #                              - (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])))
+        #
+        # # Emissions intensity deviation - 2
+        # m.PRICE_TARGET_DEV_2 = Constraint(m.Y, rule=price_target_deviation_2_rule)
 
-            if y == m.Y.first():
-                return m.z_p1[y] >= ((m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])) - m.YEAR_AVERAGE_PRICE_0)
-            else:
-                return m.z_p1[y] >= ((m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y]))
-                                     - (m.YEAR_AVERAGE_PRICE[y - 1] * (1 / m.DELTA[y - 1])))
+        def price_target_deviation_1_rule(_m, y):
+            """Absolute difference between prices in successive years relative to first year BAU price"""
+
+            return m.z_p1[y] >= ((m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])) - m.YEAR_AVERAGE_PRICE_0)
 
         # Emissions intensity deviation - 1
         m.PRICE_TARGET_DEV_1 = Constraint(m.Y, rule=price_target_deviation_1_rule)
@@ -1913,32 +1933,10 @@ class MPPDCModel:
         def price_target_deviation_2_rule(_m, y):
             """Constraint computing absolute difference between prices in successive years"""
 
-            if y == m.Y.first():
-                return m.z_p2[y] >= (m.YEAR_AVERAGE_PRICE_0 - (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])))
-            else:
-                return m.z_p2[y] >= ((m.YEAR_AVERAGE_PRICE[y - 1] * (1 / m.DELTA[y - 1]))
-                                     - (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])))
+            return m.z_p2[y] >= (m.YEAR_AVERAGE_PRICE_0 - (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])))
 
         # Emissions intensity deviation - 2
         m.PRICE_TARGET_DEV_2 = Constraint(m.Y, rule=price_target_deviation_2_rule)
-
-        # def price_target_deviation_weighted_1_rule(_m, y):
-        #     """Constraint computing absolute difference between prices in successive years"""
-        #
-        #     return (m.z_p1[y] >= ((m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])) - m.YEAR_AVERAGE_PRICE_0)
-        #             * m.PRICE_WEIGHTS[y])
-        #
-        # # Weighted price target - with reference to BAU price in first year of model horizon
-        # m.PRICE_TARGET_WEIGHTED_DEV_1 = Constraint(m.Y, rule=price_target_deviation_weighted_1_rule)
-        #
-        # def price_target_deviation_weighted_2_rule(_m, y):
-        #     """Constraint computing absolute difference between prices in successive years"""
-        #
-        #     return (m.z_p2[y] >= (m.YEAR_AVERAGE_PRICE_0 - (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])))
-        #             * m.PRICE_WEIGHTS[y])
-        #
-        # # Weighted price target - with reference to BAU price in first year of model horizon
-        # m.PRICE_TARGET_WEIGHTED_DEV_2 = Constraint(m.Y, rule=price_target_deviation_weighted_2_rule)
 
         def total_scheme_revenue_non_negative_rule(_m):
             """Ensure that net scheme revenue is greater than 0 over model horizon"""
