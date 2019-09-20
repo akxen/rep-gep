@@ -8,6 +8,7 @@ import logging
 
 # os.environ['TMPDIR'] = os.path.abspath(os.path.dirname(__file__))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'base'))
+sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, os.pardir, os.pardir, '4_analysis'))
 
 from pyomo.environ import *
 from pyomo.util.infeasible import log_infeasible_constraints
@@ -15,6 +16,7 @@ from pyomo.util.infeasible import log_infeasible_constraints
 from base.data import ModelData
 from base.components import CommonComponents
 from base.utils import Utilities
+from analysis import AnalyseResults
 
 
 class Primal:
@@ -247,14 +249,6 @@ class Primal:
 
         # Scenario scheme energy output (from generators eligible for rebates)
         m.SCENARIO_SCHEME_OUTPUT = Expression(m.Y, m.S, rule=scenario_scheme_output_rule)
-
-        def scenario_demand_rule(_m, y, s):
-            """Total demand for a given scenario (MWh)"""
-
-            return sum(m.RHO[y, s] * m.DEMAND[z, y, s, t] for z in m.Z for t in m.T)
-
-        # Scenario demand
-        m.SCENARIO_DEMAND = Expression(m.Y, m.S, rule=scenario_demand_rule)
 
         def year_demand_rule(_m, y):
             """Total demand for a given year (MWh)"""
@@ -752,6 +746,7 @@ class Primal:
         m = self.components.define_sets(m)
         m = self.components.define_parameters(m)
         m = self.components.define_variables(m)
+        m = self.components.define_expressions(m)
 
         # Primal problem variables
         m = self.define_variables(m)
@@ -1076,40 +1071,71 @@ class Dual:
         # Dual objective expression
         m.DUAL_OBJECTIVE_EXPRESSION = Expression(rule=dual_objective_expression_rule)
 
-        def scenario_average_price(_m, y, s):
-            """Average price for a given scenario"""
-
-            # Total demand
-            demand = sum(m.DEMAND[z, y, s, t] for z in m.Z for t in m.T)
+        def scenario_revenue_rule(_m, y, s):
+            """Total revenue collected from wholesale electricity sales"""
 
             if y != m.Y.last():
-                # Revenue from electricity sales (wholesale)
-                revenue = sum((m.lamb[z, y, s, t] / m.RHO[y, s]) * m.DEMAND[z, y, s, t] for z in m.Z for t in m.T)
+                # Scaling factor
+                scaling_factor = m.DELTA[y] * m.RHO[y, s]
+
+                # Revenue from electricity sales (wholesale) = $/MWh x MWh
+                return sum((m.lamb[z, y, s, t] / scaling_factor) * m.DEMAND[z, y, s, t] * m.RHO[y, s] for z in m.Z
+                           for t in m.T)
 
             else:
+                # Scaling factor
+                scaling_factor = m.DELTA[y] * m.RHO[y, s] * (1 + (1 / m.INTEREST_RATE))
+
                 # Revenue from electricity sales (wholesale)
-                revenue = sum(
-                    (m.lamb[z, y, s, t] / m.RHO[y, s]) * (1 / (1 + (1 / m.INTEREST_RATE))) * m.DEMAND[z, y, s, t] for z
-                    in m.Z for t in m.T)
+                return sum((m.lamb[z, y, s, t] / scaling_factor) * m.DEMAND[z, y, s, t] * m.RHO[y, s] for z in m.Z
+                           for t in m.T)
 
-            # Average price
-            average_price = revenue / demand
+        # Revenue from wholesale electricity sales for each scenario
+        m.SCENARIO_REVENUE = Expression(m.Y, m.S, rule=scenario_revenue_rule)
 
-            return average_price
+        def scenario_average_price_rule(_m, y, s):
+            """Average price for a given scenario"""
+
+            # # Total demand
+            # demand = sum(m.DEMAND[z, y, s, t] for z in m.Z for t in m.T)
+            #
+            # if y != m.Y.last():
+            #     # Scaling factor
+            #     scaling_factor = m.DELTA[y] * m.RHO[y, s]
+            #
+            #     # Revenue from electricity sales (wholesale)
+            #     revenue = sum((m.lamb[z, y, s, t] / scaling_factor) * m.DEMAND[z, y, s, t] for z in m.Z for t in m.T)
+            #
+            # else:
+            #     # Scaling factor
+            #     scaling_factor = m.DELTA[y] * m.RHO[y, s] * (1 + (1 / m.INTEREST_RATE))
+            #
+            #     # Revenue from electricity sales (wholesale)
+            #     revenue = sum((m.lamb[z, y, s, t] / scaling_factor) * m.DEMAND[z, y, s, t] for z in m.Z for t in m.T)
+            #
+            # # Average price
+            # average_price = revenue / demand
+            #
+            # return average_price
+
+            return m.SCENARIO_REVENUE[y, s] / m.SCENARIO_DEMAND[y, s]
 
         # Scenario demand weighted average wholesale price
-        m.SCENARIO_AVERAGE_PRICE = Expression(m.Y, m.S, rule=scenario_average_price)
+        m.SCENARIO_AVERAGE_PRICE = Expression(m.Y, m.S, rule=scenario_average_price_rule)
 
-        def year_average_price(_m, y):
+        def year_average_price_rule(_m, y):
             """Average price for a given year"""
 
-            # Days in year - accounting for leap-years
-            days = sum(m.RHO[y, s] for s in m.S)
+            # # Days in year - accounting for leap-years
+            # days = sum(m.RHO[y, s] for s in m.S)
+            #
+            # return sum((m.RHO[y, s] / days) * m.SCENARIO_AVERAGE_PRICE[y, s] for s in m.S)
 
-            return sum((m.RHO[y, s] / days) * m.SCENARIO_AVERAGE_PRICE[y, s] for s in m.S)
+            # Total revenue
+            return sum(m.SCENARIO_REVENUE[y, s] for s in m.S) / sum(m.SCENARIO_DEMAND[y, s] for s in m.S)
 
         # Year demand weighted average wholesale price
-        m.YEAR_AVERAGE_PRICE = Expression(m.Y, rule=year_average_price)
+        m.YEAR_AVERAGE_PRICE = Expression(m.Y, rule=year_average_price_rule)
 
         return m
 
@@ -1773,6 +1799,7 @@ class Dual:
         m = self.components.define_sets(m)
         m = self.components.define_parameters(m)
         m = self.components.define_variables(m)
+        m = self.components.define_expressions(m)
 
         # Primal problem variables
         m = self.define_variables(m)
@@ -1925,7 +1952,8 @@ class MPPDCModel:
         def price_target_deviation_1_rule(_m, y):
             """Absolute difference between prices in successive years relative to first year BAU price"""
 
-            return m.z_p1[y] >= ((m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])) - m.YEAR_AVERAGE_PRICE_0)
+            # return m.z_p1[y] >= ((m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])) - m.YEAR_AVERAGE_PRICE_0)
+            return m.z_p1[y] >= m.YEAR_AVERAGE_PRICE[y] - m.YEAR_AVERAGE_PRICE_0
 
         # Emissions intensity deviation - 1
         m.PRICE_TARGET_DEV_1 = Constraint(m.Y, rule=price_target_deviation_1_rule)
@@ -1933,7 +1961,8 @@ class MPPDCModel:
         def price_target_deviation_2_rule(_m, y):
             """Constraint computing absolute difference between prices in successive years"""
 
-            return m.z_p2[y] >= (m.YEAR_AVERAGE_PRICE_0 - (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])))
+            # return m.z_p2[y] >= (m.YEAR_AVERAGE_PRICE_0 - (m.YEAR_AVERAGE_PRICE[y] * (1 / m.DELTA[y])))
+            return m.z_p2[y] >= m.YEAR_AVERAGE_PRICE_0 - m.YEAR_AVERAGE_PRICE[y]
 
         # Emissions intensity deviation - 2
         m.PRICE_TARGET_DEV_2 = Constraint(m.Y, rule=price_target_deviation_2_rule)
@@ -2021,6 +2050,7 @@ class MPPDCModel:
         m = self.components.define_sets(m)
         m = self.components.define_parameters(m)
         m = self.components.define_variables(m)
+        m = self.components.define_expressions(m)
 
         # Primal problem elements
         m = self.primal.define_variables(m)
@@ -2360,6 +2390,9 @@ if __name__ == '__main__':
     final_model_year = 2020
     scenarios_per_model_year = 3
 
+    # Object used to analyse model results
+    analysis = AnalyseResults()
+
     # Check model solution
     check = CheckSolution(final_year=final_model_year, scenarios_per_year=scenarios_per_model_year)
 
@@ -2376,3 +2409,5 @@ if __name__ == '__main__':
 
     # primal = Primal(2040, 5)
     # primal_model = primal.construct_model()
+
+    analysis.get_year_average_price(check.m_m.lamb.get_values(), factor=1)

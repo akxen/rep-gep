@@ -700,3 +700,17 @@ class CommonComponents:
         m.permit_price = Var(m.Y, within=NonNegativeReals, initialize=0)
 
         return m
+
+    @staticmethod
+    def define_expressions(m):
+        """Define expressions common to both primal and dual models"""
+
+        def scenario_demand_rule(_m, y, s):
+            """Total demand for a given scenario (MWh)"""
+
+            return sum(m.RHO[y, s] * m.DEMAND[z, y, s, t] for z in m.Z for t in m.T)
+
+        # Scenario demand
+        m.SCENARIO_DEMAND = Expression(m.Y, m.S, rule=scenario_demand_rule)
+
+        return m
