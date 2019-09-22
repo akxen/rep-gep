@@ -306,17 +306,17 @@ class AnalyseResults:
 
 if __name__ == '__main__':
     # Path where results can be found
-    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'local')
+    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote')
 
     # Object used to analyse results
     analysis = AnalyseResults()
 
-    # # Load results
-    # with open(os.path.join(results_directory, 'rep_case.pickle'), 'rb') as f:
-    #     r_rep = pickle.load(f)
-    #
-    # p_ct = analysis.get_year_average_price(r_rep['stage_1_carbon_tax']['PRICES'], factor=-1)
-    # p_r = analysis.get_year_average_price(r_rep['stage_2_rep'][max(r_rep['stage_2_rep'].keys())]['PRICES'], factor=-1)
+    # Load results
+    with open(os.path.join(results_directory, 'rep_case.pickle'), 'rb') as f:
+        r_rep = pickle.load(f)
+
+    p_ct = analysis.get_year_average_price(r_rep['stage_1_carbon_tax']['PRICES'], factor=-1)
+    p_r = analysis.get_year_average_price(r_rep['stage_2_rep'][max(r_rep['stage_2_rep'].keys())]['PRICES'], factor=-1)
 
     with open(os.path.join(results_directory, 'price_targeting_mppdc_case.pickle'), 'rb') as f:
         r_m = pickle.load(f)
@@ -326,20 +326,20 @@ if __name__ == '__main__':
 
     with open(os.path.join(results_directory, 'price_targeting_heuristic_case.pickle'), 'rb') as f:
         r_h = pickle.load(f)
-    #
-    # p_h = analysis.get_year_average_price(r_h['stage_3_price_targeting'][1]['primal']['PRICES'], factor=-1)
-    # b_h = pd.Series(r_h['stage_3_price_targeting'][1]['primal']['baseline'])
+
+    p_h = analysis.get_year_average_price(r_h['stage_3_price_targeting'][1]['primal']['PRICES'], factor=-1)
+    b_h = pd.Series(r_h['stage_3_price_targeting'][1]['primal']['baseline'])
 
     # Check baselines from both plots. Include lower scheme revenue envelope
     fig, ax = plt.subplots()
-    b_m.plot(ax=ax)
-    b_h.plot(ax=ax)
+    b_m.plot(ax=ax, drawstyle="steps-post", color='red')
+    b_h.plot(ax=ax, drawstyle="steps-post", color='blue')
     plt.show()
 
     # Check prices
     fig, ax = plt.subplots()
-    p_m['average_price_real'].plot(ax=ax)
-    p_h['average_price_real'].plot(ax=ax)
-    p_ct['average_price_real'].plot(ax=ax)
-    p_r['average_price_real'].plot(ax=ax)
+    p_m['average_price_real'].plot(ax=ax, color='red')
+    p_h['average_price_real'].plot(ax=ax, color='blue')
+    p_ct['average_price_real'].plot(ax=ax, color='green')
+    p_r['average_price_real'].plot(ax=ax, color='orange')
     plt.show()
