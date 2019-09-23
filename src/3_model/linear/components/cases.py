@@ -321,6 +321,19 @@ class ModelCases:
             # Activate constraints
             m_b.SCHEME_REVENUE_ENVELOPE_LO_CONS.activate()
 
+            if params['mode'] == 'bau_deviation_minimisation':
+                m_b.PRICE_BAU_DEVIATION_1.activate()
+                m_b.PRICE_BAU_DEVIATION_2.activate()
+                filename = f'heuristic_bau_deviation_case.pickle'
+
+            elif params['mode'] == 'price_change_minimisation':
+                m_b.PRICE_CHANGE_DEVIATION_1.activate()
+                m_b.PRICE_CHANGE_DEVIATION_2.activate()
+                filename = f'heuristic_price_change_deviation_case.pickle'
+
+            else:
+                raise Exception(f"Unexpected run mode: {params['mode']}")
+
             for y in m_b.Y:
                 if y >= params['transition_year']:
                     m_b.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS[y].activate()
@@ -357,10 +370,10 @@ class ModelCases:
             counter += 1
 
             # Combine results into a single dictionary
-        combined_results = {**rep_results, 'stage_3_price_targeting': iteration_results}
+        combined_results = {**rep_results, 'stage_3_price_targeting': iteration_results, 'parameters': params}
 
         # Save results
-        self.save_results(combined_results, output_dir, f'price_targeting_heuristic_case.pickle')
+        self.save_results(combined_results, output_dir, filename)
 
         # Combine method output
         output = {'auxiliary_model': m_b, 'auxiliary_status': m_b_status, 'primal_model': m_p,
@@ -405,6 +418,19 @@ class ModelCases:
 
         # Activate necessary constraints
         m_m.SCHEME_REVENUE_ENVELOPE_LO_CONS.activate()
+
+        if params['mode'] == 'bau_deviation_minimisation':
+            m_m.PRICE_BAU_DEVIATION_1.activate()
+            m_m.PRICE_BAU_DEVIATION_2.activate()
+            filename = f'mppdc_bau_deviation_case.pickle'
+
+        elif params['mode'] == 'price_change_minimisation':
+            m_m.PRICE_CHANGE_DEVIATION_1.activate()
+            m_m.PRICE_CHANGE_DEVIATION_2.activate()
+            filename = f'mppdc_price_change_deviation_case.pickle'
+
+        else:
+            raise Exception(f"Unexpected run mode: {params['mode']}")
 
         for y in m_m.Y:
             if y >= params['transition_year']:
@@ -466,10 +492,10 @@ class ModelCases:
             counter += 1
 
             # Combine results into a single dictionary
-        combined_results = {**rep_results, 'stage_3_price_targeting': iteration_results}
+        combined_results = {**rep_results, 'stage_3_price_targeting': iteration_results, 'parameters': params}
 
         # Save results
-        self.save_results(combined_results, output_dir, f'price_targeting_mppdc_case.pickle')
+        self.save_results(combined_results, output_dir, filename)
 
         # Method output
         output = {'mppdc_model': m_m, 'mppdc_status': m_m_status, 'primal_model': m_p, 'primal_status': m_p_status,

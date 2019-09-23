@@ -306,7 +306,7 @@ class AnalyseResults:
 
 if __name__ == '__main__':
     # Path where results can be found
-    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote')
+    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'local')
 
     # Object used to analyse results
     analysis = AnalyseResults()
@@ -318,13 +318,13 @@ if __name__ == '__main__':
     p_ct = analysis.get_year_average_price(r_rep['stage_1_carbon_tax']['PRICES'], factor=-1)
     p_r = analysis.get_year_average_price(r_rep['stage_2_rep'][max(r_rep['stage_2_rep'].keys())]['PRICES'], factor=-1)
 
-    with open(os.path.join(results_directory, 'price_targeting_mppdc_case.pickle'), 'rb') as f:
+    with open(os.path.join(results_directory, 'mppdc_bau_deviation_case.pickle'), 'rb') as f:
         r_m = pickle.load(f)
 
     p_m = analysis.get_year_average_price(r_m['stage_3_price_targeting'][1]['lamb'], factor=1)
     b_m = pd.Series(r_m['stage_3_price_targeting'][1]['baseline'])
 
-    with open(os.path.join(results_directory, 'price_targeting_heuristic_case.pickle'), 'rb') as f:
+    with open(os.path.join(results_directory, 'heuristic_bau_deviation_case.pickle'), 'rb') as f:
         r_h = pickle.load(f)
 
     p_h = analysis.get_year_average_price(r_h['stage_3_price_targeting'][1]['primal']['PRICES'], factor=-1)

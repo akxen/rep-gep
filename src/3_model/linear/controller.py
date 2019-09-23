@@ -53,47 +53,20 @@ if __name__ == '__main__':
     # r_rep = cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
     cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
 
-    # Run price case targeting model using MPPDC model
-    # r_ptm = cases.run_price_smoothing_mppdc_case(case_params, output_directory)
+    # Run price case targeting model using MPPDC model - minimise price deviation between successive years
+    case_params['mode'] = 'price_change_minimisation'
+    # r_ptmd = cases.run_price_smoothing_mppdc_case(case_params, output_directory)
     cases.run_price_smoothing_mppdc_case(case_params, output_directory)
 
     # Run price case targeting model using auxiliary model
-    # r_pth = cases.run_price_smoothing_heuristic_case(case_params, output_directory)
+    # r_pthd = cases.run_price_smoothing_heuristic_case(case_params, output_directory)
     cases.run_price_smoothing_heuristic_case(case_params, output_directory)
 
-    # with open(os.path.join(output_directory, 'bau_case.pickle'), 'rb') as f:
-    #     r_bau = pickle.load(f)
-    #
-    # with open(os.path.join(output_directory, 'rep_case.pickle'), 'rb') as f:
-    #     r_rep = pickle.load(f)
-    #
-    # with open(os.path.join(output_directory, 'price_targeting_mppdc_case.pickle'), 'rb') as f:
-    #     r_ptm = pickle.load(f)
-    #
-    # with open(os.path.join(output_directory, 'price_targeting_heuristic_case.pickle'), 'rb') as f:
-    #     r_pth = pickle.load(f)
+    # Run price case targeting model using MPPDC model - minimise price difference relative to BAU prices in start year
+    case_params['mode'] = 'bau_deviation_minimisation'
+    # r_ptmb = cases.run_price_smoothing_mppdc_case(case_params, output_directory)
+    cases.run_price_smoothing_mppdc_case(case_params, output_directory)
 
-    # BAU prices
-    # p_bau = cases.analysis.get_year_average_price(r_bau['results']['PRICES'], factor=-1)
-    # p_bau = cases.analysis.get_year_average_price(r_bau['PRICES'], factor=-1)
-
-    # Carbon tax prices
-    # p_ct = cases.analysis.get_year_average_price(r_rep['results']['stage_1_carbon_tax']['PRICES'], factor=-1)
-    # p_ct = cases.analysis.get_year_average_price(r_rep['stage_1_carbon_tax']['PRICES'], factor=-1)
-
-    # MPPDC price targeting prices
-    # p_m = cases.analysis.get_year_average_price(r_ptm['results']['stage_3_price_targeting'][1]['lamb'], factor=1)
-    # p_m = cases.analysis.get_year_average_price(r_ptm['stage_3_price_targeting'][1]['lamb'], factor=1)
-
-    # Heuristic price targeting prices
-    # p_h = cases.analysis.get_year_average_price(r_pth['results']['stage_3_price_targeting'][1]['primal']['PRICES'],
-    #                                             factor=-1)
-    # p_h = cases.analysis.get_year_average_price(r_pth['stage_3_price_targeting'][1]['primal']['PRICES'], factor=-1)
-
-    # Baselines
-    # fig, ax = plt.subplots()
-    # ax.plot(list(r_ptm['mppdc_model'].baseline.get_values().values()))
-    # ax.plot(list(r_ptm['stage_3_price_targeting'][max(r_ptm['stage_3_price_targeting'].keys())]['baseline'].values()))
-    # ax.plot(list(r_pth['auxiliary_model'].baseline.get_values().values()))
-    # ax.plot(list(r_pth['stage_3_price_targeting'][max(r_pth['stage_3_price_targeting'].keys())]['primal']['baseline'].values()))
-    # plt.show()
+    # Run price case targeting model using auxiliary model
+    # r_pthb = cases.run_price_smoothing_heuristic_case(case_params, output_directory)
+    cases.run_price_smoothing_heuristic_case(case_params, output_directory)

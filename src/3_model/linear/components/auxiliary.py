@@ -211,7 +211,7 @@ class BaselineUpdater:
         m.CUMULATIVE_REVENUE_LOWER_BOUND = Constraint(m.Y, rule=cumulative_revenue_lower_bound_rule)
         m.CUMULATIVE_REVENUE_LOWER_BOUND.deactivate()
 
-        def price_difference_1_rule(_m, y):
+        def price_change_deviation_1_rule(_m, y):
             """Constraints used to compute absolute difference in average prices between successive years"""
 
             if y == m.Y.first():
@@ -220,9 +220,10 @@ class BaselineUpdater:
                 return m.z_1[y] >= m.YEAR_AVERAGE_PRICE[y] - m.YEAR_AVERAGE_PRICE[y - 1]
 
         # Price difference dummy constraints
-        m.PRICE_DIFFERENCE_CONS_1 = Constraint(m.Y, rule=price_difference_1_rule)
+        m.PRICE_CHANGE_DEVIATION_1 = Constraint(m.Y, rule=price_change_deviation_1_rule)
+        m.PRICE_CHANGE_DEVIATION_1.deactivate()
 
-        def price_difference_2_rule(_m, y):
+        def price_change_deviation_2_rule(_m, y):
             """Constraints used to compute absolute difference in average prices between successive years"""
 
             if y == m.Y.first():
@@ -231,23 +232,26 @@ class BaselineUpdater:
                 return m.z_2[y] >= m.YEAR_AVERAGE_PRICE[y - 1] - m.YEAR_AVERAGE_PRICE[y]
 
         # Price difference dummy constraints
-        m.PRICE_DIFFERENCE_CONS_2 = Constraint(m.Y, rule=price_difference_2_rule)
+        m.PRICE_CHANGE_DEVIATION_2 = Constraint(m.Y, rule=price_change_deviation_2_rule)
+        m.PRICE_CHANGE_DEVIATION_2.deactivate()
 
-        # def price_difference_1_rule(_m, y):
-        #     """Constraints used to compute absolute difference in average prices between successive years"""
-        #
-        #     return m.z_1[y] >= m.YEAR_AVERAGE_PRICE[y] - m.YEAR_AVERAGE_PRICE_0
-        #
-        # # Price difference dummy constraints
-        # m.PRICE_DIFFERENCE_CONS_1 = Constraint(m.Y, rule=price_difference_1_rule)
-        #
-        # def price_difference_2_rule(_m, y):
-        #     """Constraints used to compute absolute difference in average prices between successive years"""
-        #
-        #     return m.z_2[y] >= m.YEAR_AVERAGE_PRICE_0 - m.YEAR_AVERAGE_PRICE[y]
-        #
-        # # Price difference dummy constraints
-        # m.PRICE_DIFFERENCE_CONS_2 = Constraint(m.Y, rule=price_difference_2_rule)
+        def price_bau_deviation_1_rule(_m, y):
+            """Constraints used to compute absolute difference in average prices between successive years"""
+
+            return m.z_1[y] >= m.YEAR_AVERAGE_PRICE[y] - m.YEAR_AVERAGE_PRICE_0
+
+        # Price difference dummy constraints
+        m.PRICE_BAU_DEVIATION_1 = Constraint(m.Y, rule=price_bau_deviation_1_rule)
+        m.PRICE_BAU_DEVIATION_1.deactivate()
+
+        def price_bau_deviation_2_rule(_m, y):
+            """Constraints used to compute absolute difference in average prices between successive years"""
+
+            return m.z_2[y] >= m.YEAR_AVERAGE_PRICE_0 - m.YEAR_AVERAGE_PRICE[y]
+
+        # Price difference dummy constraints
+        m.PRICE_BAU_DEVIATION_2 = Constraint(m.Y, rule=price_bau_deviation_2_rule)
+        m.PRICE_BAU_DEVIATION_2.deactivate()
 
         def scheme_revenue_lower_envelope_rule(_m, y):
             """Ensure scheme revenue is greater than or equal to lower envelope"""
