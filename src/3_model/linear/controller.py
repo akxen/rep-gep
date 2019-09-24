@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
     log_file_name = 'case_logger'
-    output_directory = os.path.join(os.path.dirname(__file__), 'output', 'remote')
+    output_directory = os.path.join(os.path.dirname(__file__), 'output', 'local')
 
     # Object used to run model cases
     cases = ModelCases(output_directory, log_file_name)
@@ -24,7 +24,7 @@ if __name__ == '__main__':
     targets = Targets()
 
     # Common model parameters
-    start, end, scenarios = 2016, 2040, 5
+    start, end, scenarios = 2016, 2026, 5
 
     # Year when scheme transitions to a Refunded Emissions Payment (REP) scheme
     transition_year = 2021
@@ -37,7 +37,7 @@ if __name__ == '__main__':
                                   for y in range(start, end + 1)}
 
     # Price weights
-    scheme_price_weights = {y: targets.get_envelope(10, 2, start, y) for y in range(start, end + 1)}
+    scheme_price_weights = {y: targets.get_envelope(100, 2, start, y) for y in range(start, end + 1)}
 
     # Define case parameters and run model
     case_params = {'rep_filename': 'rep_case.pickle',
@@ -47,11 +47,11 @@ if __name__ == '__main__':
 
     # Run BAU case
     # r_bau = cases.run_bau_case(start, end, scenarios, output_directory)
-    cases.run_bau_case(start, end, scenarios, output_directory)
+    # cases.run_bau_case(start, end, scenarios, output_directory)
 
     # Run REP case
     # r_rep = cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
-    cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
+    # cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
 
     # Run price case targeting model using MPPDC model - minimise price deviation between successive years
     case_params['mode'] = 'price_change_minimisation'
