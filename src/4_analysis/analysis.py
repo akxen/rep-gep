@@ -303,72 +303,84 @@ class AnalyseResults:
 
         return results['YEAR_EMISSIONS']
 
+    def get_baselines(self, results_dir, filename):
+        """Get emissions intensity baselines from MPPDC model"""
+
+        # Load results
+        results = self.load_results(results_dir, filename)
+
+        # Largest key = results from last iteration
+        max_key = max(results['stage_3_price_targeting'].keys())
+
+        # Extract baselines
+        if 'mppdc' in filename:
+            baselines = results['stage_3_price_targeting'][max_key]['baseline']
+        elif 'heuristic' in filename:
+            baselines = results['stage_3_price_targeting'][max_key]['primal']['baseline']
+        else:
+            raise Exception(f"""Expected 'mppdc' or 'heuristic' in filename: {filename}""")
+
+        return pd.Series(baselines).rename_axis('year').rename('baseline')
+
+    def get_average_prices(self, results_dir, filename, stage, price_key, price_factor):
+        """Get average prices for a given results file"""
+
+        with open(os.path.join(results_dir, filename), 'rb') as f:
+            results = pickle.load(f)
+
+        if filename == 'bau_case.pickle':
+            prices = self.get_year_average_price(results[price_key], factor=price_factor)
+
+        else:
+            # Max key = last iteration for given stage
+            max_key = max(results[stage].keys())
+
+            if type(max_key) == int:
+                if 'heuristic' in filename:
+                    prices = self.get_year_average_price(results[stage][max_key]['primal'][price_key], factor=price_factor)
+                else:
+                    prices = self.get_year_average_price(results[stage][max_key][price_key], factor=price_factor)
+            else:
+                prices = self.get_year_average_price(results[stage][price_key], factor=price_factor)
+
+        return prices
+
 
 if __name__ == '__main__':
     # Path where results can be found
-    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'local')
+    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote')
 
     # Object used to analyse results
     analysis = AnalyseResults()
 
-    # Load results
-    with open(os.path.join(results_directory, 'rep_case.pickle'), 'rb') as f:
-        r_rep = pickle.load(f)
+    # Load model results given a filename
+    r = analysis.load_results(results_directory, 'heuristic_bau_deviation_case.pickle')
 
-    p_ct = analysis.get_year_average_price(r_rep['stage_1_carbon_tax']['PRICES'], factor=-1)
-    p_rep = analysis.get_year_average_price(r_rep['stage_2_rep'][max(r_rep['stage_2_rep'].keys())]['PRICES'], factor=-1)
+    # Prices from different models
+    p_bau = analysis.get_average_prices(results_directory, 'bau_case.pickle', None, 'PRICES', -1)
+    p_rep = analysis.get_average_prices(results_directory, 'rep_case.pickle', 'stage_2_rep', 'PRICES', -1)
+    p_tax = analysis.get_average_prices(results_directory, 'rep_case.pickle', 'stage_1_carbon_tax', 'PRICES', -1)
+    p_bau_dev_mppdc = analysis.get_average_prices(results_directory, 'mppdc_bau_deviation_case.pickle', 'stage_3_price_targeting', 'lamb', 1)
+    p_bau_dev_heuristic = analysis.get_average_prices(results_directory, 'heuristic_bau_deviation_case.pickle', 'stage_3_price_targeting', 'PRICES', -1)
+    p_price_dev_mppdc = analysis.get_average_prices(results_directory, 'mppdc_price_change_deviation_case.pickle', 'stage_3_price_targeting', 'lamb', 1)
+    p_price_dev_heuristic = analysis.get_average_prices(results_directory, 'heuristic_price_change_deviation_case.pickle', 'stage_3_price_targeting', 'PRICES', -1)
 
-    # Price change between successive years cases
-    # -------------------------------------------
-    with open(os.path.join(results_directory, 'mppdc_price_change_deviation_case.pickle'), 'rb') as f:
-        r_mpd = pickle.load(f)
+    # Baselines from different models
+    b_price_dev_mppdc = analysis.get_baselines(results_directory, 'mppdc_price_change_deviation_case.pickle')
+    b_price_dev_heuristic = analysis.get_baselines(results_directory, 'heuristic_price_change_deviation_case.pickle')
+    b_bau_dev_mppdc = analysis.get_baselines(results_directory, 'mppdc_bau_deviation_case.pickle')
+    b_bau_dev_heuristic = analysis.get_baselines(results_directory, 'heuristic_bau_deviation_case.pickle')
 
-    p_mpd = analysis.get_year_average_price(r_mpd['stage_3_price_targeting'][1]['lamb'], factor=1)
-    b_mpd = pd.Series(r_mpd['stage_3_price_targeting'][1]['baseline'])
-
-    with open(os.path.join(results_directory, 'heuristic_price_change_deviation_case.pickle'), 'rb') as f:
-        r_hpd = pickle.load(f)
-
-    p_hpd = analysis.get_year_average_price(r_hpd['stage_3_price_targeting'][1]['primal']['PRICES'], factor=-1)
-    b_hpd = pd.Series(r_hpd['stage_3_price_targeting'][1]['primal']['baseline'])
-
-    # BAU price deviation cases
-    # -------------------------
-    with open(os.path.join(results_directory, 'mppdc_bau_deviation_case.pickle'), 'rb') as f:
-        r_mbd = pickle.load(f)
-
-    p_mbd = analysis.get_year_average_price(r_mpd['stage_3_price_targeting'][1]['lamb'], factor=1)
-    b_mbd = pd.Series(r_mpd['stage_3_price_targeting'][1]['baseline'])
-
-    with open(os.path.join(results_directory, 'heuristic_bau_deviation_case.pickle'), 'rb') as f:
-        r_hbd = pickle.load(f)
-
-    p_hbd = analysis.get_year_average_price(r_hbd['stage_3_price_targeting'][1]['primal']['PRICES'], factor=-1)
-    b_hbd = pd.Series(r_hbd['stage_3_price_targeting'][1]['primal']['baseline'])
-
-    # Check baselines from both plots. Include lower scheme revenue envelope.
+    # Plotting baselines - price deviation objective
     fig, ax = plt.subplots()
-    b_mpd.plot(ax=ax, drawstyle="steps-post", color='red')
-    b_hpd.plot(ax=ax, drawstyle="steps-post", color='blue')
+    b_price_dev_mppdc.plot(ax=ax)
+    b_price_dev_heuristic.plot(ax=ax)
+    ax.set_title('Price deviation objective')
     plt.show()
 
+    # Plotting
     fig, ax = plt.subplots()
-    b_mbd.plot(ax=ax, drawstyle="steps-post", color='red')
-    b_hbd.plot(ax=ax, drawstyle="steps-post", color='blue')
-    plt.show()
-
-    # Check prices
-    fig, ax = plt.subplots()
-    p_mpd['average_price_real'].plot(ax=ax, color='red')
-    p_hpd['average_price_real'].plot(ax=ax, color='blue')
-    p_ct['average_price_real'].plot(ax=ax, color='green')
-    p_rep['average_price_real'].plot(ax=ax, color='orange')
-    plt.show()
-
-    # Check prices
-    fig, ax = plt.subplots()
-    p_mbd['average_price_real'].plot(ax=ax, color='red')
-    p_hbd['average_price_real'].plot(ax=ax, color='blue')
-    p_ct['average_price_real'].plot(ax=ax, color='green')
-    p_rep['average_price_real'].plot(ax=ax, color='orange')
+    b_bau_dev_mppdc.plot(ax=ax)
+    b_bau_dev_heuristic.plot(ax=ax)
+    ax.set_title('BAU deviation objective')
     plt.show()
