@@ -1868,7 +1868,7 @@ class MPPDCModel:
         m.SCHEME_REVENUE_LB = Param(initialize=float(-10e6), mutable=True)
 
         # Year at which yearly revenue neutrality constraint will be enforced
-        m.TRANSITION_YEAR = Param(initialize=0, mutable=True)
+        m.TRANSITION_YEAR = Param(initialize=2021, mutable=True)
 
         return m
 
@@ -1882,6 +1882,10 @@ class MPPDCModel:
         # Dummy variables used to minimise price differences between successive years
         m.z_p1 = Var(m.Y, within=NonNegativeReals, initialize=0)
         m.z_p2 = Var(m.Y, within=NonNegativeReals, initialize=0)
+
+        # Dummy variables to minimise baseline difference between successive years
+        m.z_b1 = Var(m.Y, within=NonNegativeReals, initialize=0)
+        m.z_b2 = Var(m.Y, within=NonNegativeReals, initialize=0)
 
         # Dummy variables to ensure strong duality constraint feasibility
         m.sd_1 = Var(within=NonNegativeReals, initialize=0)
@@ -1906,7 +1910,21 @@ class MPPDCModel:
 
         # Weighted total absolute difference
         m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[y]
-                                                                         * m.PRICE_WEIGHTS[y] for y in m.Y))
+                                                                         * m.PRICE_WEIGHTS[y] for y in m.Y
+                                                                         if y <= m.TRANSITION_YEAR.value + 1))
+
+        def year_absolute_baseline_difference_rule(_m, y):
+            """Absolute emissions intensity baseline difference between successive years"""
+
+            return m.z_b1[y] + m.z_b2[y]
+
+        # Change in baseline between successive intervals
+        m.YEAR_ABSOLUTE_BASELINE_DIFFERENCE = Expression(m.Y, rule=year_absolute_baseline_difference_rule)
+
+        # Weighted baseline difference
+        m.TOTAL_ABSOLUTE_BASELINE_DIFFERENCE_WEIGHTED = Expression(expr=sum(m.YEAR_ABSOLUTE_BASELINE_DIFFERENCE[y]
+                                                                            for y in m.Y
+                                                                            if y <= m.TRANSITION_YEAR.value + 1))
 
         # Strong duality constraint violation
         m.STRONG_DUALITY_VIOLATION_COST = Expression(expr=(m.sd_1 + m.sd_2) * m.STRONG_DUALITY_VIOLATION_PENALTY)
@@ -1966,6 +1984,28 @@ class MPPDCModel:
         # Emissions intensity deviation - 2
         m.PRICE_BAU_DEVIATION_2 = Constraint(m.Y, rule=price_bau_deviation_2_rule)
         m.PRICE_BAU_DEVIATION_2.deactivate()
+
+        def baseline_deviation_1_rule(_m, y):
+            """Constraints used to compute absolute baseline difference between successive years"""
+
+            if y == m.Y.first():
+                return m.z_b1[y] >= m.baseline[y] - 1
+            else:
+                return m.z_b1[y] >= m.baseline[y] - m.baseline[y - 1]
+
+        # Baseline difference dummy constraints
+        m.BASELINE_DEVIATION_1 = Constraint(m.Y, rule=baseline_deviation_1_rule)
+
+        def baseline_deviation_2_rule(_m, y):
+            """Constraints used to compute absolute baseline difference between successive years"""
+
+            if y == m.Y.first():
+                return m.z_b2[y] >= 1 - m.baseline[y]
+            else:
+                return m.z_b2[y] >= m.baseline[y - 1] - m.baseline[y]
+
+        # Baseline difference dummy constraints
+        m.BASELINE_DEVIATION_2 = Constraint(m.Y, rule=baseline_deviation_2_rule)
 
         def total_scheme_revenue_non_negative_rule(_m):
             """Ensure that net scheme revenue is greater than 0 over model horizon"""
@@ -2032,7 +2072,9 @@ class MPPDCModel:
         """MPPDC objective function"""
 
         # Price targeting objective
-        m.OBJECTIVE = Objective(expr=m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED + m.STRONG_DUALITY_VIOLATION_COST,
+        m.OBJECTIVE = Objective(expr=m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED
+                                     + m.TOTAL_ABSOLUTE_BASELINE_DIFFERENCE_WEIGHTED
+                                     + m.STRONG_DUALITY_VIOLATION_COST,
                                 sense=minimize)
 
         return m

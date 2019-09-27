@@ -2,6 +2,7 @@
 
 import os
 import sys
+
 sys.path.append(os.path.join(os.path.dirname(__file__), 'base'))
 sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir, '4_analysis'))
 
@@ -46,14 +47,14 @@ class BaselineUpdater:
         m.PERMIT_PRICE = Param(m.Y, initialize=0, mutable=True)
 
         # Year after which a Refunded Emissions Payment scheme is enforced
-        m.TRANSITION_YEAR = Param(initialize=2020, mutable=True)
+        m.TRANSITION_YEAR = Param(initialize=2021, mutable=True)
 
         # Lower bound for cumulative scheme revenue. Prevents cumulative scheme revenue from going below this bound.
         m.REVENUE_LOWER_BOUND = Param(initialize=float(-1e9), mutable=True)
 
         # Initial average price in year prior to model start
         m.YEAR_AVERAGE_PRICE_0 = Param(initialize=float(40), mutable=True)
-        
+
         return m
 
     @staticmethod
@@ -64,8 +65,12 @@ class BaselineUpdater:
         m.baseline = Var(m.Y, initialize=0)
 
         # Dummy variables used to minimise price difference between years in model horizon
-        m.z_1 = Var(m.Y, initialize=0, within=NonNegativeReals)
-        m.z_2 = Var(m.Y, initialize=0, within=NonNegativeReals)
+        m.z_p1 = Var(m.Y, initialize=0, within=NonNegativeReals)
+        m.z_p2 = Var(m.Y, initialize=0, within=NonNegativeReals)
+
+        # Dummy variables used to minimise baseline difference between years in model horizon
+        m.z_b1 = Var(m.Y, initialize=0, within=NonNegativeReals)
+        m.z_b2 = Var(m.Y, initialize=0, within=NonNegativeReals)
 
         return m
 
@@ -157,7 +162,7 @@ class BaselineUpdater:
         def year_absolute_price_difference_rule(_m, y):
             """Absolute price difference between consecutive years"""
 
-            return m.z_1[y] + m.z_2[y]
+            return m.z_p1[y] + m.z_p2[y]
 
         # Absolute price difference between consecutive years
         m.YEAR_ABSOLUTE_PRICE_DIFFERENCE = Expression(m.Y, rule=year_absolute_price_difference_rule)
@@ -167,7 +172,21 @@ class BaselineUpdater:
 
         # Weighted total absolute difference
         m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[y]
-                                                                         * m.PRICE_WEIGHTS[y] for y in m.Y))
+                                                                         * m.PRICE_WEIGHTS[y] for y in m.Y
+                                                                         if y <= m.TRANSITION_YEAR.value + 1))
+
+        def year_absolute_baseline_difference_rule(_m, y):
+            """Absolute baseline difference between consecutive years"""
+
+            return m.z_b1[y] + m.z_b2[y]
+
+        # Absolute baseline difference between consecutive years
+        m.YEAR_ABSOLUTE_BASELINE_DIFFERENCE = Expression(m.Y, rule=year_absolute_baseline_difference_rule)
+
+        # Weighted total absolute difference
+        m.TOTAL_ABSOLUTE_BASELINE_DIFFERENCE_WEIGHTED = Expression(expr=sum(m.YEAR_ABSOLUTE_BASELINE_DIFFERENCE[y]
+                                                                            for y in m.Y
+                                                                            if y <= m.TRANSITION_YEAR.value + 1))
 
         return m
 
@@ -215,9 +234,9 @@ class BaselineUpdater:
             """Constraints used to compute absolute difference in average prices between successive years"""
 
             if y == m.Y.first():
-                return m.z_1[y] >= m.YEAR_AVERAGE_PRICE[y] - m.YEAR_AVERAGE_PRICE_0
+                return m.z_p1[y] >= m.YEAR_AVERAGE_PRICE[y] - m.YEAR_AVERAGE_PRICE_0
             else:
-                return m.z_1[y] >= m.YEAR_AVERAGE_PRICE[y] - m.YEAR_AVERAGE_PRICE[y - 1]
+                return m.z_p1[y] >= m.YEAR_AVERAGE_PRICE[y] - m.YEAR_AVERAGE_PRICE[y - 1]
 
         # Price difference dummy constraints
         m.PRICE_CHANGE_DEVIATION_1 = Constraint(m.Y, rule=price_change_deviation_1_rule)
@@ -227,9 +246,9 @@ class BaselineUpdater:
             """Constraints used to compute absolute difference in average prices between successive years"""
 
             if y == m.Y.first():
-                return m.z_2[y] >= m.YEAR_AVERAGE_PRICE_0 - m.YEAR_AVERAGE_PRICE[y]
+                return m.z_p2[y] >= m.YEAR_AVERAGE_PRICE_0 - m.YEAR_AVERAGE_PRICE[y]
             else:
-                return m.z_2[y] >= m.YEAR_AVERAGE_PRICE[y - 1] - m.YEAR_AVERAGE_PRICE[y]
+                return m.z_p2[y] >= m.YEAR_AVERAGE_PRICE[y - 1] - m.YEAR_AVERAGE_PRICE[y]
 
         # Price difference dummy constraints
         m.PRICE_CHANGE_DEVIATION_2 = Constraint(m.Y, rule=price_change_deviation_2_rule)
@@ -238,7 +257,7 @@ class BaselineUpdater:
         def price_bau_deviation_1_rule(_m, y):
             """Constraints used to compute absolute difference in average prices between successive years"""
 
-            return m.z_1[y] >= m.YEAR_AVERAGE_PRICE[y] - m.YEAR_AVERAGE_PRICE_0
+            return m.z_p1[y] >= m.YEAR_AVERAGE_PRICE[y] - m.YEAR_AVERAGE_PRICE_0
 
         # Price difference dummy constraints
         m.PRICE_BAU_DEVIATION_1 = Constraint(m.Y, rule=price_bau_deviation_1_rule)
@@ -247,11 +266,33 @@ class BaselineUpdater:
         def price_bau_deviation_2_rule(_m, y):
             """Constraints used to compute absolute difference in average prices between successive years"""
 
-            return m.z_2[y] >= m.YEAR_AVERAGE_PRICE_0 - m.YEAR_AVERAGE_PRICE[y]
+            return m.z_p2[y] >= m.YEAR_AVERAGE_PRICE_0 - m.YEAR_AVERAGE_PRICE[y]
 
         # Price difference dummy constraints
         m.PRICE_BAU_DEVIATION_2 = Constraint(m.Y, rule=price_bau_deviation_2_rule)
         m.PRICE_BAU_DEVIATION_2.deactivate()
+
+        def baseline_deviation_1_rule(_m, y):
+            """Constraints used to compute absolute baseline difference between successive years"""
+
+            if y == m.Y.first():
+                return m.z_b1[y] >= m.baseline[y] - 1
+            else:
+                return m.z_b1[y] >= m.baseline[y] - m.baseline[y - 1]
+
+        # Baseline difference dummy constraints
+        m.BASELINE_DEVIATION_1 = Constraint(m.Y, rule=baseline_deviation_1_rule)
+
+        def baseline_deviation_2_rule(_m, y):
+            """Constraints used to compute absolute baseline difference between successive years"""
+
+            if y == m.Y.first():
+                return m.z_b2[y] >= 1 - m.baseline[y]
+            else:
+                return m.z_b2[y] >= m.baseline[y - 1] - m.baseline[y]
+
+        # Baseline difference dummy constraints
+        m.BASELINE_DEVIATION_2 = Constraint(m.Y, rule=baseline_deviation_2_rule)
 
         def scheme_revenue_lower_envelope_rule(_m, y):
             """Ensure scheme revenue is greater than or equal to lower envelope"""
@@ -269,7 +310,8 @@ class BaselineUpdater:
         """Define objective function"""
 
         # Minimise price difference between consecutive years
-        m.OBJECTIVE = Objective(expr=m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED, sense=minimize)
+        m.OBJECTIVE = Objective(expr=m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED
+                                     + m.TOTAL_ABSOLUTE_BASELINE_DIFFERENCE_WEIGHTED, sense=minimize)
 
         return m
 
@@ -374,7 +416,7 @@ if __name__ == '__main__':
 
     # Solve model
     model.REVENUE_NEUTRAL_TRANSITION.activate()
-    model.TRANSITION_YEAR = 2020
+
     for y in range(model.TRANSITION_YEAR.value, final_year_model + 1):
         model.REVENUE_NEUTRAL_YEAR[y].activate()
     model, status = baseline.solve_model(model)

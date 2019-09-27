@@ -319,7 +319,7 @@ class ModelCases:
             m_b.PRICE_WEIGHTS.store_values(params['price_weights'])
 
             # Activate constraints
-            m_b.SCHEME_REVENUE_ENVELOPE_LO_CONS.activate()
+            # m_b.SCHEME_REVENUE_ENVELOPE_LO_CONS.activate()
 
             if params['mode'] == 'bau_deviation_minimisation':
                 m_b.PRICE_BAU_DEVIATION_1.activate()
@@ -417,7 +417,7 @@ class ModelCases:
         m_m.PRICE_WEIGHTS.store_values(params['price_weights'])
 
         # Activate necessary constraints
-        m_m.SCHEME_REVENUE_ENVELOPE_LO_CONS.activate()
+        # m_m.SCHEME_REVENUE_ENVELOPE_LO_CONS.activate()
 
         if params['mode'] == 'bau_deviation_minimisation':
             m_m.PRICE_BAU_DEVIATION_1.activate()
