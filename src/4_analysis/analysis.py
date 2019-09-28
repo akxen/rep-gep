@@ -354,22 +354,22 @@ if __name__ == '__main__':
     analysis = AnalyseResults()
 
     # Load model results given a filename
-    r = analysis.load_results(results_directory, 'heuristic_bau_deviation_case.pickle')
+    # r = analysis.load_results(results_directory, 'heuristic_bau_deviation_case.pickle')
 
     # Prices from different models
     p_bau = analysis.get_average_prices(results_directory, 'bau_case.pickle', None, 'PRICES', -1)
     p_rep = analysis.get_average_prices(results_directory, 'rep_case.pickle', 'stage_2_rep', 'PRICES', -1)
     p_tax = analysis.get_average_prices(results_directory, 'rep_case.pickle', 'stage_1_carbon_tax', 'PRICES', -1)
-    p_bau_dev_mppdc = analysis.get_average_prices(results_directory, 'mppdc_bau_deviation_case.pickle', 'stage_3_price_targeting', 'lamb', 1)
-    p_bau_dev_heuristic = analysis.get_average_prices(results_directory, 'heuristic_bau_deviation_case.pickle', 'stage_3_price_targeting', 'PRICES', -1)
+    # p_bau_dev_mppdc = analysis.get_average_prices(results_directory, 'mppdc_bau_deviation_case.pickle', 'stage_3_price_targeting', 'lamb', 1)
+    # p_bau_dev_heuristic = analysis.get_average_prices(results_directory, 'heuristic_bau_deviation_case.pickle', 'stage_3_price_targeting', 'PRICES', -1)
     p_price_dev_mppdc = analysis.get_average_prices(results_directory, 'mppdc_price_change_deviation_case.pickle', 'stage_3_price_targeting', 'lamb', 1)
     p_price_dev_heuristic = analysis.get_average_prices(results_directory, 'heuristic_price_change_deviation_case.pickle', 'stage_3_price_targeting', 'PRICES', -1)
 
     # Baselines from different models
     b_price_dev_mppdc = analysis.get_baselines(results_directory, 'mppdc_price_change_deviation_case.pickle')
     b_price_dev_heuristic = analysis.get_baselines(results_directory, 'heuristic_price_change_deviation_case.pickle')
-    b_bau_dev_mppdc = analysis.get_baselines(results_directory, 'mppdc_bau_deviation_case.pickle')
-    b_bau_dev_heuristic = analysis.get_baselines(results_directory, 'heuristic_bau_deviation_case.pickle')
+    # b_bau_dev_mppdc = analysis.get_baselines(results_directory, 'mppdc_bau_deviation_case.pickle')
+    # b_bau_dev_heuristic = analysis.get_baselines(results_directory, 'heuristic_bau_deviation_case.pickle')
 
     # Plotting baselines - price deviation objective
     fig, ax = plt.subplots()
@@ -378,9 +378,9 @@ if __name__ == '__main__':
     ax.set_title('Price deviation objective')
     plt.show()
 
-    # Plotting
-    fig, ax = plt.subplots()
-    b_bau_dev_mppdc.plot(ax=ax)
-    b_bau_dev_heuristic.plot(ax=ax)
-    ax.set_title('BAU deviation objective')
-    plt.show()
+    # # Plotting
+    # fig, ax = plt.subplots()
+    # b_bau_dev_mppdc.plot(ax=ax)
+    # b_bau_dev_heuristic.plot(ax=ax)
+    # ax.set_title('BAU deviation objective')
+    # plt.show()

@@ -175,6 +175,12 @@ class BaselineUpdater:
                                                                          * m.PRICE_WEIGHTS[y] for y in m.Y
                                                                          if y <= m.TRANSITION_YEAR.value + 1))
 
+        # Cumulative price difference
+        m.TOTAL_ABSOLUTE_CUMULATIVE_PRICE_DIFFERENCE = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[j]
+                                                                           for y in m.Y if
+                                                                           y <= m.TRANSITION_YEAR.value + 1
+                                                                           for j in m.Y if j <= y))
+
         def year_absolute_baseline_difference_rule(_m, y):
             """Absolute baseline difference between consecutive years"""
 
@@ -184,9 +190,9 @@ class BaselineUpdater:
         m.YEAR_ABSOLUTE_BASELINE_DIFFERENCE = Expression(m.Y, rule=year_absolute_baseline_difference_rule)
 
         # Weighted total absolute difference
-        m.TOTAL_ABSOLUTE_BASELINE_DIFFERENCE_WEIGHTED = Expression(expr=sum(m.YEAR_ABSOLUTE_BASELINE_DIFFERENCE[y]
-                                                                            for y in m.Y
-                                                                            if y <= m.TRANSITION_YEAR.value + 1))
+        # m.TOTAL_ABSOLUTE_BASELINE_DIFFERENCE_WEIGHTED = Expression(expr=sum(m.YEAR_ABSOLUTE_BASELINE_DIFFERENCE[y]
+        #                                                                      * m.PRICE_WEIGHTS[y] for y in m.Y
+        #                                                                     if y <= m.TRANSITION_YEAR.value + 1))
 
         return m
 
@@ -310,8 +316,7 @@ class BaselineUpdater:
         """Define objective function"""
 
         # Minimise price difference between consecutive years
-        m.OBJECTIVE = Objective(expr=m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED
-                                     + m.TOTAL_ABSOLUTE_BASELINE_DIFFERENCE_WEIGHTED, sense=minimize)
+        m.OBJECTIVE = Objective(expr=m.TOTAL_ABSOLUTE_CUMULATIVE_PRICE_DIFFERENCE, sense=minimize)
 
         return m
 

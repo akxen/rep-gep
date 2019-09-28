@@ -56,18 +56,18 @@ if __name__ == '__main__':
 
     # Run price case targeting model using MPPDC model - minimise price deviation between successive years
     case_params['mode'] = 'price_change_minimisation'
-    # r_price_change_mppdc = cases.run_price_smoothing_mppdc_case(case_params, output_directory)
-    cases.run_price_smoothing_mppdc_case(case_params, output_directory)
+    r_price_change_mppdc = cases.run_price_smoothing_mppdc_case(case_params, output_directory)
+    # cases.run_price_smoothing_mppdc_case(case_params, output_directory)
 
     # Run price case targeting model using auxiliary model
-    # r_price_change_heuristic = cases.run_price_smoothing_heuristic_case(case_params, output_directory)
-    cases.run_price_smoothing_heuristic_case(case_params, output_directory)
+    r_price_change_heuristic = cases.run_price_smoothing_heuristic_case(case_params, output_directory)
+    # cases.run_price_smoothing_heuristic_case(case_params, output_directory)
 
-    # Run price case targeting model using MPPDC model - minimise price difference relative to BAU prices in start year
-    case_params['mode'] = 'bau_deviation_minimisation'
-    # r_bau_change_mppdc = cases.run_price_smoothing_mppdc_case(case_params, output_directory)
-    cases.run_price_smoothing_mppdc_case(case_params, output_directory)
-
-    # Run price case targeting model using auxiliary model
-    # r_bau_change_heuristic = cases.run_price_smoothing_heuristic_case(case_params, output_directory)
-    cases.run_price_smoothing_heuristic_case(case_params, output_directory)
+    # # Run price case targeting model using MPPDC model - minimise price difference relative to BAU prices in start year
+    # case_params['mode'] = 'bau_deviation_minimisation'
+    # # r_bau_change_mppdc = cases.run_price_smoothing_mppdc_case(case_params, output_directory)
+    # cases.run_price_smoothing_mppdc_case(case_params, output_directory)
+    #
+    # # Run price case targeting model using auxiliary model
+    # # r_bau_change_heuristic = cases.run_price_smoothing_heuristic_case(case_params, output_directory)
+    # cases.run_price_smoothing_heuristic_case(case_params, output_directory)

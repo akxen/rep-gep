@@ -1913,6 +1913,12 @@ class MPPDCModel:
                                                                          * m.PRICE_WEIGHTS[y] for y in m.Y
                                                                          if y <= m.TRANSITION_YEAR.value + 1))
 
+        # Cumulative price difference
+        m.TOTAL_ABSOLUTE_CUMULATIVE_PRICE_DIFFERENCE = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[j]
+                                                                           for y in m.Y if
+                                                                           y <= m.TRANSITION_YEAR.value + 1
+                                                                           for j in m.Y if j <= y))
+
         def year_absolute_baseline_difference_rule(_m, y):
             """Absolute emissions intensity baseline difference between successive years"""
 
@@ -1921,10 +1927,10 @@ class MPPDCModel:
         # Change in baseline between successive intervals
         m.YEAR_ABSOLUTE_BASELINE_DIFFERENCE = Expression(m.Y, rule=year_absolute_baseline_difference_rule)
 
-        # Weighted baseline difference
-        m.TOTAL_ABSOLUTE_BASELINE_DIFFERENCE_WEIGHTED = Expression(expr=sum(m.YEAR_ABSOLUTE_BASELINE_DIFFERENCE[y]
-                                                                            for y in m.Y
-                                                                            if y <= m.TRANSITION_YEAR.value + 1))
+        # # Weighted baseline difference
+        # m.TOTAL_ABSOLUTE_BASELINE_DIFFERENCE_WEIGHTED = Expression(expr=sum(m.YEAR_ABSOLUTE_BASELINE_DIFFERENCE[y]
+        #                                                                     * m.PRICE_WEIGHTS[y] for y in m.Y
+        #                                                                     if y <= m.TRANSITION_YEAR.value + 1))
 
         # Strong duality constraint violation
         m.STRONG_DUALITY_VIOLATION_COST = Expression(expr=(m.sd_1 + m.sd_2) * m.STRONG_DUALITY_VIOLATION_PENALTY)
@@ -2072,9 +2078,7 @@ class MPPDCModel:
         """MPPDC objective function"""
 
         # Price targeting objective
-        m.OBJECTIVE = Objective(expr=m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED
-                                     + m.TOTAL_ABSOLUTE_BASELINE_DIFFERENCE_WEIGHTED
-                                     + m.STRONG_DUALITY_VIOLATION_COST,
+        m.OBJECTIVE = Objective(expr=m.TOTAL_ABSOLUTE_CUMULATIVE_PRICE_DIFFERENCE + m.STRONG_DUALITY_VIOLATION_COST,
                                 sense=minimize)
 
         return m
