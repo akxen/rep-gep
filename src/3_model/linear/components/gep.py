@@ -1915,6 +1915,7 @@ class MPPDCModel:
 
         # Cumulative price difference
         m.TOTAL_ABSOLUTE_CUMULATIVE_PRICE_DIFFERENCE = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[j]
+                                                                           * m.PRICE_WEIGHTS[y]
                                                                            for y in m.Y if
                                                                            y <= m.TRANSITION_YEAR.value + 1
                                                                            for j in m.Y if j <= y))

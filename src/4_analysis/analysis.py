@@ -354,7 +354,7 @@ if __name__ == '__main__':
     analysis = AnalyseResults()
 
     # Load model results given a filename
-    # r = analysis.load_results(results_directory, 'heuristic_bau_deviation_case.pickle')
+    r = analysis.load_results(results_directory, 'heuristic_price_change_deviation_case.pickle')
 
     # Prices from different models
     p_bau = analysis.get_average_prices(results_directory, 'bau_case.pickle', None, 'PRICES', -1)
@@ -373,8 +373,14 @@ if __name__ == '__main__':
 
     # Plotting baselines - price deviation objective
     fig, ax = plt.subplots()
-    b_price_dev_mppdc.plot(ax=ax)
-    b_price_dev_heuristic.plot(ax=ax)
+    b_price_dev_mppdc.plot(ax=ax, color='red')
+    b_price_dev_heuristic.plot(ax=ax, color='blue')
+    ax.set_title('Price deviation objective')
+    plt.show()
+
+    fig, ax = plt.subplots()
+    p_price_dev_mppdc['average_price_real'].plot(ax=ax, color='red')
+    p_price_dev_heuristic['average_price_real'].plot(ax=ax, color='blue')
     ax.set_title('Price deviation objective')
     plt.show()
 

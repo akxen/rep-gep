@@ -103,7 +103,7 @@ class BaselineUpdater:
             g = price_setters_dict['generator'][(z, y, s, t)]
 
             # Under load shedding changes to the baseline do not change marginal costs
-            if price_setters_dict['price_normalised'][(z, y, s, t)] >= 9000:
+            if price_setters_dict['price_normalised'][(z, y, s, t)] >= 1000:
                 return float(price_setters_dict['price_normalised'][(z, y, s, t)])
 
             # Price as function of the marginal unit's cost function
@@ -177,6 +177,7 @@ class BaselineUpdater:
 
         # Cumulative price difference
         m.TOTAL_ABSOLUTE_CUMULATIVE_PRICE_DIFFERENCE = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[j]
+                                                                           * m.PRICE_WEIGHTS[y]
                                                                            for y in m.Y if
                                                                            y <= m.TRANSITION_YEAR.value + 1
                                                                            for j in m.Y if j <= y))
@@ -398,30 +399,30 @@ if __name__ == '__main__':
     # Model horizon and scenarios per year
     first_year_model, final_year_model, scenarios_per_year_model = 2016, 2040, 5
 
-    # Output directory
-    output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'local')
-
-    # Results file to load
-    results_filename = 'carbon_tax_case.pickle'
-
-    # Object used to compute baseline trajectory
-    baseline = BaselineUpdater(first_year_model, final_year_model, scenarios_per_year_model)
-
-    # Model results
-    r_carbon_tax = baseline.analysis.load_results(output_directory, results_filename)
-
-    # Get price setting generator results
-    psg = baseline.prices.get_price_setting_generators_from_model_results(r_carbon_tax)
-
-    # Construct model
-    model = baseline.construct_model(psg)
-
-    # Update parameters
-    model = baseline.update_parameters(model, r_carbon_tax)
-
-    # Solve model
-    model.REVENUE_NEUTRAL_TRANSITION.activate()
-
-    for y in range(model.TRANSITION_YEAR.value, final_year_model + 1):
-        model.REVENUE_NEUTRAL_YEAR[y].activate()
-    model, status = baseline.solve_model(model)
+    # # Output directory
+    # output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'local')
+    #
+    # # Results file to load
+    # results_filename = 'carbon_tax_case.pickle'
+    #
+    # # Object used to compute baseline trajectory
+    # baseline = BaselineUpdater(first_year_model, final_year_model, scenarios_per_year_model)
+    #
+    # # Model results
+    # r_carbon_tax = baseline.analysis.load_results(output_directory, results_filename)
+    #
+    # # Get price setting generator results
+    # psg = baseline.prices.get_price_setting_generators_from_model_results(r_carbon_tax)
+    #
+    # # Construct model
+    # model = baseline.construct_model(psg)
+    #
+    # # Update parameters
+    # model = baseline.update_parameters(model, r_carbon_tax)
+    #
+    # # Solve model
+    # model.REVENUE_NEUTRAL_TRANSITION.activate()
+    #
+    # for y in range(model.TRANSITION_YEAR.value, final_year_model + 1):
+    #     model.REVENUE_NEUTRAL_YEAR[y].activate()
+    # model, status = baseline.solve_model(model)
