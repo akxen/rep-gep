@@ -33,12 +33,13 @@ if __name__ == '__main__':
     permit_prices_model = {y: float(40) for y in range(start, end + 1)}
 
     # Cumulative scheme revenue cannot go below this envelope
-    scheme_revenue_envelope_lo = {y: targets.get_envelope(-100e6, 4, start, y) if y < transition_year else float(0)
+    scheme_revenue_envelope_lo = {y: targets.get_envelope(-20e6, 4, start, y) if y < transition_year else float(0)
                                   for y in range(start, end + 1)}
 
     # Price weights
-    scheme_price_weights = {y: targets.get_envelope(10, 2, start, y) if y <= transition_year + 1 else 0
-                            for y in range(start, end + 1)}
+    # scheme_price_weights = {y: targets.get_envelope(10, 2, start, y) if y <= transition_year + 1 else 0
+    #                         for y in range(start, end + 1)}
+    scheme_price_weights = {y: float(1) if y <= transition_year + 1 else 0 for y in range(start, end + 1)}
 
     # Define case parameters and run model
     case_params = {'rep_filename': 'rep_case.pickle',
@@ -56,14 +57,14 @@ if __name__ == '__main__':
 
     # Run price case targeting model using MPPDC model - minimise price deviation between successive years
     case_params['mode'] = 'price_change_minimisation'
-    r_price_change_mppdc = cases.run_price_smoothing_mppdc_case(case_params, output_directory)
-    # cases.run_price_smoothing_mppdc_case(case_params, output_directory)
+    # r_price_change_mppdc = cases.run_price_smoothing_mppdc_case(case_params, output_directory)
+    cases.run_price_smoothing_mppdc_case(case_params, output_directory)
 
-    # Run price case targeting model using auxiliary model
-    r_price_change_heuristic = cases.run_price_smoothing_heuristic_case(case_params, output_directory)
-    # cases.run_price_smoothing_heuristic_case(case_params, output_directory)
+    # Run price targeting model using auxiliary model
+    # r_price_change_heuristic = cases.run_price_smoothing_heuristic_case(case_params, output_directory)
+    cases.run_price_smoothing_heuristic_case(case_params, output_directory)
 
-    # # Run price case targeting model using MPPDC model - minimise price difference relative to BAU prices in start year
+    # # Run price targeting model using MPPDC model - minimise price difference relative to BAU prices in start year
     # case_params['mode'] = 'bau_deviation_minimisation'
     # # r_bau_change_mppdc = cases.run_price_smoothing_mppdc_case(case_params, output_directory)
     # cases.run_price_smoothing_mppdc_case(case_params, output_directory)

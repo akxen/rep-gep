@@ -68,10 +68,6 @@ class BaselineUpdater:
         m.z_p1 = Var(m.Y, initialize=0, within=NonNegativeReals)
         m.z_p2 = Var(m.Y, initialize=0, within=NonNegativeReals)
 
-        # Dummy variables used to minimise baseline difference between years in model horizon
-        m.z_b1 = Var(m.Y, initialize=0, within=NonNegativeReals)
-        m.z_b2 = Var(m.Y, initialize=0, within=NonNegativeReals)
-
         return m
 
     @staticmethod
@@ -96,6 +92,31 @@ class BaselineUpdater:
         # Convert to dict for faster lookups
         price_setters_dict = psg_results.to_dict()
 
+        def net_cost_rule(_m, g, y):
+            """Max net marginal cost for each generator (assuming baseline = 0 tCO2/MWh)"""
+
+            if g in m.G_ELIGIBLE:
+                return m.C_MC[g, y] + (m.EMISSIONS_RATE[g] * m.PERMIT_PRICE[y])
+            else:
+                return m.C_MC[g, y]
+
+        # Net marginal cost
+        m.NET_COST = Expression(m.G, m.Y, rule=net_cost_rule)
+
+        def max_net_cost(_m, y):
+            """Max net marginal cost"""
+
+            # Max net marginal cost in each year
+            cost = [m.NET_COST[g, y].expr() for g in m.G]
+
+            return max(cost)
+
+        # Max net marginal cost
+        m.MAX_NET_COST = Expression(m.Y, rule=max_net_cost)
+
+        # Construct dictionary for faster lookup in following expressions
+        max_net_cost = {y: m.MAX_NET_COST[y].expr() for y in m.Y}
+
         def approximate_price_rule(_m, z, y, s, t):
             """Approximated price from price setting generator"""
 
@@ -103,7 +124,7 @@ class BaselineUpdater:
             g = price_setters_dict['generator'][(z, y, s, t)]
 
             # Under load shedding changes to the baseline do not change marginal costs
-            if price_setters_dict['price_normalised'][(z, y, s, t)] >= 1000:
+            if price_setters_dict['price_normalised'][(z, y, s, t)] > max_net_cost[y]:
                 return float(price_setters_dict['price_normalised'][(z, y, s, t)])
 
             # Price as function of the marginal unit's cost function
@@ -172,28 +193,9 @@ class BaselineUpdater:
 
         # Weighted total absolute difference
         m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[y]
-                                                                         * m.PRICE_WEIGHTS[y] for y in m.Y
+                                                                         * m.PRICE_WEIGHTS[y]
+                                                                         for y in m.Y
                                                                          if y <= m.TRANSITION_YEAR.value + 1))
-
-        # Cumulative price difference
-        m.TOTAL_ABSOLUTE_CUMULATIVE_PRICE_DIFFERENCE = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[j]
-                                                                           * m.PRICE_WEIGHTS[y]
-                                                                           for y in m.Y if
-                                                                           y <= m.TRANSITION_YEAR.value + 1
-                                                                           for j in m.Y if j <= y))
-
-        def year_absolute_baseline_difference_rule(_m, y):
-            """Absolute baseline difference between consecutive years"""
-
-            return m.z_b1[y] + m.z_b2[y]
-
-        # Absolute baseline difference between consecutive years
-        m.YEAR_ABSOLUTE_BASELINE_DIFFERENCE = Expression(m.Y, rule=year_absolute_baseline_difference_rule)
-
-        # Weighted total absolute difference
-        # m.TOTAL_ABSOLUTE_BASELINE_DIFFERENCE_WEIGHTED = Expression(expr=sum(m.YEAR_ABSOLUTE_BASELINE_DIFFERENCE[y]
-        #                                                                      * m.PRICE_WEIGHTS[y] for y in m.Y
-        #                                                                     if y <= m.TRANSITION_YEAR.value + 1))
 
         return m
 
@@ -279,28 +281,6 @@ class BaselineUpdater:
         m.PRICE_BAU_DEVIATION_2 = Constraint(m.Y, rule=price_bau_deviation_2_rule)
         m.PRICE_BAU_DEVIATION_2.deactivate()
 
-        def baseline_deviation_1_rule(_m, y):
-            """Constraints used to compute absolute baseline difference between successive years"""
-
-            if y == m.Y.first():
-                return m.z_b1[y] >= m.baseline[y] - 1
-            else:
-                return m.z_b1[y] >= m.baseline[y] - m.baseline[y - 1]
-
-        # Baseline difference dummy constraints
-        m.BASELINE_DEVIATION_1 = Constraint(m.Y, rule=baseline_deviation_1_rule)
-
-        def baseline_deviation_2_rule(_m, y):
-            """Constraints used to compute absolute baseline difference between successive years"""
-
-            if y == m.Y.first():
-                return m.z_b2[y] >= 1 - m.baseline[y]
-            else:
-                return m.z_b2[y] >= m.baseline[y - 1] - m.baseline[y]
-
-        # Baseline difference dummy constraints
-        m.BASELINE_DEVIATION_2 = Constraint(m.Y, rule=baseline_deviation_2_rule)
-
         def scheme_revenue_lower_envelope_rule(_m, y):
             """Ensure scheme revenue is greater than or equal to lower envelope"""
 
@@ -317,7 +297,7 @@ class BaselineUpdater:
         """Define objective function"""
 
         # Minimise price difference between consecutive years
-        m.OBJECTIVE = Objective(expr=m.TOTAL_ABSOLUTE_CUMULATIVE_PRICE_DIFFERENCE, sense=minimize)
+        m.OBJECTIVE = Objective(expr=m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED, sense=minimize)
 
         return m
 
@@ -397,26 +377,26 @@ class BaselineUpdater:
 
 if __name__ == '__main__':
     # Model horizon and scenarios per year
-    first_year_model, final_year_model, scenarios_per_year_model = 2016, 2040, 5
+    first_year_model, final_year_model, scenarios_per_year_model = 2016, 2017, 5
 
-    # # Output directory
-    # output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'local')
-    #
-    # # Results file to load
-    # results_filename = 'carbon_tax_case.pickle'
-    #
-    # # Object used to compute baseline trajectory
-    # baseline = BaselineUpdater(first_year_model, final_year_model, scenarios_per_year_model)
-    #
-    # # Model results
-    # r_carbon_tax = baseline.analysis.load_results(output_directory, results_filename)
-    #
-    # # Get price setting generator results
-    # psg = baseline.prices.get_price_setting_generators_from_model_results(r_carbon_tax)
-    #
-    # # Construct model
-    # model = baseline.construct_model(psg)
-    #
+    # Output directory
+    output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'local')
+
+    # Results file to load
+    results_filename = 'rep_case.pickle'
+
+    # Object used to compute baseline trajectory
+    baseline = BaselineUpdater(first_year_model, final_year_model, scenarios_per_year_model)
+
+    # Model results
+    r_rep = baseline.analysis.load_results(output_directory, results_filename)
+
+    # Get price setting generator results
+    psg = baseline.prices.get_price_setting_generators_from_model_results(r_rep['stage_2_rep'][3])
+
+    # Construct model
+    model = baseline.construct_model(psg)
+
     # # Update parameters
     # model = baseline.update_parameters(model, r_carbon_tax)
     #
