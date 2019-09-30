@@ -390,3 +390,9 @@ if __name__ == '__main__':
     b_bau_dev_heuristic.plot(ax=ax)
     ax.set_title('BAU deviation objective')
     plt.show()
+
+    fig, ax = plt.subplots()
+    p_bau_dev_mppdc['average_price_real'].plot(ax=ax, color='red')
+    p_bau_dev_heuristic['average_price_real'].plot(ax=ax, color='blue')
+    ax.set_title('BAU deviation objective')
+    plt.show()

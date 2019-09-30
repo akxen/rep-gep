@@ -195,7 +195,7 @@ class BaselineUpdater:
         m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[y]
                                                                          * m.PRICE_WEIGHTS[y]
                                                                          for y in m.Y
-                                                                         if y <= m.TRANSITION_YEAR.value + 1))
+                                                                         if y <= m.TRANSITION_YEAR.value))
 
         return m
 

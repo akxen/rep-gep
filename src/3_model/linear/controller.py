@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
     log_file_name = 'case_logger'
-    output_directory = os.path.join(os.path.dirname(__file__), 'output', 'remote')
+    output_directory = os.path.join(os.path.dirname(__file__), 'output', 'local')
 
     # Object used to run model cases
     cases = ModelCases(output_directory, log_file_name)
@@ -24,7 +24,7 @@ if __name__ == '__main__':
     targets = Targets()
 
     # Common model parameters
-    start, end, scenarios = 2016, 2040, 5
+    start, end, scenarios = 2016, 2031, 5
 
     # Year when scheme transitions to a Refunded Emissions Payment (REP) scheme
     transition_year = 2021
@@ -39,7 +39,7 @@ if __name__ == '__main__':
     # Price weights
     # scheme_price_weights = {y: targets.get_envelope(10, 2, start, y) if y <= transition_year + 1 else 0
     #                         for y in range(start, end + 1)}
-    scheme_price_weights = {y: float(1) if y <= transition_year + 1 else 0 for y in range(start, end + 1)}
+    scheme_price_weights = {y: float(1) if y <= transition_year else 0 for y in range(start, end + 1)}
 
     # Define case parameters and run model
     case_params = {'rep_filename': 'rep_case.pickle',
