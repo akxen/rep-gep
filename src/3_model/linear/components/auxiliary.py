@@ -191,11 +191,35 @@ class BaselineUpdater:
         # Total absolute price difference
         m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[y] for y in m.Y))
 
+        def year_absolute_price_difference_weighted_rule(_m, y):
+            """Weighted absolute price difference"""
+
+            return m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[y] * m.PRICE_WEIGHTS[y]
+
+        # Weighted absolute price difference for each year
+        m.YEAR_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED = Expression(m.Y, rule=year_absolute_price_difference_weighted_rule)
+
         # Weighted total absolute difference
-        m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[y]
-                                                                         * m.PRICE_WEIGHTS[y]
-                                                                         for y in m.Y
-                                                                         if y <= m.TRANSITION_YEAR.value))
+        m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED[y]
+                                                                         for y in m.Y if y <= m.TRANSITION_YEAR.value))
+
+        def year_cumulative_price_difference_weighted_rule(_m, y):
+            """Cumulative weighted price difference"""
+
+            return sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED[j] for j in m.Y if j <= y)
+
+        # Weighted cumulative absolute price difference for each year in model horizon
+        m.YEAR_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED = Expression(m.Y,
+                                                                 rule=year_cumulative_price_difference_weighted_rule)
+
+        def year_sum_cumulative_price_difference_weighted_rule(_m, y):
+            """Sum of cumulative price difference up to year, y"""
+
+            return sum(m.YEAR_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED[j] for j in m.Y if j <= y)
+
+        # Sum of cumulative price differences for each year in model horizon
+        m.YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED = Expression(m.Y,
+                                                                     rule=year_sum_cumulative_price_difference_weighted_rule)
 
         return m
 
@@ -297,7 +321,8 @@ class BaselineUpdater:
         """Define objective function"""
 
         # Minimise price difference between consecutive years
-        m.OBJECTIVE = Objective(expr=m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED, sense=minimize)
+        m.OBJECTIVE = Objective(expr=m.YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED[m.TRANSITION_YEAR.value],
+                                sense=minimize)
 
         return m
 

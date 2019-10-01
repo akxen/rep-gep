@@ -24,7 +24,7 @@ if __name__ == '__main__':
     targets = Targets()
 
     # Common model parameters
-    start, end, scenarios = 2016, 2040, 5
+    start, end, scenarios = 2016, 2031, 5
 
     # Year when scheme transitions to a Refunded Emissions Payment (REP) scheme
     transition_year = 2021
@@ -49,11 +49,11 @@ if __name__ == '__main__':
 
     # Run BAU case
     # r_bau = cases.run_bau_case(start, end, scenarios, output_directory)
-    # cases.run_bau_case(start, end, scenarios, output_directory)
+    cases.run_bau_case(start, end, scenarios, output_directory)
 
     # Run REP case
     # r_rep = cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
-    # cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
+    cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
 
     # Run price case targeting model using MPPDC model - minimise price deviation between successive years
     case_params['mode'] = 'price_change_minimisation'

@@ -1887,6 +1887,10 @@ class MPPDCModel:
         m.sd_1 = Var(within=NonNegativeReals, initialize=0)
         m.sd_2 = Var(within=NonNegativeReals, initialize=0)
 
+        # Dummy variables used to minimise deviations to baseline between successive years
+        m.z_b1 = Var(m.Y, within=NonNegativeReals, initialize=0)
+        m.z_b2 = Var(m.Y, within=NonNegativeReals, initialize=0)
+
         return m
 
     @staticmethod
@@ -1904,11 +1908,43 @@ class MPPDCModel:
         # Total absolute price difference
         m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[y] for y in m.Y))
 
+        def year_absolute_price_difference_weighted_rule(_m, y):
+            """Weighted absolute price difference"""
+
+            return m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[y] * m.PRICE_WEIGHTS[y]
+
+        # Weighted absolute price difference for each year
+        m.YEAR_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED = Expression(m.Y, rule=year_absolute_price_difference_weighted_rule)
+
         # Weighted total absolute difference
-        m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[y]
-                                                                         * m.PRICE_WEIGHTS[y]
-                                                                         for y in m.Y
-                                                                         if y <= m.TRANSITION_YEAR.value))
+        m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED[y]
+                                                                         for y in m.Y if y <= m.TRANSITION_YEAR.value))
+
+        def year_cumulative_price_difference_weighted_rule(_m, y):
+            """Cumulative weighted price difference"""
+
+            return sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED[j] for j in m.Y if j <= y)
+
+        # Weighted cumulative absolute price difference for each year in model horizon
+        m.YEAR_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED = Expression(m.Y,
+                                                                 rule=year_cumulative_price_difference_weighted_rule)
+
+        def year_sum_cumulative_price_difference_weighted_rule(_m, y):
+            """Sum of cumulative price difference up to year, y"""
+
+            return sum(m.YEAR_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED[j] for j in m.Y if j <= y)
+
+        # Sum of cumulative price differences for each year in model horizon
+        m.YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED = Expression(m.Y,
+                                                                     rule=year_sum_cumulative_price_difference_weighted_rule)
+
+        def year_absolute_baseline_difference_rule(_m, y):
+            """Absolute baseline difference between successive years"""
+
+            return m.z_b1[y] + m.z_b2[y]
+
+        # Absolute change in baseline between successive years
+        m.YEAR_ABSOLUTE_BASELINE_DIFFERENCE = Expression(m.Y, rule=year_absolute_baseline_difference_rule)
 
         # Strong duality constraint violation
         m.STRONG_DUALITY_VIOLATION_COST = Expression(expr=(m.sd_1 + m.sd_2) * m.STRONG_DUALITY_VIOLATION_PENALTY)
@@ -1947,7 +1983,7 @@ class MPPDCModel:
             else:
                 return m.z_p2[y] >= m.YEAR_AVERAGE_PRICE[y - 1] - m.YEAR_AVERAGE_PRICE[y]
 
-        # Emissions intensity deviation - 2
+        # Price change deviation - 1
         m.PRICE_CHANGE_DEVIATION_2 = Constraint(m.Y, rule=price_change_deviation_2_rule)
         m.PRICE_CHANGE_DEVIATION_2.deactivate()
 
@@ -1956,7 +1992,7 @@ class MPPDCModel:
 
             return m.z_p1[y] >= m.YEAR_AVERAGE_PRICE[y] - m.YEAR_AVERAGE_PRICE_0
 
-        # Emissions intensity deviation - 1
+        # BAU price deviation - 1
         m.PRICE_BAU_DEVIATION_1 = Constraint(m.Y, rule=price_bau_deviation_1_rule)
         m.PRICE_BAU_DEVIATION_1.deactivate()
 
@@ -1965,9 +2001,33 @@ class MPPDCModel:
 
             return m.z_p2[y] >= m.YEAR_AVERAGE_PRICE_0 - m.YEAR_AVERAGE_PRICE[y]
 
-        # Emissions intensity deviation - 2
+        # BAU price deviation - 2
         m.PRICE_BAU_DEVIATION_2 = Constraint(m.Y, rule=price_bau_deviation_2_rule)
         m.PRICE_BAU_DEVIATION_2.deactivate()
+
+        def baseline_deviation_1_rule(_m, y):
+            """Absolute difference between baseline for successive years"""
+
+            if y == m.Y.first():
+                return m.z_b1[y] >= 1 - m.baseline[y]
+            else:
+                return m.z_b1[y] >= m.baseline[y - 1] - m.baseline[y]
+
+        # Emissions intensity baseline deviation - 1
+        m.BASELINE_DEVIATION_1 = Constraint(m.Y, rule=baseline_deviation_1_rule)
+        m.BASELINE_DEVIATION_1.deactivate()
+
+        def baseline_deviation_2_rule(_m, y):
+            """Absolute difference between baseline for successive years"""
+
+            if y == m.Y.first():
+                return m.z_b2[y] >= m.baseline[y] - 1
+            else:
+                return m.z_b2[y] >= m.baseline[y] - m.baseline[y - 1]
+
+        # Emissions intensity baseline deviation - 2
+        m.BASELINE_DEVIATION_2 = Constraint(m.Y, rule=baseline_deviation_2_rule)
+        m.BASELINE_DEVIATION_2.deactivate()
 
         def total_scheme_revenue_non_negative_rule(_m):
             """Ensure that net scheme revenue is greater than 0 over model horizon"""
@@ -2034,7 +2094,8 @@ class MPPDCModel:
         """MPPDC objective function"""
 
         # Price targeting objective
-        m.OBJECTIVE = Objective(expr=m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED + m.STRONG_DUALITY_VIOLATION_COST,
+        m.OBJECTIVE = Objective(expr=m.YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED[
+                                         m.TRANSITION_YEAR.value] + m.STRONG_DUALITY_VIOLATION_COST,
                                 sense=minimize)
 
         return m

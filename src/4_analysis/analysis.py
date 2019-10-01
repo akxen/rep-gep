@@ -348,13 +348,13 @@ class AnalyseResults:
 
 if __name__ == '__main__':
     # Path where results can be found
-    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'local')
+    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote')
 
     # Object used to analyse results
     analysis = AnalyseResults()
 
     # Load model results given a filename
-    r = analysis.load_results(results_directory, 'heuristic_price_change_deviation_case.pickle')
+    r = analysis.load_results(results_directory, 'mppdc_price_change_deviation_case.pickle')
 
     # Prices from different models
     p_bau = analysis.get_average_prices(results_directory, 'bau_case.pickle', None, 'PRICES', -1)
