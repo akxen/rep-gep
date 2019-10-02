@@ -1958,8 +1958,7 @@ class MPPDCModel:
         def strong_duality_rule(_m):
             """Strong duality constraint"""
 
-            # return m.TPV + m.sd_1 == m.DUAL_OBJECTIVE_EXPRESSION + m.sd_2
-            return m.TPV == m.DUAL_OBJECTIVE_EXPRESSION
+            return m.TPV + m.sd_1 == m.DUAL_OBJECTIVE_EXPRESSION + m.sd_2
 
         # Strong duality constraint (primal objective = dual objective at optimality)
         m.STRONG_DUALITY = Constraint(rule=strong_duality_rule)
@@ -2095,8 +2094,8 @@ class MPPDCModel:
         """MPPDC objective function"""
 
         # Price targeting objective
-        m.OBJECTIVE = Objective(expr=m.YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED[m.TRANSITION_YEAR.value],
-                                     # + m.STRONG_DUALITY_VIOLATION_COST,
+        m.OBJECTIVE = Objective(expr=m.YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED[m.TRANSITION_YEAR.value]
+                                     + m.STRONG_DUALITY_VIOLATION_COST,
                                 sense=minimize)
 
         return m

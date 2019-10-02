@@ -133,9 +133,9 @@ def plot_gep_prices(results_dir, output_dir):
 
     ax.plot(x.tolist(), p_bau['average_price_real'].values.tolist(), color='blue', alpha=0.7)
     ax.plot(x.tolist(), p_tax['average_price_real'].values.tolist(), color='red', alpha=0.7)
-    ax.plot(x.tolist(), p_rep['average_price_real'].values.tolist(), color='green', alpha=0.4)
-    ax.plot(x.tolist(), p_price_dev_mppdc['average_price_real'].values.tolist(), color='purple', alpha=0.4)
-    ax.plot(x.tolist(), p_price_dev_heuristic['average_price_real'].values.tolist(), color='orange', alpha=0.4)
+    ax.plot(x.tolist(), p_rep['average_price_real'].values.tolist(), color='green', alpha=0.7)
+    ax.plot(x.tolist(), p_price_dev_mppdc['average_price_real'].values.tolist(), color='purple', alpha=0.8)
+    ax.plot(x.tolist(), p_price_dev_heuristic['average_price_real'].values.tolist(), color='orange', alpha=0.5)
     ax.yaxis.set_minor_locator(MultipleLocator(2))
     ax.xaxis.set_minor_locator(MultipleLocator(1))
     ax.xaxis.set_major_locator(MultipleLocator(2))
@@ -318,7 +318,7 @@ if __name__ == '__main__':
     output_directory = os.path.join(os.path.dirname(__file__), 'output', 'figures')
 
     # Results directory
-    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote')
+    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'local')
 
     # Object used to analyse results
     analysis = AnalyseResults()
@@ -336,8 +336,8 @@ if __name__ == '__main__':
     plt.show()
 
     # # Plot generation expansion planning model prices
-    # plot_gep_prices(results_directory, output_directory)
-    #
+    plot_gep_prices(results_directory, output_directory)
+
     # # Plot generation expansion planning model baselines
     # plot_gep_baselines(results_directory, output_directory)
     #
