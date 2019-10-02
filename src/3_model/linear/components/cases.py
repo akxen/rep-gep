@@ -66,6 +66,9 @@ class ModelCases:
         elif type(model_component) == pyomo.core.base.param.SimpleParam:
             return model_component.value
 
+        elif type(model_component) == pyomo.core.base.objective.SimpleObjective:
+            return model_component.expr()
+
         else:
             raise Exception(f'Unexpected model component: {component_name}')
 
@@ -142,7 +145,7 @@ class ModelCases:
         # Results to extract
         result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
                        'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'C_MC', 'ETA',
-                       'DELTA', 'RHO', 'EMISSIONS_RATE']
+                       'DELTA', 'RHO', 'EMISSIONS_RATE', 'OBJECTIVE']
 
         # Model results
         results = {k: self.extract_result(m, k) for k in result_keys}
@@ -171,7 +174,7 @@ class ModelCases:
         # Results to extract
         result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
                        'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'C_MC', 'ETA',
-                       'DELTA', 'RHO', 'EMISSIONS_RATE']
+                       'DELTA', 'RHO', 'EMISSIONS_RATE', 'OBJECTIVE']
 
         # Model results
         results = {k: self.extract_result(m, k) for k in result_keys}
@@ -192,7 +195,7 @@ class ModelCases:
         result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'q', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
                        'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'C_MC', 'ETA',
                        'DELTA', 'RHO', 'EMISSIONS_RATE', 'YEAR_SCHEME_EMISSIONS_INTENSITY',
-                       'YEAR_CUMULATIVE_SCHEME_REVENUE']
+                       'YEAR_CUMULATIVE_SCHEME_REVENUE', 'OBJECTIVE']
 
         # First run carbon tax case
         baselines = {y: float(0) for y in range(first_year, final_year + 1)}
@@ -293,10 +296,11 @@ class ModelCases:
         primal_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
                        'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'C_MC', 'ETA',
                        'DELTA', 'RHO', 'EMISSIONS_RATE', 'YEAR_CUMULATIVE_SCHEME_REVENUE',
-                       'YEAR_SCHEME_EMISSIONS_INTENSITY']
+                       'YEAR_SCHEME_EMISSIONS_INTENSITY', 'OBJECTIVE']
 
         # Results to extract from baseline targeting model
-        baseline_keys = ['YEAR_AVERAGE_PRICE', 'YEAR_AVERAGE_PRICE_0', 'YEAR_ABSOLUTE_PRICE_DIFFERENCE']
+        baseline_keys = ['YEAR_AVERAGE_PRICE', 'YEAR_AVERAGE_PRICE_0', 'YEAR_ABSOLUTE_PRICE_DIFFERENCE',
+                         'YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED', 'OBJECTIVE']
 
         iteration_results = {}
         stop_flag = False
@@ -444,7 +448,8 @@ class ModelCases:
         mppdc_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'q', 'baseline', 'permit_price', 'lamb',
                       'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_EMISSIONS_INTENSITY',
                       'YEAR_SCHEME_REVENUE', 'YEAR_CUMULATIVE_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE',
-                      'YEAR_ABSOLUTE_PRICE_DIFFERENCE', 'YEAR_AVERAGE_PRICE_0', 'YEAR_AVERAGE_PRICE']
+                      'YEAR_ABSOLUTE_PRICE_DIFFERENCE', 'YEAR_AVERAGE_PRICE_0', 'YEAR_AVERAGE_PRICE',
+                      'YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED', 'OBJECTIVE']
 
         # Stop flag and iteration counter
         stop_flag = False

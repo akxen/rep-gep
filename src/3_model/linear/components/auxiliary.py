@@ -402,7 +402,7 @@ class BaselineUpdater:
 
 if __name__ == '__main__':
     # Model horizon and scenarios per year
-    first_year_model, final_year_model, scenarios_per_year_model = 2016, 2017, 5
+    first_year_model, final_year_model, scenarios_per_year_model = 2016, 2031, 5
 
     # Output directory
     output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'local')
