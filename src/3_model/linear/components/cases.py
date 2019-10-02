@@ -300,7 +300,9 @@ class ModelCases:
 
         # Results to extract from baseline targeting model
         baseline_keys = ['YEAR_AVERAGE_PRICE', 'YEAR_AVERAGE_PRICE_0', 'YEAR_ABSOLUTE_PRICE_DIFFERENCE',
-                         'YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED', 'OBJECTIVE']
+                         'YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED', 'OBJECTIVE',
+                         'TOTAL_ABSOLUTE_PRICE_DIFFERENCE', 'YEAR_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED',
+                         'TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED', 'YEAR_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED']
 
         iteration_results = {}
         stop_flag = False
@@ -449,7 +451,9 @@ class ModelCases:
                       'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_EMISSIONS_INTENSITY',
                       'YEAR_SCHEME_REVENUE', 'YEAR_CUMULATIVE_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE',
                       'YEAR_ABSOLUTE_PRICE_DIFFERENCE', 'YEAR_AVERAGE_PRICE_0', 'YEAR_AVERAGE_PRICE',
-                      'YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED', 'OBJECTIVE']
+                      'YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED', 'OBJECTIVE',
+                      'YEAR_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED', 'TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED',
+                      'YEAR_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED']
 
         # Stop flag and iteration counter
         stop_flag = False

@@ -355,6 +355,7 @@ if __name__ == '__main__':
 
     # Load model results given a filename
     r = analysis.load_results(results_directory, 'mppdc_price_change_deviation_case.pickle')
+    r2 = analysis.load_results(results_directory, 'heuristic_price_change_deviation_case.pickle')
 
     # Prices from different models
     p_bau = analysis.get_average_prices(results_directory, 'bau_case.pickle', None, 'PRICES', -1)

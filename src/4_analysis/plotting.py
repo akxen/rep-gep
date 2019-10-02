@@ -35,16 +35,16 @@ def merit_order():
     ax.add_collection(pc_3)
     ax.set_xlim([0, 400])
     ax.set_ylim([0, 75])
-    ax.tick_params(labelsize=6)
+    ax.tick_params(labelsize=7)
     ax.yaxis.set_major_locator(MultipleLocator(20))
     ax.yaxis.set_minor_locator(MultipleLocator(5))
     ax.xaxis.set_major_locator(MultipleLocator(100))
     ax.xaxis.set_minor_locator(MultipleLocator(20))
-    ax.set_xlabel('Energy offers (MWh)', fontsize=7)
-    ax.set_ylabel('Price ($/MWh)', fontsize=7, labelpad=-0.1)
+    ax.set_xlabel('Energy offers (MWh)', fontsize=9)
+    ax.set_ylabel('Price ($/MWh)', fontsize=9, labelpad=-0.1)
 
     fig.set_size_inches(1.9685, 2.756)
-    fig.subplots_adjust(left=0.17, bottom=0.13, top=0.99, right=0.95)
+    fig.subplots_adjust(left=0.18, bottom=0.14, top=0.99, right=0.95)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
 
@@ -56,8 +56,8 @@ def merit_order_demand(fig, ax):
 
     ax.plot([200, 200], [0, 68], color='k', linestyle='--', alpha=0.9, linewidth=0.7)
     ax.plot([0, 150], [45, 45], color='k', linestyle='--', alpha=0.9, linewidth=0.6)
-    ax.text(150, 70, 'Demand', fontsize=6)
-    ax.text(-40, 44, '$\lambda$', fontsize=7, color='red')
+    ax.text(138, 70, 'Demand', fontsize=8)
+    ax.text(-50, 44, '$\lambda$', fontsize=10, color='red')
 
     return fig, ax
 
@@ -66,13 +66,14 @@ def merit_order_price_setter(fig, ax):
     """Add demand"""
 
     ax.plot([0, 150], [45, 45], color='k', linestyle='--', alpha=0.9, linewidth=0.6)
-    ax.text(-40, 44, '$\lambda$', fontsize=7, color='red')
-    ax.text(80, 46.5, r'$C_{g^{\star}}+(E_{g^{\star}} - \phi)\tau$', fontsize=7)
-
-    ax.text(80, 66, r'$\lambda = C_{g^{\star}}+(E_{g^{\star}} - \phi)\tau$', fontsize=7)
-
+    ax.text(-50, 44, '$\lambda$', fontsize=10, color='red')
+    ax.text(50, 46.5, r'$C_{g^{\star}}+(E_{g^{\star}} - \phi)\tau$', fontsize=8)
+    # ax.text(80, 66, r'$\lambda = C_{g^{\star}}+(E_{g^{\star}} - \phi)\tau$', fontsize=7)
+    ax.set_ylim([0, 65])
+    fig.set_size_inches(1.9685, 2.756-0.31)
     ax.collections[0].set_alpha(0.2)
     ax.collections[2].set_alpha(0.2)
+    fig.subplots_adjust(bottom=0.16)
 
     return fig, ax
 
@@ -184,89 +185,66 @@ def plot_gep_baselines(results_dir, output_dir):
     plt.show()
 
 
-if __name__ == '__main__':
-    # Output directory
-    output_directory = os.path.join(os.path.dirname(__file__), 'output', 'figures')
+def get_installed_cumulative_capacity_technology(results_dir, case):
+    """Get installed cumulative capacity for a given case (by technology type)"""
 
-    # Results directory
-    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote')
+    # Load results
+    results = analysis.load_results(results_dir, case)
 
-    # Object used to analyse results
-    analysis = AnalyseResults()
+    # Extract investment results
+    x_c = results['stage_2_rep'][max(results['stage_2_rep'].keys())]['x_c']
 
-    # Plot merit order (base image)
-    plot_merit_order(output_directory)
-    plt.show()
+    # Convert to pandas Series
+    df_cap = pd.Series(x_c).rename_axis(['generator', 'year']).rename('capacity')
 
-    # Plot merit order + demand
-    plot_merit_order_demand(output_directory)
-    plt.show()
+    # Compute cumulative capacity
+    df_cumulative_cap = df_cap.reset_index().pivot(index='year', columns='generator', values='capacity').cumsum()
 
-    # Plot merit order + price setter
-    plot_merit_order_price_setter(output_directory)
-    plt.show()
+    # Take transpose and extract technology type for each technology
+    df_cumulative_cap_t = df_cumulative_cap.T
+    df_cumulative_cap_t['technology'] = df_cumulative_cap_t.apply(lambda x: x.name.split('-')[1], axis=1)
 
-    # Plot generation expansion planning model prices
-    plot_gep_prices(results_directory, output_directory)
-    plt.show()
+    # Groupby technology type
+    df_tech = df_cumulative_cap_t.groupby('technology').sum().T
 
-    # Plot generation expansion planning model baselines
-    plot_gep_baselines(results_directory, output_directory)
-    plt.show()
+    return df_tech
 
-    def get_installed_cumulative_capacity_technology(results_dir, case):
-        """Get installed cumulative capacity for a given case (by technology type)"""
 
-        # Load results
-        results = analysis.load_results(results_dir, case)
+def get_year_existing_capacity_technology(year):
+    """Get existing capacity by technology type"""
 
-        # Extract investment results
-        x_c = results['stage_2_rep'][max(results['stage_2_rep'].keys())]['x_c']
+    # Existing unit retirement
+    df_r = pd.Series(analysis.data.unit_retirement)
 
-        # Convert to pandas Series
-        df_cap = pd.Series(x_c).rename_axis(['generator', 'year']).rename('capacity')
+    # Generator capacity for a given year
+    df_g = analysis.data.existing_units
 
-        # Compute cumulative capacity
-        df_cumulative_cap = df_cap.reset_index().pivot(index='year', columns='generator', values='capacity').cumsum()
+    # Retired generators
+    retired_gens = df_r.loc[df_r <= year].index
 
-        # Take transpose and extract technology type for each technology
-        df_cumulative_cap_t = df_cumulative_cap.T
-        df_cumulative_cap_t['technology'] = df_cumulative_cap_t.apply(lambda x: x.name.split('-')[1], axis=1)
+    # Generators that could potentially be included in model (scheduled and semi-scheduled)
+    included_gens = df_g.loc[df_g[('PARAMETERS', 'SCHEDULE_TYPE')].isin(['SCHEDULED', 'SEMI-SCHEDULED'])].index
 
-        # Groupby technology type
-        df_tech = df_cumulative_cap_t.groupby('technology').sum().T
+    # Available generators
+    available_gens = df_g.index.intersection(included_gens).difference(retired_gens)
+    df_ga = df_g.reindex(available_gens)
 
-        return df_tech
+    # Installed capacity for existing generators
+    df_c = df_ga.groupby(('PARAMETERS', 'TECHNOLOGY_CAT_PRIMARY')).sum()[('PARAMETERS', 'REG_CAP')]
 
-    df_inv = get_installed_cumulative_capacity_technology(results_directory, 'rep_case.pickle')
+    # Installed capacity for a given year
+    capacity = {(year, k): v for k, v in df_c.to_dict().items()}
 
-    def get_year_existing_capacity_technology(year):
-        """Get existing capacity by technology type"""
+    return capacity
 
-        # Existing unit retirement
-        df_r = pd.Series(analysis.data.unit_retirement)
 
-        # Generator capacity for a given year
-        df_g = analysis.data.existing_units
+def plot_cumulative_installed_capacity(case, results_dir, output_dir):
+    """Cumulative installed capacity"""
 
-        # Retired generators
-        retired_gens = df_r.loc[df_r <= year].index
+    # Installed capacity under REP case
+    df_inv = get_installed_cumulative_capacity_technology(results_dir, case)
 
-        # Generators that could potentially be included in model (scheduled and semi-scheduled)
-        included_gens = df_g.loc[df_g[('PARAMETERS', 'SCHEDULE_TYPE')].isin(['SCHEDULED', 'SEMI-SCHEDULED'])].index
-
-        # Available generators
-        available_gens = df_g.index.intersection(included_gens).difference(retired_gens)
-        df_ga = df_g.reindex(available_gens)
-
-        # Installed capacity for existing generators
-        df_c = df_ga.groupby(('PARAMETERS', 'TECHNOLOGY_CAT_PRIMARY')).sum()[('PARAMETERS', 'REG_CAP')]
-
-        # Installed capacity for a given year
-        capacity = {(year, k): v for k, v in df_c.to_dict().items()}
-
-        return capacity
-
+    # Incumbent installed capacity in each year of model horizon
     existing_cap = {}
     for y in df_inv.index:
         existing_cap = {**existing_cap, **get_year_existing_capacity_technology(y)}
@@ -329,7 +307,39 @@ if __name__ == '__main__':
 
     ax.legend(handles=legend_elements, fontsize=9, ncol=2, loc='lower left')
     fig.subplots_adjust(left=0.11, bottom=0.14, top=0.97, right=0.99)
-    fig.savefig(os.path.join(output_directory, 'rep_cumulative_capacity.png'))
-    fig.savefig(os.path.join(output_directory, 'rep_cumulative_capacity.pdf'), transparent=True)
+    fig.savefig(os.path.join(output_dir, 'rep_cumulative_capacity.png'))
+    fig.savefig(os.path.join(output_dir, 'rep_cumulative_capacity.pdf'), transparent=True)
 
     plt.show()
+
+
+if __name__ == '__main__':
+    # Output directory
+    output_directory = os.path.join(os.path.dirname(__file__), 'output', 'figures')
+
+    # Results directory
+    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote')
+
+    # Object used to analyse results
+    analysis = AnalyseResults()
+
+    # Plot merit order (base image)
+    plot_merit_order(output_directory)
+    plt.show()
+
+    # Plot merit order + demand
+    plot_merit_order_demand(output_directory)
+    plt.show()
+
+    # Plot merit order + price setter
+    plot_merit_order_price_setter(output_directory)
+    plt.show()
+
+    # # Plot generation expansion planning model prices
+    # plot_gep_prices(results_directory, output_directory)
+    #
+    # # Plot generation expansion planning model baselines
+    # plot_gep_baselines(results_directory, output_directory)
+    #
+    # # Plot cumulative installed capacity
+    # plot_cumulative_installed_capacity(results_directory, output_directory, 'rep_case.pickle')
