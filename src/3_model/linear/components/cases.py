@@ -302,7 +302,8 @@ class ModelCases:
         baseline_keys = ['YEAR_AVERAGE_PRICE', 'YEAR_AVERAGE_PRICE_0', 'YEAR_ABSOLUTE_PRICE_DIFFERENCE',
                          'YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED', 'OBJECTIVE',
                          'TOTAL_ABSOLUTE_PRICE_DIFFERENCE', 'YEAR_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED',
-                         'TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED', 'YEAR_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED']
+                         'TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED', 'YEAR_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED',
+                         'PRICE_WEIGHTS']
 
         iteration_results = {}
         stop_flag = False
@@ -454,7 +455,7 @@ class ModelCases:
                       'YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED', 'OBJECTIVE',
                       'YEAR_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED', 'TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED',
                       'YEAR_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED', 'sd_1', 'sd_2', 'STRONG_DUALITY_VIOLATION_COST',
-                      'TRANSITION_YEAR']
+                      'TRANSITION_YEAR', 'PRICE_WEIGHTS']
 
         # Stop flag and iteration counter
         stop_flag = False

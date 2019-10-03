@@ -39,7 +39,7 @@ if __name__ == '__main__':
     # Price weights
     # scheme_price_weights = {y: targets.get_envelope(10, 2, start, y) if y <= transition_year + 1 else 0
     #                         for y in range(start, end + 1)}
-    scheme_price_weights = {y: float(1) if y <= transition_year else 0 for y in range(start, end + 1)}
+    scheme_price_weights = {y: float(1) if y <= transition_year else float(0) for y in range(start, end + 1)}
 
     # Define case parameters and run model
     case_params = {'rep_filename': 'rep_case.pickle',
