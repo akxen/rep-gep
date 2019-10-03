@@ -2450,14 +2450,14 @@ class CheckSolution:
 if __name__ == '__main__':
     # Setup model parameters
     output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'local')
-    final_model_year = 2020
+    final_model_year = 2022
     scenarios_per_model_year = 3
 
     # Object used to analyse model results
-    analysis = AnalyseResults()
+    # analysis = AnalyseResults()
 
     # Check model solution
-    check = CheckSolution(final_year=final_model_year, scenarios_per_year=scenarios_per_model_year)
+    # check = CheckSolution(final_year=final_model_year, scenarios_per_year=scenarios_per_model_year)
 
     # Check primal and dual solution - primal and dual elements should be the same for prices and power output
     # check.check_primal_and_dual_solutions()
@@ -2467,10 +2467,12 @@ if __name__ == '__main__':
     baseline = {2016: 0.9979464507243393, 2017: 1.0153153056565962, 2018: 1.0323371086829316, 2019: 0.9870038442889452,
                 2020: 1.0269914600598047}
 
-    check.check_primal_and_mppdc_solutions(permit_prices=permit_price, baselines=baseline)
+    # check.check_primal_and_mppdc_solutions(permit_prices=permit_price, baselines=baseline)
     # check.check_dual_and_mppdc_solutions()
 
     # primal = Primal(2040, 5)
     # primal_model = primal.construct_model()
 
-    analysis.get_year_average_price(check.m_m.lamb.get_values(), factor=1)
+    # analysis.get_year_average_price(check.m_m.lamb.get_values(), factor=1)
+    mppdc = MPPDCModel(start_year=2016, final_year=final_model_year, scenarios_per_year=scenarios_per_model_year)
+    m_m = mppdc.construct_model(include_primal_constraints=True)

@@ -57,6 +57,9 @@ class ModelCases:
         elif type(model_component) == pyomo.core.base.expression.SimpleExpression:
             return model_component.expr()
 
+        elif type(model_component) == pyomo.core.base.var.SimpleVar:
+            return model_component.value
+
         elif type(model_component) == pyomo.core.base.var.IndexedVar:
             return model_component.get_values()
 
@@ -539,7 +542,7 @@ if __name__ == '__main__':
     targets = Targets()
 
     # Common model parameters
-    start, end, scenarios = 2016, 2026, 10
+    start, end, scenarios = 2016, 2022, 10
 
     # Year when scheme transitions to a Refunded Emissions Payment (REP) scheme
     transition_year = 2021
@@ -548,6 +551,7 @@ if __name__ == '__main__':
     permit_prices_model = {y: float(40) for y in range(start, end + 1)}
     scheme_revenue_envelope_lo = {y: targets.get_envelope(-100e6, 4, start, y) if y < transition_year else float(0)
                                   for y in range(start, end + 1)}
+
     scheme_price_weights = {y: targets.get_envelope(1, 4, start, y) for y in range(start, end + 1)}
 
     # Define case parameters and run model
@@ -556,29 +560,129 @@ if __name__ == '__main__':
                    'price_weights': scheme_price_weights,
                    'transition_year': transition_year}
 
-    # Run BAU case
-    r_bau = cases.run_bau_case(start, end, scenarios, output_directory)
+    self = cases
+    params = case_params
+    output_dir = output_directory
+    params['mode'] = 'price_change_minimisation'
 
-    # Run REP case
-    r_rep = cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
+    # Model parameters
+    rep_filename = params['rep_filename']
 
-    # Run price case targeting model using MPPDC model
-    r_ptm = cases.run_price_smoothing_mppdc_case(case_params, output_directory)
+    # Load REP results
+    with open(os.path.join(output_dir, rep_filename), 'rb') as f:
+        rep_results = pickle.load(f)
 
-    # Run price case targeting model using auxiliary model
-    r_pth = cases.run_price_smoothing_heuristic_case(case_params, output_directory)
+    # Get results corresponding to last iteration of REP solution
+    rep_iteration = rep_results['stage_2_rep'][max(rep_results['stage_2_rep'].keys())]
 
-    # Check prices
-    p_m = r_ptm['mppdc_model'].lamb.get_values()
-    p_p = {k: r_ptm['primal_model'].dual[r_ptm['primal_model'].POWER_BALANCE[k]]
-           for k in r_ptm['primal_model'].POWER_BALANCE.keys()}
+    # Extract parameters from last iteration of REP program results
+    permit_prices = rep_iteration['permit_price']
+    first_year = min(permit_prices.keys())
+    final_year = max(permit_prices.keys())
+    bau_initial_price = self.get_bau_initial_price(output_dir, first_year)
+    scenarios_per_year = len([s for y, s in rep_iteration['RHO'].keys() if y == final_year])
 
-    # Absolute price difference, and max difference
-    p_diff = {k: abs(abs(p_m[k]) - abs(p_p[k])) for k in p_m.keys()}
-    p_diff_max = max(p_diff.values())
+    # Classes used to construct and run primal and MPPDC programs
+    mppdc = MPPDCModel(first_year, final_year, scenarios_per_year)
+    primal = Primal(first_year, final_year, scenarios_per_year)
 
-    # Check baselines from both plots. Include lower scheme revenue envelope
-    fig, ax = plt.subplots()
-    ax.plot(list(r_ptm['mppdc_model'].baseline.get_values().values()))
-    ax.plot(list(r_pth['auxiliary_model'].baseline.get_values().values()))
-    plt.show()
+    # Construct MPPDC
+    m_m = mppdc.construct_model(include_primal_constraints=True)
+
+    # Construct primal model
+    m_p = primal.construct_model()
+
+    # Update MPPDC model parameters
+    m_m.YEAR_AVERAGE_PRICE_0 = float(bau_initial_price)
+    m_m.SCHEME_REVENUE_ENVELOPE_LO.store_values(params['revenue_envelope_lo'])
+    m_m.PRICE_WEIGHTS.store_values(params['price_weights'])
+
+    # Activate necessary constraints
+    m_m.SCHEME_REVENUE_ENVELOPE_LO_CONS.activate()
+
+    if params['mode'] == 'bau_deviation_minimisation':
+        m_m.PRICE_BAU_DEVIATION_1.activate()
+        m_m.PRICE_BAU_DEVIATION_2.activate()
+        filename = f'mppdc_bau_deviation_case.pickle'
+
+    elif params['mode'] == 'price_change_minimisation':
+        m_m.PRICE_CHANGE_DEVIATION_1.activate()
+        m_m.PRICE_CHANGE_DEVIATION_2.activate()
+        filename = f'mppdc_price_change_deviation_case.pickle'
+
+    else:
+        raise Exception(f"Unexpected run mode: {params['mode']}")
+
+    for y in m_m.Y:
+        if y >= params['transition_year']:
+            m_m.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS[y].activate()
+
+    # Primal variables
+    primal_vars = ['x_c', 'p', 'p_in', 'p_out', 'q', 'p_V', 'p_L', 'permit_price']
+    fixed_vars = {v: rep_iteration[v] for v in primal_vars}
+
+    # Results to extract from MPPDC model
+    mppdc_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'q', 'baseline', 'permit_price', 'lamb',
+                  'YEAR_EMISSIONS', 'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_EMISSIONS_INTENSITY',
+                  'YEAR_SCHEME_REVENUE', 'YEAR_CUMULATIVE_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE',
+                  'YEAR_ABSOLUTE_PRICE_DIFFERENCE', 'YEAR_AVERAGE_PRICE_0', 'YEAR_AVERAGE_PRICE',
+                  'YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED', 'OBJECTIVE',
+                  'YEAR_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED', 'TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED',
+                  'YEAR_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED', 'sd_1', 'sd_2', 'STRONG_DUALITY_VIOLATION_COST',
+                  'TRANSITION_YEAR', 'PRICE_WEIGHTS']
+
+    # Stop flag and iteration counter
+    stop_flag = False
+    counter = 1
+
+    # Container for iteration results
+    iteration_results = {}
+
+    while not stop_flag:
+        # Fix MPPDC variables
+        m_m = mppdc.fix_variables(m_m, fixed_vars)
+
+        # Solve MPPDC
+        m_m, m_m_status = mppdc.solve_model(m_m)
+
+        # Results from MPPDC program
+        r_m = copy.deepcopy({v: self.extract_result(m_m, v) for v in mppdc_keys})
+        iteration_results[counter] = r_m
+
+        # Update primal program with baselines and permit prices obtained from MPPDC model
+        for y in m_p.Y:
+            m_p.baseline[y].fix(m_m.baseline[y].value)
+            m_p.permit_price[y].fix(m_m.permit_price[y].value)
+
+        # Solve primal model
+        m_p, m_p_status = primal.solve_model(m_p)
+
+        # Results from primal program
+        p_r = copy.deepcopy({v: self.extract_result(m_p, v) for v in primal_vars})
+        p_r['PRICES'] = copy.deepcopy({k: m_p.dual[m_p.POWER_BALANCE[k]] for k in m_p.POWER_BALANCE.keys()})
+        iteration_results[counter]['primal'] = p_r
+
+        # Max difference in capacity sizing decision between MPPDC and primal program
+        max_cap_difference = max(abs(m_m.x_c[k].value - m_p.x_c[k].value) for k in m_m.x_c.keys())
+        print(f'Max capacity difference: {max_cap_difference} MW')
+
+        # Check if capacity variables have changed
+        if max_cap_difference < 5:
+            stop_flag = True
+
+        else:
+            # Update dictionary of fixed variables to be used in next iteration
+            fixed_vars = {v: p_r[v] for v in primal_vars}
+
+        counter += 1
+
+        # Combine results into a single dictionary
+    combined_results = {**rep_results, 'stage_3_price_targeting': iteration_results, 'parameters': params}
+
+    # # Save results
+    # self.save_results(combined_results, output_dir, filename)
+    #
+    # # Method output
+    # output = {'mppdc_model': m_m, 'mppdc_status': m_m_status, 'primal_model': m_p, 'primal_status': m_p_status,
+    #           'results': combined_results}
+    #

@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
     log_file_name = 'case_logger'
-    output_directory = os.path.join(os.path.dirname(__file__), 'output', 'remote')
+    output_directory = os.path.join(os.path.dirname(__file__), 'output', 'local')
 
     # Object used to run model cases
     cases = ModelCases(output_directory, log_file_name)
@@ -24,7 +24,7 @@ if __name__ == '__main__':
     targets = Targets()
 
     # Common model parameters
-    start, end, scenarios = 2016, 2040, 5
+    start, end, scenarios = 2016, 2031, 5
 
     # Year when scheme transitions to a Refunded Emissions Payment (REP) scheme
     transition_year = 2021
@@ -65,7 +65,7 @@ if __name__ == '__main__':
     cases.run_price_smoothing_heuristic_case(case_params, output_directory)
 
     # Run price targeting model using MPPDC model - minimise price difference relative to BAU prices in start year
-    case_params['mode'] = 'bau_deviation_minimisation'
+    # case_params['mode'] = 'bau_deviation_minimisation'
     # r_bau_change_mppdc = cases.run_price_smoothing_mppdc_case(case_params, output_directory)
     # cases.run_price_smoothing_mppdc_case(case_params, output_directory)
 
