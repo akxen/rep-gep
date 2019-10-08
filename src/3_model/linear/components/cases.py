@@ -64,7 +64,10 @@ class ModelCases:
             return model_component.get_values()
 
         elif type(model_component) == pyomo.core.base.param.IndexedParam:
-            return {k: v for k, v in model_component.items()}
+            try:
+                return {k: v.value for k, v in model_component.items()}
+            except AttributeError:
+                return {k: v for k, v in model_component.items()}
 
         elif type(model_component) == pyomo.core.base.param.SimpleParam:
             return model_component.value
@@ -542,17 +545,22 @@ if __name__ == '__main__':
     targets = Targets()
 
     # Common model parameters
-    start, end, scenarios = 2016, 2022, 10
+    start, end, scenarios = 2016, 2022, 5
 
     # Year when scheme transitions to a Refunded Emissions Payment (REP) scheme
     transition_year = 2021
 
     # Permit prices for carbon pricing scenarios
     permit_prices_model = {y: float(40) for y in range(start, end + 1)}
-    scheme_revenue_envelope_lo = {y: targets.get_envelope(-100e6, 4, start, y) if y < transition_year else float(0)
+
+    # Cumulative scheme revenue cannot go below this envelope
+    scheme_revenue_envelope_lo = {y: targets.get_envelope(-20e6, 4, start, y) if y < transition_year else float(0)
                                   for y in range(start, end + 1)}
 
-    scheme_price_weights = {y: targets.get_envelope(1, 4, start, y) for y in range(start, end + 1)}
+    # Price weights
+    # scheme_price_weights = {y: targets.get_envelope(10, 2, start, y) if y <= transition_year + 1 else 0
+    #                         for y in range(start, end + 1)}
+    scheme_price_weights = {y: float(1) if y <= transition_year else float(0) for y in range(start, end + 1)}
 
     # Define case parameters and run model
     case_params = {'rep_filename': 'rep_case.pickle',
@@ -679,10 +687,9 @@ if __name__ == '__main__':
         # Combine results into a single dictionary
     combined_results = {**rep_results, 'stage_3_price_targeting': iteration_results, 'parameters': params}
 
-    # # Save results
-    # self.save_results(combined_results, output_dir, filename)
-    #
-    # # Method output
-    # output = {'mppdc_model': m_m, 'mppdc_status': m_m_status, 'primal_model': m_p, 'primal_status': m_p_status,
-    #           'results': combined_results}
-    #
+    # Save results
+    self.save_results(combined_results, output_dir, filename)
+
+    # Method output
+    output = {'mppdc_model': m_m, 'mppdc_status': m_m_status, 'primal_model': m_p, 'primal_status': m_p_status,
+              'results': combined_results}
