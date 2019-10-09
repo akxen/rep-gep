@@ -1862,7 +1862,7 @@ class MPPDCModel:
         m.YEAR_AVERAGE_PRICE_0 = Param(initialize=100, mutable=True)
 
         # Strong duality constraint violation penalty
-        m.STRONG_DUALITY_VIOLATION_PENALTY = Param(initialize=float(1e6))
+        m.STRONG_DUALITY_VIOLATION_PENALTY = Param(initialize=float(1e5))
 
         # Lower limit for scheme revenue in a given year
         m.SCHEME_REVENUE_LB = Param(initialize=float(-10e6), mutable=True)
@@ -1954,6 +1954,22 @@ class MPPDCModel:
     @staticmethod
     def define_constraints(m):
         """MPPDC constraints"""
+
+        def sd_1_non_negative_rule(_m):
+            """Dummy variable ensuring strong duality constraint feasibility is non-negative"""
+
+            return m.sd_1 >= 0
+
+        # Constraint on dummy variable ensuring non-negative values
+        m.SD_1_CONS = Constraint(rule=sd_1_non_negative_rule)
+
+        def sd_2_non_negative_rule(_m):
+            """Dummy variable ensuring strong duality constraint feasibility is non-negative"""
+
+            return m.sd_2 >= 0
+
+        # Constraint on dummy variable ensuring non-negative values
+        m.SD_2_CONS = Constraint(rule=sd_2_non_negative_rule)
 
         def strong_duality_rule(_m):
             """Strong duality constraint"""
