@@ -49,9 +49,6 @@ class BaselineUpdater:
         # Year after which a Refunded Emissions Payment scheme is enforced
         m.TRANSITION_YEAR = Param(initialize=2021, mutable=True)
 
-        # Lower bound for cumulative scheme revenue. Prevents cumulative scheme revenue from going below this bound.
-        m.REVENUE_LOWER_BOUND = Param(initialize=float(-1e9), mutable=True)
-
         # Initial average price in year prior to model start
         m.YEAR_AVERAGE_PRICE_0 = Param(initialize=float(40), mutable=True)
 
@@ -227,42 +224,6 @@ class BaselineUpdater:
     def define_constraints(m):
         """Define model constraints"""
 
-        def revenue_neutral_horizon_rule(_m):
-            """Scheme is revenue neutral over whole model horizon"""
-
-            return sum(m.YEAR_SCHEME_REVENUE[y] for y in m.Y) == 0
-
-        # Enforce revenue neutrality over entire model horizon
-        m.REVENUE_NEUTRAL_HORIZON = Constraint(rule=revenue_neutral_horizon_rule)
-        m.REVENUE_NEUTRAL_HORIZON.deactivate()
-
-        def revenue_neutral_transition_rule(_m):
-            """Scheme is revenue neutral up until a transition year"""
-
-            return sum(m.YEAR_SCHEME_REVENUE[j] for j in m.Y if j <= m.TRANSITION_YEAR.value) == 0
-
-        # Enforce revenue neutrality up until transition year
-        m.REVENUE_NEUTRAL_TRANSITION = Constraint(rule=revenue_neutral_transition_rule)
-        m.REVENUE_NEUTRAL_TRANSITION.deactivate()
-
-        def year_net_scheme_revenue_neutral_rule(_m, y):
-            """Enforce scheme is revenue neutral for a given year"""
-
-            return m.YEAR_SCHEME_REVENUE[y] == 0
-
-        # Enforce revenue neutrality for a given year
-        m.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS = Constraint(m.Y, rule=year_net_scheme_revenue_neutral_rule)
-        m.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS.deactivate()
-
-        def cumulative_revenue_lower_bound_rule(_m, y):
-            """Ensure revenue never falls below a given lower bound for any year in model horizon"""
-
-            return m.YEAR_CUMULATIVE_SCHEME_REVENUE[y] >= m.REVENUE_LOWER_BOUND
-
-        # Ensure cumulative scheme revenue never goes below this level
-        m.CUMULATIVE_REVENUE_LOWER_BOUND = Constraint(m.Y, rule=cumulative_revenue_lower_bound_rule)
-        m.CUMULATIVE_REVENUE_LOWER_BOUND.deactivate()
-
         def price_change_deviation_1_rule(_m, y):
             """Constraints used to compute absolute difference in average prices between successive years"""
 
@@ -305,14 +266,23 @@ class BaselineUpdater:
         m.PRICE_BAU_DEVIATION_2 = Constraint(m.Y, rule=price_bau_deviation_2_rule)
         m.PRICE_BAU_DEVIATION_2.deactivate()
 
-        def scheme_revenue_lower_envelope_rule(_m, y):
-            """Ensure scheme revenue is greater than or equal to lower envelope"""
+        def year_scheme_revenue_neutral_rule(_m, y):
+            """Ensure that net scheme revenue in each year = 0 (equivalent to a REP scheme)"""
 
-            return m.YEAR_CUMULATIVE_SCHEME_REVENUE[y] >= m.SCHEME_REVENUE_ENVELOPE_LO[y]
+            return m.YEAR_SCHEME_REVENUE[y] == 0
 
-        # Ensure scheme revenue less than or equal to upper envelope
-        m.SCHEME_REVENUE_ENVELOPE_LO_CONS = Constraint(m.Y, rule=scheme_revenue_lower_envelope_rule)
-        m.SCHEME_REVENUE_ENVELOPE_LO_CONS.deactivate()
+        # Ensure scheme is revenue neutral in each year of model horizon (equivalent to a REP scheme)
+        m.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS = Constraint(m.Y, rule=year_scheme_revenue_neutral_rule)
+        m.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS.deactivate()
+
+        def non_negative_transition_revenue_rule(_m):
+            """Ensure that net scheme revenue over transition period >= 0 (equivalent to a REP scheme)"""
+
+            return sum(m.YEAR_SCHEME_REVENUE[y] for y in m.Y if y <= m.TRANSITION_YEAR.value) >= 0
+
+        # Ensure scheme is revenue neutral over transition period
+        m.NON_NEGATIVE_TRANSITION_REVENUE_CONS = Constraint(rule=non_negative_transition_revenue_rule)
+        m.NON_NEGATIVE_TRANSITION_REVENUE_CONS.deactivate()
 
         return m
 

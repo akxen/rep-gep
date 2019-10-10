@@ -640,7 +640,7 @@ class CommonComponents:
         def lost_load_cost_rule(_m, z):
             """Return cost for lost-load power in each NEM zone"""
 
-            return float(1e4 + random.uniform(0, 100))
+            return float(2e4 + random.uniform(0, 100))
 
         # Lost load cost for each NEM zone
         random.seed(10)

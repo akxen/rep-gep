@@ -1864,9 +1864,6 @@ class MPPDCModel:
         # Strong duality constraint violation penalty
         m.STRONG_DUALITY_VIOLATION_PENALTY = Param(initialize=float(1e5))
 
-        # Lower limit for scheme revenue in a given year
-        m.SCHEME_REVENUE_LB = Param(initialize=float(-10e6), mutable=True)
-
         # Year at which yearly revenue neutrality constraint will be enforced
         m.TRANSITION_YEAR = Param(initialize=2021, mutable=True)
 
@@ -2045,24 +2042,6 @@ class MPPDCModel:
         m.BASELINE_DEVIATION_2 = Constraint(m.Y, rule=baseline_deviation_2_rule)
         m.BASELINE_DEVIATION_2.deactivate()
 
-        def total_scheme_revenue_non_negative_rule(_m):
-            """Ensure that net scheme revenue is greater than 0 over model horizon"""
-
-            return m.TOTAL_SCHEME_REVENUE >= 0
-
-        # Total net scheme revenue non-negativity constraint
-        m.TOTAL_SCHEME_REVENUE_NON_NEGATIVE_CONS = Constraint(rule=total_scheme_revenue_non_negative_rule)
-        m.TOTAL_SCHEME_REVENUE_NON_NEGATIVE_CONS.deactivate()
-
-        def total_scheme_revenue_neutral_rule(_m):
-            """Ensure that net scheme revenue is equals 0 over model horizon"""
-
-            return m.TOTAL_SCHEME_REVENUE == 0
-
-        # Total net scheme revenue neutrality constraint
-        m.TOTAL_NET_SCHEME_REVENUE_NEUTRAL_CONS = Constraint(rule=total_scheme_revenue_neutral_rule)
-        m.TOTAL_NET_SCHEME_REVENUE_NEUTRAL_CONS.deactivate()
-
         def year_scheme_revenue_neutral_rule(_m, y):
             """Ensure that net scheme revenue in each year = 0 (equivalent to a REP scheme)"""
 
@@ -2072,36 +2051,14 @@ class MPPDCModel:
         m.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS = Constraint(m.Y, rule=year_scheme_revenue_neutral_rule)
         m.YEAR_NET_SCHEME_REVENUE_NEUTRAL_CONS.deactivate()
 
-        def cumulative_scheme_revenue_lower_bound_rule(_m, y):
-            """Ensure that cumulative scheme revenue each year is greater than some lower limit"""
+        def non_negative_transition_revenue_rule(_m):
+            """Ensure that net scheme revenue over transition period >= 0 (equivalent to a REP scheme)"""
 
-            return sum(m.YEAR_SCHEME_REVENUE[j] for j in m.Y if j <= y) >= m.SCHEME_REVENUE_LB
+            return sum(m.YEAR_SCHEME_REVENUE[y] for y in m.Y if y <= m.TRANSITION_YEAR.value) >= 0
 
-        # Ensure cumulative scheme revenue is greater than or equal to some lower limit
-        m.CUMULATIVE_NET_SCHEME_REVENUE_LB_CONS = Constraint(m.Y, rule=cumulative_scheme_revenue_lower_bound_rule)
-        m.CUMULATIVE_NET_SCHEME_REVENUE_LB_CONS.deactivate()
-
-        def transition_net_scheme_revenue_neutral_rule(_m):
-            """Ensure revenue neutrality over transitional period"""
-
-            if m.TRANSITION_YEAR.value >= m.Y.first():
-                return sum(m.YEAR_SCHEME_REVENUE[y] for y in m.Y if y <= m.TRANSITION_YEAR.value) == 0
-
-            else:
-                return Constraint.Skip
-
-        # Enforce net scheme revenue over transitional period = 0
-        m.TRANSITION_NET_SCHEME_REVENUE_NEUTRAL_CONS = Constraint(rule=transition_net_scheme_revenue_neutral_rule)
-        m.TRANSITION_NET_SCHEME_REVENUE_NEUTRAL_CONS.deactivate()
-
-        def scheme_revenue_lower_envelope_rule(_m, y):
-            """Ensure scheme revenue is greater than or equal to lower envelope"""
-
-            return m.YEAR_CUMULATIVE_SCHEME_REVENUE[y] >= m.SCHEME_REVENUE_ENVELOPE_LO[y]
-
-        # Ensure scheme revenue less than or equal to upper envelope
-        m.SCHEME_REVENUE_ENVELOPE_LO_CONS = Constraint(m.Y, rule=scheme_revenue_lower_envelope_rule)
-        m.SCHEME_REVENUE_ENVELOPE_LO_CONS.deactivate()
+        # Ensure scheme is revenue neutral over transition period
+        m.NON_NEGATIVE_TRANSITION_REVENUE_CONS = Constraint(rule=non_negative_transition_revenue_rule)
+        m.NON_NEGATIVE_TRANSITION_REVENUE_CONS.deactivate()
 
         return m
 
