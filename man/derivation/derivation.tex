@@ -4,6 +4,7 @@
 % Import packages
 \usepackage{notation}
 \usepackage{geometry,amsmath,amssymb,bm,mathtools,graphicx,pdfpages,tikz,float,blkarray,longtable,titlesec,cases,bm,titlesec,breqn}
+\usepackage[]{algorithm2e}
 
 % Graphics path
 \graphicspath{{figures}}
@@ -152,7 +153,7 @@
 	\end{longtable}
 
 \section{Model outline}
-The calibration of scheme parameters is considered a Stackelberg Game, and modelled within a bi-level framework. The lower level consititutes the generation expansion planning problem, while the upper-level considers the policy calibration objective. The policymaker must take into account the optimal response of investment and operating decisions that a particular trajectory of policy parameters will elicit. A generalised representation of the problem is as follows:
+When setting scheme parameters a policymaker should consider the impact their decisions will have on investment and operating decisions over the model horizon. In this sense the calibration problem can be considered a Stackelberg Game between two agents: a policymaker who decides scheme parameters, and a market operator who determines the least-cost investment and operating plan. In this setting, the leader (policymaker) must to take into account the optimal response of a follower (market operator) following the scheme's introduction. This situation is modelled as a bi-level program, with the lower-level constituting the generation expansion planning problem, while the upper-level considers a policy calibration objective. A generalised representation of the program is as follows:
 
 \begin{alignat}{3}
 & \minimise\limits_{\bm{u}, \bm{v}, \bm{\mu}, \bm{\nu}} \quad && f\left(\bm{u}, \bm{v}, \bm{\mu}, \bm{\nu}\right) \label{eqn: bi-level example upper objective}\\
@@ -163,10 +164,10 @@ The calibration of scheme parameters is considered a Stackelberg Game, and model
 & && \minimise\limits_{\bm{v}} \quad && g(\bm{u}, \bm{v})\\
 & && \textrm{subject to} \nonumber\\
 & && && \bm{c}(\bm{u}, \bm{v}) \leq \bm{0} \quad \left(\bm{\mu}\right) \\
-& && && \bm{d}(\bm{u}, \bm{v}) = \bm{0} \quad \left(\bm{\nu}\right)\\\nonumber
+& && && \bm{d}(\bm{u}, \bm{v}) = \bm{0} \quad \left(\bm{\nu}\right) \label{eqn: bi-level example lower-level equality constraint}\\\nonumber
 \end{alignat}
 
-The upper-level objective (\ref{eqn: bi-level example upper objective}) is function of upper-level variables $\bm{u}$, lower-level variables $\bm{v}$, and dual variables associated with the lower-level program, given by $\bm{\mu}$ and $\bm{\nu}$. The generation expansion planner is assumed to be the follower within this context, responding to the policymaker's selection of scheme parameters with the least cost investment and operational plan over the model horizon. The following sections introduce each component of this model, followed by a reformulation strategy that converts the bi-level model above into a single-level optimisation problem.
+The upper-level objective (\ref{eqn: bi-level example upper objective}) is function of upper-level variables $\bm{u}$, lower-level variables $\bm{v}$, and dual variables associated with the lower-level inequality and equality constraints, given by $\bm{\mu}$ and $\bm{\nu}$ respectively. The generation expansion planner is assumed to be the follower within this context, responding to the policymaker's selection of scheme parameters with the least-cost investment and operational plan over the model horizon. The following sections introduce each component of this model, followed by a reformulation strategy that converts this bi-level model into a single-level optimisation problem.
 
 \subsection{Upper-level objective and constraints}
 The upper-level objective seeks to penalise average price deviations between successive years. In this sense it can be seen as a price smoothing objective. By minimising the sum of cumulative deviations greater emphasis is placed on minimising price changes at the start of the model horizon.
@@ -197,13 +198,15 @@ Where:
 
 \begin{equation}
 	\dAveragePrice = \frac{\sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iZone \in \sZones} \dPowerBalance \cDemand}{\sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals}\sum\limits_{\iZone \in \sZones} \cDemand}
+	\label{eqn: average price}
 \end{equation}
 
 Optimisation variables for the upper-level program consist of upper-level primal variables, lower-level primal variables, and lower-level dual variables. Upper-level primal variables are denoted by $\bm{\Psi} = \{\vBaseline, \vPermitPrice\}$, lower-level primal variables by $\bm{\Gamma} = \{\vInstalledCapacity, \vPower, \vPowerIn, \vPowerOut, \vStorageUnitEnergy, \vPowerFlow, \vLostLoadPower\}$, and lower-level dual variables by $\bm{\Lambda} = \{\dNonNegativeCandidateCapacity, \dSolarBuildLimit, \\\dWindBuildLimit, \dStorageBuildLimit, \dMinPowerOutput, \dMaxPowerOutputExistingThermal, \dMaxPowerOutputCandidateThermal, \dMaxPowerOutputWindExisting, \dMaxPowerOutputWindCandidate, \dMaxPowerOutputSolarExisting,  \dMaxPowerOutputSolarCandidate, \dMaxPowerOutputHydro,  \dNonNegativeCharging, \dNonNegativeDischarging, \dMaxChargingRateExisting,  \dMaxChargingRateCandidate, \dMaxDischargingRateExisting, \\ \dMaxDischargingRateCandidate, \dMaxDischargingRateExisting, \dMaxDischargingRateCandidate, \dNonNegativeStorageEnergy, \dMaxStorageEnergyExisting, \dMaxStorageEnergyCandidate, \dMinStorageEnergyIntervalEnd, \dMaxStorageEnergyIntervalEnd, \dRampRateUp, \dRampRateDown, \dNonNegativeLostLoad, \dMinPowerFlow, \dMaxPowerFlow, \dPowerBalance, \dStorageEnergyTransition\}$.
 
-Constraint (\ref{eqn: non-negative policy variables}) ensures that policy variables are non-negative over the model horizon, while (\ref{eqn: cumulative revenue constraint}) imposes a cumulative revenue constraint up until transition year, $\iYearTransition$. From year $n$ to the end of the model horizon total emissions payments collected in a given year are made to exactly equal total credits paid out, with these revenue neutrality constraints enforced by (\ref{eqn: revenue neutral constraint}). The upper-level objective and constraints given by (\ref{eqn: upper-level objective})--(\ref{eqn: revenue neutral constraint}) can be thought of as taking into account transitional effects when calibrating an emissions abatement policy. In the years immediately following the scheme's introduction the policymaker may run the scheme at a net surplus or deficit each year, so long as cumulative scheme revenue is greater than some amount $\cMinimumCumulativeSchemeRevenue$ by the end of the transitional period. In the years that follow the scheme must run in a revenue neutral manner -- emulating the mechanics of a Refunded Emissions Payment (REP) scheme.
+Constraint (\ref{eqn: non-negative policy variables}) ensures that policy variables are non-negative over the model horizon, while (\ref{eqn: cumulative revenue constraint}) imposes a cumulative revenue constraint up until transition year, $\iYearTransition$. From year $n$ to the end of the model horizon total emissions payments collected in a given year are made to exactly equal total credits paid out, with these revenue neutrality constraints enforced by (\ref{eqn: revenue neutral constraint}). The upper-level objective and constraints given by (\ref{eqn: upper-level objective})--(\ref{eqn: revenue neutral constraint}) can be thought of as taking into account transitional effects when calibrating an emissions abatement policy. In the years immediately following the scheme's introduction the policymaker may run the scheme at a net surplus or deficit each year, so long as cumulative scheme revenue is greater than some amount $\cMinimumCumulativeSchemeRevenue$ by the end of the transitional period. In following years the scheme must run in a revenue neutral manner -- emulating the mechanics of a Refunded Emissions Payment (REP) scheme REF.
 
 \subsection{Lower-level problem}
+\label{subsec: lower-level problem}
 The lower-level program seeks to identify the least-cost investment and operating plan for the system over the model's horizon. The structure of the program, in particular treatment of amortised investment costs and end-of-horizon costs, are based on the models presented in REF and REF. The objective function seeks to minimise the total present value, $\cTotalPresentValue$, of these costs:
 
 \begin{equation}
@@ -220,14 +223,13 @@ The $\cTotalPresentValue$ is comprised of the following expressions:
 \label{eqn: total present value expression}
 \end{align}
 
-Where $\cInvestmentCost$, $\cFixedOperationsMaintenanceCost$, and $\cOperatingCost[\iYear]$ denote the total investment, fixed operations and maintenance, and operating costs for year $\iYear$ respectively. These terms are discounted by $\cDiscountRate$ to take into account the opportunity cost associated with investing at different stages over the model horizon, and allows the present value of all cash-flows to be computed. The discount rate given by:
+Where $\cInvestmentCost$, $\cFixedOperationsMaintenanceCost$, and $\cOperatingCost[\iYear]$ denote the investment, fixed operations and maintenance, and operating costs for year $\iYear$ respectively. These terms are discounted by $\cDiscountRate$ to take into account the opportunity cost associated with investing at different stages over the model horizon, and allows the present value of all cash-flows to be computed. The discount rate is given by:
 
 \begin{equation}
 \cDiscountRate = \frac{1}{(1 + \cInterestRate)^{\iYear}}
 \end{equation}
 
-Where $\cInterestRate$ is the interest rate (or weighted average cost of capital). The last term constituting the $\cTotalPresentValue$ expression in (\ref{eqn: total present value expression}) is an end-of-horizon cost.
-This term assumes that the operating costs incurred in the last year of the model's horizon occurs in all future years. Without this term investment would be biased towards the start of the horizon, as investing early would yield the greatest savings. This is a consequence of the model not having a concept of a future beyond the final year. It is assumed that this cost will be paid in perpetuity, and can be expressed as:
+Where $\cInterestRate$ is the interest rate (or weighted average cost of capital). The last term constituting the $\cTotalPresentValue$ expression in (\ref{eqn: total present value expression}) is an end-of-horizon cost, $\cEndOfHorizonCost$. This term assumes that the operating costs incurred in the last year of the model's horizon occurs in all future years. Without this term investment would be biased towards the start of the horizon, as investing early would yield the greatest savings. This is a consequence of the model not having a concept of a `future' beyond the final year. It is assumed that this cost will be paid in perpetuity, and can be expressed as:
 
 \begin{equation}
 \cEndOfHorizonCost = \frac{\cDiscountRate[\iYearTerminal]}{\cInterestRate} 
@@ -256,7 +258,7 @@ Where $\cAmortisationRate$ is the amortisation rate of the investment, which dep
 
 \subsubsection{Operating costs}
 
-Total operating cost for a given year, $\iYear$, is equal to the total operating cost for a representative day, $\cOperatingCostScenario$, multiplied by the relative duration of the day for a given year, $\cScenarioDuration$. The concept of relative duration stems from the construction procedure for the set of representative days for each year. A $k$-means clustering algorithm is used to reduce a set of 365 load, hydro, solar, wind, and demand traces into a reduced set of traces that seeks to retain the temporal relationships and correlations between these traces. Reducing these input traces to set of $k$ centroid traces, and assigning each input trace to its closest centroid allows a relative weighting to be assigned to each centroid. Therefore the relative duration, $\cScenarioDuration$, can be considered as the number of days in a year that are represented by the trace. An expression for total operating costs over an entire year can then be formulated as follows:
+Total operating cost for a given year, $\iYear$, is equal to the total operating cost for a representative day, $\cOperatingCostScenario$, multiplied by the relative duration of the day for a given year, $\cScenarioDuration$. The concept of relative duration stems from the construction procedure for the set of representative days for each year. For each year in the model horizon a $k$-means clustering algorithm is used to reduce a set of 365 load, hydro, solar, wind, and demand traces into a reduced set of traces that seeks to retain the temporal relationships and correlations between these traces. Reducing these input traces to a set of $k$ centroid traces, and assigning each input trace to its closest centroid allows a relative weighting to be assigned to each centroid. Therefore the relative duration, $\cScenarioDuration$, can be considered as the number of days in a year that are represented by the trace. An expression for total operating costs over an entire year can then be formulated as follows:
 
 \begin{equation}
 \cOperatingCost[\iYear] = \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \cOperatingCostScenario
@@ -309,10 +311,10 @@ The fixed cost to maintain installed capacity is given by:
 \cFixedOperationsMaintenanceCost = \sum\limits_{\iGenerator \in \sGeneratorsCandidate} \cFixedOperationsMaintenanceCostGenerator \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias]
 \end{equation}
 
-Note that $\vInstalledCapacity$ denotes the capacity of candidate generator $\iGenerator$ installed in year $\iYear$. Therefore the total installed capacity at year $\iYear$ is the cumulative sum of these terms up until year $\iYear$. Also note that if retirement decisions were variable, then fixed operating and maintenance costs may influence the timing of incumbent generators exiting the market. However, in this analysis retirement decisions are considered to be deterministic, following the expected schedule outlined in REF. Therefore only candidate unit capacity is considered in the $\cFixedOperationsMaintenanceCost$ expression. This is because incumbent units have fixed capacities and fixed costs, therefore these terms reduce to a constant and have no bearing on the optimal solution. 
+Note that $\vInstalledCapacity$ denotes the capacity of candidate generator $\iGenerator$ installed in year $\iYear$. Therefore the total installed capacity for year $\iYear$ is the cumulative sum of these terms up until year $\iYear$. Also note that if retirement decisions were variable, then fixed operating and maintenance costs may influence the timing of incumbent generators exiting the market. However, in this analysis retirement decisions are considered to be deterministic, following the expected schedule outlined in REF. Therefore only candidate unit capacity is considered in the $\cFixedOperationsMaintenanceCost$ expression. This is because incumbent units have fixed capacities and fixed costs, therefore these terms reduce to a constant and have no bearing on the optimal solution. 
 
 \subsubsection{Investment constraints}
-Investment decisions in each year of the model horizon are assumed to be continuous variables. This modelling assumption allows the model to retain the property of linearity, however it deviates from reality in the sense that new thermal units are likely to be subject to fixed sizes. The modelling assumption is also used in AEMO's REF MODEL NAME capacity expansion planning model REF. Investment for each technology type is also limited by cumulative build limits for each NEM zone.
+Capacity investment decisions in each year are assumed to be continuous variables. This assumption is in-line with the methodology adopted in AEMO's REF MODEL NAME capacity expansion planning model REF, and allows the model to retain the property of linearity. The cost of this simplification is a deviation from reality, as new thermal units are likely to be subject to fixed sizes. Investment for each technology type is also limited by cumulative build limits for each NEM zone.
 
 Continuous capacity sizing for candidate generators:
 
@@ -337,7 +339,7 @@ Build limits for different technologies in each zone:
 \end{equation}
 
 \subsubsection{Operating constraints}
-Operating constraints for thermal, wind, solar, and storage units are presented below. As representative days are being used, ramp-rate constraints for thermal and hydro generators are also included. At the temporal resolution considered in this model (hourly), solar, wind, and storage units are assumed to have sufficiently high ramp-rates that they will be non-binding, and are not included in the model.
+Operating constraints for thermal, wind, solar, and storage units are presented below. As representative days are used, ramp-rate constraints for thermal and hydro generators are also included. At the temporal resolution considered in this model (hourly), solar, wind, and storage units are assumed to have sufficiently high ramp-rates that ramp-rate constraints for these units will be non-binding, thus these constraints are not included in the model.
 
 Minimum power output:
 \begin{equation}
@@ -468,7 +470,7 @@ Power balance for each zone:
 \end{equation}
 
 \subsection{Dual problem}
-The primal program described in sections REF-REF can equivalently be expressed via its dual formulation. A general procedure for constructing the dual function, $\Lambda$, is as follows, where $\mathcal{L}(\bm{\overline{u}}, \bm{v}, \bm{\mu}, \bm{\nu})$ is the Lagrangian:
+The primal program described in Sections \ref{subsec: lower-level problem} can equivalently be expressed via its dual formulation. A general procedure for constructing the dual function, $\Lambda$, is as follows, where $\mathcal{L}(\bm{\overline{u}}, \bm{v}, \bm{\mu}, \bm{\nu})$ is the Lagrangian:
 
 \begin{equation}
 \Lambda(\bm{\overline{u}}, \bm{v}, \bm{\mu}, \bm{\nu}) = \inf\limits_{\bm{v}, \bm{\mu}, \bm{\nu}} \quad \mathcal{L}(\bm{\overline{u}}, \bm{v}, \bm{\mu}, \bm{\nu})
@@ -483,18 +485,22 @@ Note that upper-level variables, $\bm{\overline{v}}$, are contained within the L
 The following sections derive the dual program by first constructing the Lagrangian, and then identifying a set of constraints that prevents the program from being unbounded.
 
 \subsubsection{Lagrangian}
-Using the notation outlined in section REF, a generalised expression for the Lagrangian can be defined as follows:
-
-For the purposes of clarity, let us partition the set of lower-level problem inequality constraints, $\bm{c}(\bm{u}, \bm{v})$, into two sets: $\bm{m}(\bm{u}, \bm{v})$ denoting inequality constraints associated with investment decisions and $\bm{n}(\bm{u}, \bm{v})$ inequality constraints associated with operating decisions. Let the sets of dual variables $\bm{\mu}$ and $\bm{\sigma}$ be associated with these respective sets of constraints. Similarly, let $\bm{h}(\bm{u}, \bm{v})$ be the set of lower-level equality constraints, and $\bm{\zeta}$ the set of dual variables associated with these constraints. The Lagrangian can then be expressed as:
+Using the notation outlined (\ref{eqn: bi-level example upper objective})--(\ref{eqn: bi-level example lower-level equality constraint}), a generalised expression for the Lagrangian can be defined as follows:
 
 \begin{equation}
-	\mathcal{L}(\bm{u}, \bm{v}, \bm{\mu}, \bm{\sigma}, \bm{\zeta}) = g(\bm{u}, \bm{v}) + \bm{\mu}^{T}\bm{m}(\bm{u}, \bm{v}) + \bm{\sigma}^{T}\bm{n}(\bm{u}, \bm{v}) + \bm{\zeta}^{T}\bm{h}(\bm{u}, \bm{v})
+	\mathcal{L}(\bm{\overline{u}}, \bm{v}, \bm{\mu}, \bm{\nu}) = g(\bm{\overline{u}}, \bm{v}) + \bm{\mu}^{T}\bm{c}(\bm{\overline{u}}, \bm{v}) + \bm{\sigma}^{T}\bm{d}(\bm{\overline{u}}, \bm{v})
+\end{equation}
+
+Without loss of generality, partition the vector of lower-level problem inequality constraints, $\bm{c}(\bm{\overline{u}}, \bm{v})$, into vectors: $\bm{m}(\bm{\overline{u}}, \bm{v})$ denoting inequality constraints associated with investment decisions, and $\bm{n}(\bm{\overline{u}}, \bm{v})$ inequality constraints associated with operating decisions. Let the vectors of dual variables $\bm{\mu}$ and $\bm{\sigma}$ be associated with these respective constraints. Similarly, let $\bm{h}(\bm{\overline{u}}, \bm{v})$ be the vector of lower-level equality constraints, and $\bm{\zeta}$ the vector of dual variables associated with these constraints. The Lagrangian can then be expressed as:
+
+\begin{equation}
+	\mathcal{L}(\bm{\overline{u}}, \bm{v}, \bm{\mu}, \bm{\sigma}, \bm{\zeta}) = g(\bm{\overline{u}}, \bm{v}) + \bm{\mu}^{T}\bm{m}(\bm{\overline{u}}, \bm{v}) + \bm{\sigma}^{T}\bm{n}(\bm{\overline{u}}, \bm{v}) + \bm{\zeta}^{T}\bm{h}(\bm{\overline{u}}, \bm{v})
 \end{equation}
 
 Where:
 
 \begin{alignat}{3}
-	& && g(\bm{u}, \bm{v}) = \sum\limits_{\iYear \in \sYears} \cDiscountRate  &&  \left[\frac{1}{\cInterestRate} \sum\limits_{g\in \sGeneratorsCandidate} \cAmortisationRate  \cCandidateInvestmentCost \vInstalledCapacity + \sum\limits_{\iGenerator \in \sGeneratorsCandidate} \cFixedOperationsMaintenanceCostGenerator \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias] \right. \nonumber\\ 
+	& && g(\bm{\overline{u}}, \bm{v}) = \sum\limits_{\iYear \in \sYears} \cDiscountRate  &&  \left[\frac{1}{\cInterestRate} \sum\limits_{g\in \sGeneratorsCandidate} \cAmortisationRate  \cCandidateInvestmentCost \vInstalledCapacity + \sum\limits_{\iGenerator \in \sGeneratorsCandidate} \cFixedOperationsMaintenanceCostGenerator \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias] \right. \nonumber\\ 
 	& && + \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals} && \left[\sum\limits_{\iGenerator \in \sGeneratorsThermal} \left[\cMarginalCost + (\cEmissionsIntensity - \vBaseline)\vPermitPrice\right]\vPower  + \sum\limits_{\iGenerator \in \sGeneratorsHydro}\cMarginalCost \vPower \right. \nonumber\\
 	& && && + \sum\limits_{\iGenerator \in \sGeneratorsExistingWind} \cMarginalCost \vPower + \sum\limits_{\iGenerator \in \sGeneratorsCandidateWind} \left[\cMarginalCost - \vBaseline \vPermitPrice\right] \vPower \nonumber\\
 	& && && + \sum\limits_{\iGenerator \in \sGeneratorsExistingSolar} \cMarginalCost \vPower + \sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar} \left[\cMarginalCost - \vBaseline\vPermitPrice\right] \vPower\nonumber\\
@@ -509,14 +515,14 @@ Where:
 \end{alignat}
 
 \begin{align}
-\bm{\mu}^{T}\bm{m}(\bm{u}, \bm{v}) = & \sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sGeneratorsCandidate} \dNonNegativeCandidateCapacity \left(-\vInstalledCapacity\right)\nonumber\\
+\bm{\mu}^{T}\bm{m}(\bm{\overline{u}}, \bm{v}) = & \sum\limits_{\iYear \in \sYears} \sum\limits_{\iGenerator \in \sGeneratorsCandidate} \dNonNegativeCandidateCapacity \left(-\vInstalledCapacity\right)\nonumber\\
 & + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iZone \in \sZones} \dSolarBuildLimit \left(\sum\limits_{\iGenerator \in \sGeneratorsCandidateSolar_{\iZone}} \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias]  - \cBuildLimitSolar\right)\nonumber\\
 & + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iZone \in \sZones} \dWindBuildLimit \left(\sum\limits_{\iGenerator \in \sGeneratorsCandidateWind_{\iZone}} \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias] - \cBuildLimitWind\right)\nonumber\\
 & + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iZone \in \sZones} \dStorageBuildLimit \left(\sum\limits_{\iGenerator \in \sStorageCandidate_{\iZone}} \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias] - \cBuildLimitStorage\right)\\\nonumber
 \end{align}
 
 \begin{align}
-	\bm{\sigma}^{T}\bm{n}(\bm{u}, \bm{v}) = & \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGenerators \setminus \sStorage} \dMinPowerOutput \left(-\vPower + \cPowerOutputMin\right) \nonumber\\
+	\bm{\sigma}^{T}\bm{n}(\bm{\overline{u}}, \bm{v}) = & \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGenerators \setminus \sStorage} \dMinPowerOutput \left(-\vPower + \cPowerOutputMin\right) \nonumber\\
 	& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsExistingThermal} \dMaxPowerOutputExistingThermal \left(\vPower - \cPowerOutputMax \left(1 - \cRetirementIndicator\right)\right) \nonumber\\
 	& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsCandidateThermal} \dMaxPowerOutputCandidateThermal \left(\vPower - \sum\limits_{\iYearAlias \leq \iYear} \vInstalledCapacity[\iGenerator,\iYearAlias]\right) \nonumber\\
 	& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsExistingWind} \dMaxPowerOutputWindExisting \left(\vPower - \cCapacityFactorWind \cPowerOutputMax[\iGenerator] \left(1 - \cRetirementIndicator\right) \right) \nonumber\\
@@ -545,7 +551,7 @@ Where:
 \end{align}
 
 \begin{align}
-	\bm{\zeta}^{T} \bm{h}(\bm{u}, \bm{v}) = 	& \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iZone \in \sZones} \dPowerBalance \left(\cDemand - \sum\limits_{\iGenerator \in \sGenerators_{\iZone} \setminus \sStorage_{\iZone}} \vPower - \sum\limits_{\iGenerator \in \sStorage_{\iZone}} \left(\vPowerOut - \vPowerIn\right) + \sum\limits_{\iLink \in \sLinks} \cIncidenceMatrix \vPowerFlow - \vLostLoadPower \right) \nonumber\\
+	\bm{\zeta}^{T} \bm{h}(\bm{\overline{u}}, \bm{v}) = 	& \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iZone \in \sZones} \dPowerBalance \left(\cDemand - \sum\limits_{\iGenerator \in \sGenerators_{\iZone} \setminus \sStorage_{\iZone}} \vPower - \sum\limits_{\iGenerator \in \sStorage_{\iZone}} \left(\vPowerOut - \vPowerIn\right) + \sum\limits_{\iLink \in \sLinks} \cIncidenceMatrix \vPowerFlow - \vLostLoadPower \right) \nonumber\\
 	& + \sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios}\sum\limits_{\iInterval \in \sIntervals \setminus \{\iIntervalStart\}} \sum\limits_{\iGenerator \in \sStorage} \dStorageEnergyTransition \left(-\vStorageUnitEnergy + \vStorageUnitEnergy[\iGenerator,\iYear,\iScenario,\iInterval-1] + \cStorageUnitEfficiencyCharging \vPowerIn - \frac{1}{\cStorageUnitEfficiencyDischarging} \vPowerOut \right) \nonumber\\
 	& + \sum\limits_{\iYear \in \sYears} \sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iGenerator \in \sStorage} \dStorageEnergyTransition[\iGenerator,\iYear,\iScenario,\iIntervalStart] \left(-\vStorageUnitEnergy[\iGenerator,\iYear,\iScenario,\iIntervalStart] + \cStorageEnergyInitial + \cStorageUnitEfficiencyCharging \vPowerIn[\iGenerator,\iYear,\iScenario,\iIntervalStart] - \frac{1}{\cStorageUnitEfficiencyDischarging} \vPowerOut[\iGenerator,\iYear,\iScenario,\iIntervalStart] \right)\\\nonumber
 \end{align}
@@ -553,6 +559,7 @@ Where:
 
 
 \subsubsection{Expressions}
+\label{subsubsec: dual expressions}
 Each primal variable within the Lagrangian is factored out to identify a set of constraints that prevent the dual problem from being unbounded.
 
 \newcommand{\sumIntervals}{\sum\limits_{\iYear \in \sYears}\sum\limits_{\iScenario \in \sScenarios} \sum\limits_{\iInterval \in \sIntervals}}
@@ -764,7 +771,7 @@ Dual objective:
 \end{align}
 
 \subsubsection{Constraints}
-The expressions developed in Section REF can be used to construct a set of constraints that prevent the dual from being unbounded. Note that if the body of any expression that factors out primal variables were non-zero, then it's value could be made arbitrarily large when maximising the dual function over the set of dual variables. Therefore in order for the dual problem to not be unbounded each expression must be set equal to zero, yielding the following equality constraints:
+The expressions developed in Section~\ref{subsubsec: dual expressions} can be used to construct a set of constraints that prevent the dual from being unbounded. Note that if the body of any expression that factors out primal variables were non-zero, then it's value could be made arbitrarily large when maximising the dual function over the set of dual variables. Therefore in order for the dual problem to not be unbounded each expression must be set equal to zero, yielding the following equality constraints:
 
 Investment decision - candidate thermal:
 \begin{align}
@@ -1036,7 +1043,8 @@ Powerflow:
  
  
 \subsection{MPPDC reformulation}
-The bi-level program is re-formulated into a single-level Mathematical Program with Primal and Dual Constraints (MPPDC). As the lower-level primal problem is linear, by Slater's constraint qualification REF the primal and dual objectives will be equal at optimality (if there exists a primal and dual feasible solution). The lower-level optimisation problem can therefore be represented as a set of primal and dual constraints, along with a strong duality constraint. The bi-level program can therefore be re-cast as a single-level optimisation problem:
+\label{subsec: mppdc reformulation}
+The bi-level program is re-formulated into a single-level Mathematical Program with Primal and Dual Constraints (MPPDC). As the lower-level primal problem is linear, by Slater's constraint qualification REF the primal and dual objectives will be equal at optimality (if there exists a primal and dual feasible solution). The lower-level optimisation problem can therefore be represented as a set of primal and dual constraints, along with a strong duality constraint, allowing the bi-level program to be re-cast as a single-level optimisation problem:
 
 \begin{equation}
 \minimise\limits_{\bm{\Psi}, \bm{\Gamma}, \bm{\Lambda}} \quad \sum\limits_{\iYear=\iYearStart}^{\iYearTransition} \sum\limits_{\iYearAlias=\iYearStart}^{\iYear} \norm[\big]{\dAveragePrice[\iYearAlias] - \dAveragePrice[\iYearAlias-1]}_{1} \nonumber
@@ -1057,16 +1065,16 @@ Strong duality constraint:
 (\ref{eqn: total present value expression}) = (\ref{eqn: dual objective})
  
 \section{Functional approximation heuristic}
-While the MPPDC presented in Section REF allows one to optimise over prices, it is subject to several limitations. First, the derivation of the program is non-trivial, with edge cases needing to be considered when deriving constraints for the dual problem. Second, the reformulation procedure requires that the primal program be linear with respect to the lower-level variables. Even with this strong assumption the resulting MPPDC is non-linear, with policy variables $\vBaseline$ and $\vPermitPrice$ interacting with power output variables $\vPower$ in the strong-duality constraint, causing the MPPDC to be highly non-linear. Rather than rely on this reformulation strategy, a heuristic is proposed that seeks to calibrate the policy parameters such that the same price objectives are achieved. 
+While the MPPDC presented in Section~\ref{subsec: mppdc reformulation} allows one to optimise over prices, it is subject to several limitations. First, the derivation of the program is non-trivial, with edge cases needing to be considered when deriving constraints for the dual problem. Second, the reformulation procedure requires that the primal program be linear with respect to the lower-level variables. Even with this strong assumption the resulting MPPDC is non-linear, with policy variables $\vBaseline$ and $\vPermitPrice$ interacting with power output variables $\vPower$ in the strong-duality constraint, causing the MPPDC to be highly non-linear. An alternative approach is to use the primal program's KKT conditions when reformulating it as a single-level program. However doing so yields complementarity slackness conditions that may be linearised by big-M constraints, introducing integer variables into the formulation. Rather than rely on these reformulation strategies, a heuristic is proposed that seeks to calibrate the policy parameters such that the same price objectives are achieved.
 
-The price targeting heuristic first seeks to identify price setting generators for each dispatch interval. If these generators can be identified, then a functional approximation of the price with respect to the policy parameters can be derived for each dispatch interval. One can then optimise prices using these functional approximations. The solution protocol is therefore iterative. First the primal program is solved, and the price setting generators identified. A functional approximation of the average price with respect to policy parameters is then constructed based on the cost functions of these price setting generators. Using this functional approximation an auxiliary program is solved to calibrate the policy parameters. Using these updated policy parameters the primal program is re-solved, and the procedure to identify price setting generators is repeated until the difference between successive solutions is less than some tolerance. The following sections introduce each component of this algorithm.
+The price targeting heuristic first seeks to identify price setting generators for each dispatch interval. If these generators can be identified, then a functional approximation of the price with respect to the policy parameters can be derived for each dispatch interval. One can then optimise prices using these functional approximations. The solution protocol is therefore iterative. First the primal program is solved, and the price setting generators identified. A functional approximation of the average price with respect to policy parameters is then constructed based on the cost functions of these price setting generators. Using this functional approximation an auxiliary program is solved to calibrate the policy parameters. The primal program is then re-solved using these updated policy parameters, and the procedure to identify price setting generators is repeated until the difference in solutions between successive iterations is less than some tolerance. The following sections introduce each component of this algorithm.
 
 \subsection{Price setting generators}
-Dual variables associated with the power balance constraint (\ref{eqn: power balance}) yield the marginal cost to produce an additional unit of energy, and are defined for each zone and dispatch interval. Under a uniform price auction, these prices correspond to the marginal cost of the last committed unit. In practice it is possible to have more than one unit set the price for the dispatch interval, however for the purposes of introducing the algorithm we will assumed that only one generator acts as the price setter. To identify this generator for each zone and dispatch interval the dual variable associated with a given zone and dispatch interval's power balance constraint is compared with the net marginal cost of all generators within the system. The generator whose net marginal cost is closest to the price is then assigned as the price setting generator for that dispatch interval. 
+Dual variables associated with the power balance constraint (\ref{eqn: power balance}) yield the marginal cost to produce an additional unit of energy, and are obtained for each zone and dispatch interval. Under a uniform price auction, these prices correspond to the marginal cost of the last committed unit. In practice it is possible to have more than one unit set the price for the dispatch interval, however for the purposes of introducing the algorithm we will assumed that only one generator acts as the price setter. To identify this generator for each zone and dispatch interval the dual variable associated with a given zone and dispatch interval's power balance constraint is compared with the net marginal cost of all generators within the system. The generator whose net marginal cost is closest to the price is then assigned as the price setting generator for that dispatch interval. 
 
-Price targeting objectives can be achieved by first identifying price setting generators, and which then allows nodal prices to be parametrised as a function of policy variables (namely the emissions intensity baseline). dispatch interval and NEM zone, the generator that sets the price for that zone is identified. This is accomplished by observing the price for that zone, given by the dual variable of the power balance constraint, and comparing this with the short-run marginal costs of all generators within the network. 
+%Price targeting objectives can be achieved by first identifying price setting generators, which then allows nodal prices to be parametrised as a function of policy variables. dispatch interval and NEM zone, the generator that sets the price for that zone is identified. This is accomplished by observing the price for that zone, given by the dual variable of the power balance constraint, and comparing this with the net short-run marginal costs of all generators within the network. 
 
-Let the net marginal cost of each generator, $\iGenerator$, in a given year, $\iYear$, be given by:
+To identify price setting generators, first let the net marginal cost of each generator, $\iGenerator$, in a given year, $\iYear$, be given by:
 
 \[
 c_{\iGenerator,\iYear} = \left\{\begin{array}{ll}
@@ -1075,96 +1083,62 @@ A_{\iGenerator}, & \text{otherwise}
 \end{array}\right.
 \]
 
-Combining these marginal costs into a single vector for a given year:
+Let the highest net marginal cost of all generators in year $\iYear$ be denoted as $c_{\iYear}^{\mathrm{max}}$. The algorithm to identify the price setting generator for a given zone, $\iZone$, and dispatch interval, $\iInterval$, is as follows:
+
+\begin{algorithm}[H]
+	\KwData{Generator marginal costs in a given year, and zonal price for a given zone and dispatch interval}
+	\KwResult{Functional price approximation, $\hat{\dPowerBalance[]}_{\iZone,\iYear,\iScenario,\iInterval}$, for given zone and dispatch interval}
+	initialisation: set $d_{\iZone,\iYear,\iScenario,\iInterval}^{\mathrm{min}} = + \infty$\;
+	\eIf{$\dPowerBalance > c_{\iYear}^{\mathrm{max}}$}{
+	$\hat{\dPowerBalance[]}_{\iZone,\iYear,\iScenario,\iInterval} = \dPowerBalance$
+}
+{
+	\For{$\iGenerator$ in $\sGenerators$}{
+		$d_{\iZone,\iYear,\iScenario, \iInterval} = \norm{c_{g,y} - \dPowerBalance}_{1}$\;
+		\eIf{$d_{\iZone,\iYear,\iScenario,\iInterval} < d_{\iZone,\iYear,\iScenario,\iInterval}^{\mathrm{min}}$}{
+			update mininmum difference: $d_{\iZone,\iYear,\iScenario,\iInterval}^{\mathrm{min}} = d_{\iZone,\iYear,\iScenario,\iInterval}$\;
+			update price function: $\hat{\dPowerBalance[]}_{\iZone,\iYear,\iScenario,\iInterval} = c_{\iGenerator,\iYear}$\;
+		}{
+			continue\;
+		}
+	}
+}
+	\caption{Functional price approximation}
+\end{algorithm}
+
+Note that if the zonal price is greater than the highest net marginal cost for all units in the system, then the price must be determined by penalty factors within the model (e.g. the cost of lost-load). In this situation changes to policy parameters will have little to no effect on the zonal price, and the functional approximation for that dispatch interval is simply a constant equal to the price observed for that dispatch interval. Using these functional price approximations an expression for the average price can be formulated as follows:
 
 \begin{equation}
-	\mathbf{c}(\iYear) = \left[c_{\iGenerator,\iYear} : \iGenerator \in \sGenerators\right]^{T}
+	\hat{\dPowerBalance[]}_{\iYear}^{\mathrm{avg}} = \frac{\sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals}\sum\limits_{\iZone \in \sZones} \hat{\dPowerBalance[]}_{\iZone,\iYear,\iScenario,\iInterval} \cDemand}{\sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals}\sum\limits_{\iZone \in \sZones} \cDemand}
+	\label{eqn: average price approximation}
 \end{equation}
 
+Note that (\ref{eqn: average price approximation}) is almost identical to (\ref{eqn: average price}) in the MPPDC formulation. However instead of using dual variables from power balance constraints, approximations of price sensitivities with respect to policy parameters are constructed using knowledge of price setting generator cost functions. The same upper-level price smoothing objective and associated constraints as outlined in (\ref{eqn: upper-level objective})--(\ref{eqn: revenue neutral constraint}) can be constructed using these functional approximations:
 
 \begin{equation}
-\iGenerator^{\star}_{\iZone,\iYear,\iScenario,\iInterval} = \argmin\limits_{\iGenerator} \left(\norm{\mathbf{c}(\mathbf{\iGenerator}, \iYear) - \dPowerBalance}_{1}\right)
+\minimise\limits_{\bm{\Psi}} \quad \sum\limits_{\iYear=\iYearStart}^{\iYearTransition} \sum\limits_{\iYearAlias=\iYearStart}^{\iYear} \norm[\big]{\hat{\dPowerBalance[]}_{\iYearAlias}^{\mathrm{avg}} - \hat{\dPowerBalance[]}_{\iYearAlias - 1}^{\mathrm{avg}}}_{1}
+\label{eqn: upper-level objective approximation}
 \end{equation}
 
-The marginal cost of each generator is given by:
+subject to:
 
 \begin{equation}
-c(\iGenerator, \iYear) = A_{\iGenerator} + \left(\cEmissionsIntensity - \vBaseline\right) \vPermitPrice
+\vBaseline, \vPermitPrice \geq 0 \quad  \iYear \in \sYears
 \end{equation}
-
-By knowing the price setting generator, the marginal price for a given zone and dispatch interval can be approximated based off of the price setting generator's marginal cost function.
 
 \begin{equation}
-\hat{\dPowerBalance[]}_{\iZone,\iYear,\iScenario,\iInterval} = A_{\iGenerator^{\star}} + \left(\cEmissionsIntensity[\iGenerator^{\star}] - \vBaseline\right) \vPermitPrice
+\sum\limits_{\iYear=\iYearStart}^{\iYearTransition} \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsCandidate \cup \sGeneratorsExistingThermal}\left(\cEmissionsIntensity -\vBaseline\right)\vPermitPrice \hat{\vPower[]}_{\iGenerator,\iYear,\iScenario,\iInterval} \geq \cMinimumCumulativeSchemeRevenue
+\label{eqn: cumulative revenue constraint approximation}
 \end{equation}
-
-Approximation for total revenue over all dispatch intervals in a given year:
 
 \begin{equation}
-\mathrm{REVENUE}_{\iYear} = \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals}\sum\limits_{\iZone \in \sZones} \hat{\dPowerBalance[]}_{\iZone,\iYear,\iScenario,\iInterval} \cDemand
+\sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGeneratorsCandidate \cup \sGeneratorsExistingThermal}\left(\cEmissionsIntensity -\vBaseline\right)\vPermitPrice \hat{\vPower[]}_{\iGenerator,\iYear,\iScenario,\iInterval} = 0 \quad  \iYear \in \left[\iYearTransition, \ldots, \iYearTerminal\right]	
+\label{eqn: revenue neutral constraint approximation}
 \end{equation}
 
-Total demand in a given year:
+The key difference between this program and that given by (\ref{eqn: upper-level objective})--(\ref{eqn: revenue neutral constraint}) is that power output is fixed to values obtained from the primal program's solution, and the average price expressions are built from price setting generator cost functions. In this way (\ref{eqn: upper-level objective approximation})--(\ref{eqn: revenue neutral constraint approximation}) can be considered an auxiliary program. Rather than solve for the cost minimising operational and investment plan \textit{and} target prices simultaneously, the auxiliary program first solves for the cost minimising operational and investment plan \textit{then} optimises over prices. This approach is computationally less expensive and does not require the MPPDC to be formulated. However, it should be noted that the solution of policy parameters obtained from the auxiliary program may change the operational and investment decisions given by the primal program. Iteration is therefore required, with the policy parameter solution from the auxiliary program used as inputs to the primal program, and the solution of the primal program used as inputs to the auxiliary program.
 
-\begin{equation}
-\mathrm{DEMAND}_{\iYear} = \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals}\sum\limits_{\iZone \in \sZones} \cDemand
-\end{equation}
-
-Average price:
-
-\begin{equation}
-\mathrm{PRICE}_{\iYear} = \frac{\mathrm{REVENUE}_{\iYear}}{\mathrm{DEMAND}_{\iYear}}
-\end{equation}
-
-Price targeting objective:
-\begin{equation}
-\mathrm{OBJ} = \sum\limits_{\iYear \in \sYears} \norm{\mathrm{PRICE}_{\iYear-1} - \mathrm{PRICE}_{\iYear}}_{1}
-\end{equation}
-
-Note that in the first year $\iYear - 1$ is not defined. In this year $\mathrm{PRICE}_{\iYear-1}$ is set equal to the price arising in the first year of the model horizon under the business-as-usual case.
-
-Scheme revenue obtained for a given year. Note that power output is fixed to the value obtained in the carbon tax program. Changing the baseline's value should have no impact on the merit order, and by extension power output from individual generators:
-
-\begin{equation}
-R_{\iYear} = \sum\limits_{\iScenario \in \sScenarios} \cScenarioDuration \sum\limits_{\iInterval \in \sIntervals} \sum\limits_{\iGenerator \in \sGenerators} \left(\cEmissionsIntensity - \vBaseline \right) \vPermitPrice \hat{\vPower[]}_{\iGenerator,\iYear,\iScenario,\iInterval}
-\end{equation}
-
-Revenue neutrality constraint (entire model horizon):
-\begin{equation}
-\sum\limits_{\iYear \in \sYears} R_{\iYear} = 0
-\end{equation}
-
-Revenue neutrality constraint (up to transition year):
-\begin{equation}
-\sum\limits_{\iYear \in \bar{\sYears}} R_{\iYear} = 0
-\end{equation}
-
-Cumulative revenue constraint lower-bound:
-\begin{equation}
-\sum\limits_{\iYear=\iYearStart}^{\iYearAlias} R_{\iYear} \geq \underline{R} \quad  \iYearAlias \in \left[\iYearStart, \iYearStart + 1, \ldots, \iYearTerminal \right] 
-\end{equation}
-
-\section{Cases}
-\subsection{Business-as-usual}
-This case serves as a benchmark. The permit price and baseline are set = 0 for all years.
-
-\subsection{Carbon tax}
-A carbon tax of 40 \$/MWh is imposed for all years of the model horizon. The baseline = 0 for all years.
-
-\subsection{Refunded Emissions Payment Scheme}
-A carbon price of 40 \$/MWh is imposed for all years of the model horizon. The revenue collected in each year is refunded to generators in proportion to their output. Operationally, this is the same as establishing an emissions intensity baseline equal to the average emissions intensity of energy falling under the scheme's remit. This case is solved first taking the carbon tax solution, and identifying the average emissions intensity from regulated generators. The baselines are then set equal to these emissions intensity values for each year in the model horizon. The primal program is re-solved. If the difference in installed capacity is sufficiently small between this new solution and the carbon tax case, then stop, else compute the new average emissions intensities, update the baselines and re-solve.
-
-\subsection{Price smoothing - revenue neutrality over entire horizon}
-A carbon price of 40 \$/MWh is imposed, with the baselines initially set equal to the average emissions intensities of regulated generators. Information from the primal program is used to solve an auxiliary program that calibrates the emissions intensity baseline. The baselines are updated and the model re-solved. If the max difference between the capacity sizing variable solution is sufficiently close to that obtained in the previous iteration, and the price setting generators have not changed, end, else repeat from the step where the auxiliary program is solved.
-
-\subsection{Price smoothing - revenue neutrality over entire horizon with lower cumulative revenue constraint}
-A carbon price of 40 \$/MWh is imposed. Scheme revenue is made to be neutral over the model horizon. Scheme revenue may be positive or negative in each year, but cumulative scheme revenue (as defined from the start of the horizon) may not fall below some lower limit. 
-
-
-\subsection{Price smoothing - revenue neutrality for transitional period}
-A carbon price of 40 \$/MWh is imposed. Revenue up until the transitional year may be positive or negative. From the transitional year onwards net scheme revenue = 0 in all years for the remainder of the model horizon.
-
-\section{Solution algorithm}
+The program presented here assumes that both the permit price and emissions intensity baseline are variable. In practice, it may be the case that the permit price trajectory is decided upon between the policymaker and industry stakeholders. Certainty with respect to the permit price is critical if confidence is to be instilled with investors, as it is this variable that primarily brings about adjustments to relative operational and investment costs for different technologies. Conversely, the baseline has less impact on relative costs as the magnitude of the rebate given to generators per MWh is the same irrespective of emissions intensity (i.e. the rebate  is $\vPermitPrice\vBaseline$ per MWh for all generators under the scheme's remit). With these practicalities in mind, an implementation strategy could be to first decide upon a trajectory of permit prices that achieves given emissions objectives, and then use the aforementioned calibration frameworks to identify a trajectory of baselines that minimise disruptions to average wholesale prices in the years following the scheme's introduction. An approach that utilises the functional price approximation methodology presented above is as follows:
 
 \begin{figure}
 	\centering
