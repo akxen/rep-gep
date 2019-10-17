@@ -648,7 +648,8 @@ class Primal:
 
             # Existing and candidate storage units within a given zone
             c_storage_units = [g for g, zone in self.data.battery_properties_dict['NEM_ZONE'].items() if zone == z]
-            e_storage_units = [g for g, val in self.data.existing_storage_units_dict.items() if val['NEM_ZONE'] == z]
+            e_storage_units = [g for g, val in self.data.existing_storage_units_dict.items()
+                               if (val['NEM_ZONE'] == z) and (g in m.G_E_STORAGE)]
             storage_units = e_storage_units + c_storage_units
 
             return (m.DEMAND[z, y, s, t]

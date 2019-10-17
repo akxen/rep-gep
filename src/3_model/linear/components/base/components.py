@@ -71,7 +71,8 @@ class CommonComponents:
         m.G_E_HYDRO = Set(initialize=self.data.existing_hydro_unit_ids)
 
         # Existing storage units
-        m.G_E_STORAGE = Set(initialize=self.data.existing_storage_unit_ids)
+        # m.G_E_STORAGE = Set(initialize=self.data.existing_storage_unit_ids)
+        m.G_E_STORAGE = Set(initialize=[])
 
         # Candidate storage units
         m.G_C_STORAGE = Set(initialize=self.data.candidate_storage_units)
