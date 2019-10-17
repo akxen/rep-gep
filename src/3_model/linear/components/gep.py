@@ -496,7 +496,7 @@ class Primal:
         def max_energy_existing_storage_rule(_m, g, y, s, t):
             """Max energy for existing storage units"""
 
-            return m.q[g, y, s, t] - m.Q_MAX <= 0
+            return m.q[g, y, s, t] - m.Q_MAX[g] <= 0
 
         # Max energy for existing storage units
         m.MAX_ENERGY_EXISTING_STORAGE = Constraint(m.G_E_STORAGE, m.Y, m.S, m.T, rule=max_energy_existing_storage_rule)
@@ -646,8 +646,10 @@ class Primal:
             # All generators within a given zone
             generators = existing_units + candidate_units
 
-            # Storage units within a given zone TODO: will need to update if existing storage units are included
-            storage_units = [gen for gen, zone in self.data.battery_properties_dict['NEM_ZONE'].items() if zone == z]
+            # Existing and candidate storage units within a given zone
+            c_storage_units = [g for g, zone in self.data.battery_properties_dict['NEM_ZONE'].items() if zone == z]
+            e_storage_units = [g for g, val in self.data.existing_storage_units_dict.items() if val['NEM_ZONE'] == z]
+            storage_units = e_storage_units + c_storage_units
 
             return (m.DEMAND[z, y, s, t]
                     - sum(m.p[g, y, s, t] for g in generators)
@@ -794,8 +796,11 @@ class Dual:
         elif g in m.G_C.difference(m.G_STORAGE):
             return self.data.candidate_units_dict[('PARAMETERS', 'ZONE')][g]
 
-        elif g in m.G_STORAGE:
+        elif g in m.G_C_STORAGE:
             return self.data.battery_properties_dict['NEM_ZONE'][g]
+
+        elif g in m.G_E_STORAGE:
+            return self.data.existing_storage_units_dict[g]['NEM_ZONE']
 
         else:
             raise Exception(f'Unexpected generator: {g}')

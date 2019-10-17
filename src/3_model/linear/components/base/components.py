@@ -70,8 +70,8 @@ class CommonComponents:
         # Existing hydro units
         m.G_E_HYDRO = Set(initialize=self.data.existing_hydro_unit_ids)
 
-        # Existing storage units TODO: Not considering incumbent units for now. Could perhaps include later.
-        m.G_E_STORAGE = Set(initialize=[])
+        # Existing storage units
+        m.G_E_STORAGE = Set(initialize=self.data.existing_storage_unit_ids)
 
         # Candidate storage units
         m.G_C_STORAGE = Set(initialize=self.data.candidate_storage_units)
@@ -260,7 +260,7 @@ class CommonComponents:
         def retirement_indicator_rule(_m, g, y):
             """Indicates if unit is retired. 1=unit is retired, 0=unit operational"""
 
-            # TODO: Update this assumption of all units always available
+            # Year in which unit retires
             year = self.data.unit_retirement.get(g)
 
             if year is not None:
@@ -277,7 +277,7 @@ class CommonComponents:
                 return float(0)
 
         # Retirement indicator
-        m.F = Param(m.G_E, m.Y, rule=retirement_indicator_rule)
+        m.F = Param(m.G_E.union(m.G_E_STORAGE), m.Y, rule=retirement_indicator_rule)
 
         def hydro_output_rule(_m, g, y, s, t):
             """Get hydro output for a given scenario"""
@@ -297,8 +297,7 @@ class CommonComponents:
         def max_power_in_existing_storage_rule(_m, g):
             """Max charging power for existing storage units"""
 
-            # TODO: May need to update this assumption - might not consider existing storage unit in final model
-            return float(100)
+            return self.data.existing_storage_units_dict[g]['REG_CAP']
 
         # Max charging power for existing storage units
         m.P_IN_MAX = Param(m.G_E_STORAGE, rule=max_power_in_existing_storage_rule)
@@ -306,8 +305,7 @@ class CommonComponents:
         def max_power_out_existing_storage_rule(_m, g):
             """Max discharging power for existing storage units"""
 
-            # TODO: May need to update this assumption - might not consider existing storage unit in final model
-            return float(100)
+            return self.data.existing_storage_units_dict[g]['REG_CAP']
 
         # Max discharging power for existing storage units
         m.P_OUT_MAX = Param(m.G_E_STORAGE, rule=max_power_out_existing_storage_rule)
@@ -315,8 +313,7 @@ class CommonComponents:
         def max_energy_storage_rule(_m, g):
             """Max energy level for existing storage units"""
 
-            # TODO: May need to update this assumption - might not consider existing storage unit in final model
-            return float(100)
+            return self.data.existing_storage_units_dict[g]['ENERGY']
 
         # Max energy level for existing storage units
         m.Q_MAX = Param(m.G_E_STORAGE, rule=max_energy_storage_rule)
@@ -324,7 +321,6 @@ class CommonComponents:
         def min_energy_interval_end_rule(_m, g):
             """Minimum energy level at end of scenario"""
 
-            # TODO: May need to update this assumption
             return float(0)
 
         # Minimum energy level at end of scenario
@@ -333,7 +329,7 @@ class CommonComponents:
         def max_energy_interval_end_rule(_m, g):
             """Max energy level at end of scenario"""
 
-            # TODO: May need to update this assumption - large value assumes constraint will not be binding
+            # Arbitrarily high upper-limit (note: energy will also be constrained by transition function)
             return float(500)
 
         # Max energy level at end of scenario
@@ -567,7 +563,7 @@ class CommonComponents:
                 # Marginal cost = VOM cost for wind and solar generators
                 marginal_cost = self.data.candidate_units.loc[g, ('PARAMETERS', 'VOM')]
 
-            elif g in m.G_C_STORAGE:
+            elif g in m.G_STORAGE:
                 # Assume marginal cost = VOM cost of typical hydro generator (7 $/MWh)
                 marginal_cost = 7
 
@@ -580,7 +576,7 @@ class CommonComponents:
 
         # Marginal costs for all generators and time periods
         random.seed(10)
-        m.C_MC = Param(m.G, m.Y, rule=marginal_cost_rule)
+        m.C_MC = Param(m.G.union(m.G_E_STORAGE), m.Y, rule=marginal_cost_rule)
 
         def emissions_intensity_rule(_m, g):
             """Emissions intensity (tCO2/MWh)"""

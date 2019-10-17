@@ -29,6 +29,10 @@ class ModelData:
         self.existing_units = self._load_existing_units()
         self.existing_units_dict = self.existing_units.to_dict()
 
+        # Existing storage units
+        self.existing_storage_units = self._load_existing_storage_units()
+        self.existing_storage_units_dict = self.existing_storage_units.to_dict(orient='index')
+
         # Candidate unit details
         self.candidate_units = self._load_candidate_units()
         self.candidate_units_dict = self.candidate_units.to_dict()
@@ -88,6 +92,9 @@ class ModelData:
 
         # IDs for existing hydro units
         self.existing_hydro_unit_ids = self._get_existing_hydro_unit_ids()
+
+        # IDs for existing storage units
+        self.existing_storage_unit_ids = self._get_existing_storage_unit_ids()
 
         # IDs for candidate storage units
         self.candidate_storage_units = self._get_candidate_storage_units()
@@ -162,6 +169,14 @@ class ModelData:
 
         # Rename columns
         df = df.rename(self._col_mapper, axis='columns', level=1)
+
+        return df
+
+    def _load_existing_storage_units(self):
+        """Load existing storage units"""
+
+        # Read as Pandas DataFrame
+        df = pd.read_csv(os.path.join(self.data_dir, 'existing_storage_units.csv')).set_index('DUID')
 
         return df
 
@@ -369,6 +384,13 @@ class ModelData:
         existing_hydro_ids = self.existing_units[mask_existing_hydro].index
 
         return existing_hydro_ids
+
+    def _get_existing_storage_unit_ids(self):
+        """Get IDs for existing storage units"""
+
+        df = self._load_existing_storage_units()
+
+        return list(df.index)
 
     def _get_candidate_storage_units(self):
         """Get IDs for candidate storage units"""
