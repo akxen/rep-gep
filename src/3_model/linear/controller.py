@@ -27,7 +27,7 @@ if __name__ == '__main__':
     start, end, scenarios = 2016, 2040, 5
 
     # Year when scheme transitions to a Refunded Emissions Payment (REP) scheme
-    transition_year = 2021
+    transition_year = 2022
 
     # Permit prices for carbon pricing scenarios
     permit_prices_model = {y: float(40) for y in range(start, end + 1)}
@@ -49,11 +49,11 @@ if __name__ == '__main__':
 
     # Run BAU case
     # r_bau = cases.run_bau_case(start, end, scenarios, output_directory)
-    cases.run_bau_case(start, end, scenarios, output_directory)
+    # cases.run_bau_case(start, end, scenarios, output_directory)
 
     # Run REP case
     # r_rep = cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
-    cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
+    # cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
 
     # Run price case targeting model using MPPDC model - minimise price deviation between successive years
     case_params['mode'] = 'price_change_minimisation'

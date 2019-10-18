@@ -71,8 +71,8 @@ class CommonComponents:
         m.G_E_HYDRO = Set(initialize=self.data.existing_hydro_unit_ids)
 
         # Existing storage units
-        # m.G_E_STORAGE = Set(initialize=self.data.existing_storage_unit_ids)
-        m.G_E_STORAGE = Set(initialize=[])
+        m.G_E_STORAGE = Set(initialize=self.data.existing_storage_unit_ids)
+        # m.G_E_STORAGE = Set(initialize=[])
 
         # Candidate storage units
         m.G_C_STORAGE = Set(initialize=self.data.candidate_storage_units)
@@ -87,7 +87,7 @@ class CommonComponents:
         m.G_THERM_QUICK = Set(initialize=self.data.quick_start_thermal_generator_ids)
 
         # All existing generators
-        m.G_E = m.G_E_THERM.union(m.G_E_WIND).union(m.G_E_SOLAR).union(m.G_E_HYDRO)
+        m.G_E = m.G_E_THERM.union(m.G_E_WIND).union(m.G_E_SOLAR).union(m.G_E_HYDRO).union(m.G_E_STORAGE)
 
         # All candidate generators
         m.G_C = m.G_C_THERM.union(m.G_C_WIND).union(m.G_C_SOLAR).union(m.G_C_STORAGE)
@@ -123,7 +123,11 @@ class CommonComponents:
         def existing_units_max_output_rule(_m, g):
             """Max power output for existing units"""
 
-            return float(self.data.existing_units_dict[('PARAMETERS', 'REG_CAP')][g])
+            if g in m.G_E_STORAGE:
+                return float(self.data.existing_storage_units_dict[g]['REG_CAP'])
+
+            else:
+                return float(self.data.existing_units_dict[('PARAMETERS', 'REG_CAP')][g])
 
         # Max output for existing units
         m.P_MAX = Param(m.G_E, rule=existing_units_max_output_rule)
@@ -158,7 +162,7 @@ class CommonComponents:
             Note: Data in NTNDP is in terms of $/kW/year. Must multiply by 1000 to convert to $/MW/year
             """
 
-            if g in m.G_E:
+            if g in m.G_E.difference(m.G_STORAGE):
                 return float(self.data.existing_units_dict[('PARAMETERS', 'FOM')][g] * 1000)
 
             elif g in m.G_C_THERM.union(m.G_C_WIND, m.G_C_SOLAR):

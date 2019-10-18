@@ -3,6 +3,7 @@
 import os
 
 import pandas as pd
+import colorlover as cl
 from matplotlib import rc
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Patch
@@ -313,33 +314,80 @@ def plot_cumulative_installed_capacity(case, results_dir, output_dir):
     plt.show()
 
 
+def scale_rgb(rgb):
+    """Convert RGB to hex"""
+
+    return tuple([i / 255.5 for i in rgb])
+
+
+def plot_average_prices(results_dir, output_dir):
+    """Plot average prices under different schemes"""
+
+    # Prices from different models
+    p_bau = analysis.get_average_prices(results_dir, 'bau_case.pickle', None, 'PRICES', -1)
+    p_rep = analysis.get_average_prices(results_dir, 'rep_case.pickle', 'stage_2_rep', 'PRICES', -1)
+    p_tax = analysis.get_average_prices(results_dir, 'rep_case.pickle', 'stage_1_carbon_tax', 'PRICES', -1)
+    p_price_dev_mppdc = analysis.get_average_prices(results_dir, 'mppdc_price_change_deviation_case.pickle', 'stage_3_price_targeting', 'lamb', 1)
+    p_price_dev_heuristic = analysis.get_average_prices(results_dir, 'heuristic_price_change_deviation_case.pickle', 'stage_3_price_targeting', 'PRICES', -1)
+
+    # Create figures
+    c = cl.to_numeric(cl.flipper()['qual']['5']['Set1']) # ['Accent', 'Dark2', 'Paired', 'Pastel1', 'Pastel2', 'Set1', 'Set2', 'Set3'])
+    fig, ax = plt.subplots()
+    ax.plot(p_bau.index.tolist(), p_bau['average_price_real'].tolist(), color=scale_rgb(c[1]), alpha=0.7, linewidth=0.9)
+    ax.plot(p_tax.index.tolist(), p_tax['average_price_real'].tolist(), color=scale_rgb(c[0]), alpha=0.7, linewidth=0.9)
+    ax.plot(p_rep.index.tolist(), p_rep['average_price_real'].tolist(), color=scale_rgb(c[2]), alpha=0.7, linewidth=0.9)
+    ax.plot(p_price_dev_mppdc.index.tolist(), p_price_dev_mppdc['average_price_real'].tolist(), color=scale_rgb(c[3]), alpha=0.7, linewidth=0.9)
+    ax.plot(p_price_dev_heuristic.index.tolist(), p_price_dev_heuristic['average_price_real'].tolist(), color=scale_rgb(c[4]), alpha=0.6, linewidth=0.9)
+
+    fig.set_size_inches(3, 2.3)
+
+    ax.set_ylabel('Average price ($/MWh)', fontsize=9, labelpad=-0.1)
+    ax.set_xlabel('Year', fontsize=9)
+    ax.tick_params(labelsize=8)
+    ax.xaxis.set_major_locator(MultipleLocator(5))
+    ax.xaxis.set_minor_locator(MultipleLocator(1))
+    ax.yaxis.set_major_locator(MultipleLocator(20))
+    ax.yaxis.set_minor_locator(MultipleLocator(5))
+
+    ax.legend(['BAU', 'Tax', 'REP', 'MPPDC', 'Heuristic'], fontsize=7, ncol=2, frameon=False)
+    fig.subplots_adjust(left=0.16, bottom=0.18, top=0.98, right=0.98)
+    fig.savefig(os.path.join(output_dir, 'average_prices.png'))
+    fig.savefig(os.path.join(output_dir, 'average_prices.pdf'))
+
+    plt.show()
+
+
 if __name__ == '__main__':
     # Output directory
     output_directory = os.path.join(os.path.dirname(__file__), 'output', 'figures')
 
     # Results directory
     results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'local')
+    # results_directory = r'C:\Users\eee\Desktop\local_hold\20191017\3_no_existing_storage'
 
     # Object used to analyse results
     analysis = AnalyseResults()
 
-    # Plot merit order (base image)
-    plot_merit_order(output_directory)
-    plt.show()
-
-    # Plot merit order + demand
-    plot_merit_order_demand(output_directory)
-    plt.show()
-
-    # Plot merit order + price setter
-    plot_merit_order_price_setter(output_directory)
-    plt.show()
-
-    # # Plot generation expansion planning model prices
-    plot_gep_prices(results_directory, output_directory)
+    # # Plot merit order (base image)
+    # plot_merit_order(output_directory)
+    # plt.show()
+    #
+    # # Plot merit order + demand
+    # plot_merit_order_demand(output_directory)
+    # plt.show()
+    #
+    # # Plot merit order + price setter
+    # plot_merit_order_price_setter(output_directory)
+    # plt.show()
+    #
+    # # # Plot generation expansion planning model prices
+    # plot_gep_prices(results_directory, output_directory)
 
     # # Plot generation expansion planning model baselines
     # plot_gep_baselines(results_directory, output_directory)
     #
     # # Plot cumulative installed capacity
     # plot_cumulative_installed_capacity(results_directory, output_directory, 'rep_case.pickle')
+
+    # Plot average prices under different schemes
+    plot_average_prices(results_directory, output_directory)

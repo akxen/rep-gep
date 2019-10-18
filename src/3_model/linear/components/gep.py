@@ -791,7 +791,7 @@ class Dual:
     def k(self, m, g):
         """Mapping generator to the NEM zone to which it belongs"""
 
-        if g in m.G_E:
+        if g in m.G_E.difference(m.G_STORAGE):
             return self.data.existing_units_dict[('PARAMETERS', 'NEM_ZONE')][g]
 
         elif g in m.G_C.difference(m.G_STORAGE):
