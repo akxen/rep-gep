@@ -1871,7 +1871,7 @@ class MPPDCModel:
         m.STRONG_DUALITY_VIOLATION_PENALTY = Param(initialize=float(1e5))
 
         # Year at which yearly revenue neutrality constraint will be enforced
-        m.TRANSITION_YEAR = Param(initialize=2021, mutable=True)
+        m.TRANSITION_YEAR = Param(initialize=2028, mutable=True)
 
         return m
 

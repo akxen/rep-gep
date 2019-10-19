@@ -47,7 +47,7 @@ class BaselineUpdater:
         m.PERMIT_PRICE = Param(m.Y, initialize=0, mutable=True)
 
         # Year after which a Refunded Emissions Payment scheme is enforced
-        m.TRANSITION_YEAR = Param(initialize=2021, mutable=True)
+        m.TRANSITION_YEAR = Param(initialize=2028, mutable=True)
 
         # Initial average price in year prior to model start
         m.YEAR_AVERAGE_PRICE_0 = Param(initialize=float(40), mutable=True)
