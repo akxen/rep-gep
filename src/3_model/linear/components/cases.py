@@ -274,6 +274,8 @@ class ModelCases:
     def run_price_smoothing_heuristic_case(self, params, output_dir):
         """Smooth prices over entire model horizon using approximated price functions"""
 
+        logging.info('Starting heuristic model with params: ' + str(params))
+
         # Model parameters
         rep_filename = params['rep_filename']
 
@@ -293,7 +295,7 @@ class ModelCases:
 
         # Classes used to construct and run primal and MPPDC programs
         primal = Primal(first_year, final_year, scenarios_per_year)
-        baseline = BaselineUpdater(first_year, final_year, scenarios_per_year)
+        baseline = BaselineUpdater(first_year, final_year, scenarios_per_year, params['transition_year'])
 
         # Construct primal program
         m_p = primal.construct_model()
@@ -328,7 +330,6 @@ class ModelCases:
             # Update parameters
             m_b = baseline.update_parameters(m_b, psg_input)
             m_b.YEAR_AVERAGE_PRICE_0 = float(bau_initial_price)
-            m_b.SCHEME_REVENUE_ENVELOPE_LO.store_values(params['revenue_envelope_lo'])
             m_b.PRICE_WEIGHTS.store_values(params['price_weights'])
 
             # Activate constraints
@@ -337,12 +338,12 @@ class ModelCases:
             if params['mode'] == 'bau_deviation_minimisation':
                 m_b.PRICE_BAU_DEVIATION_1.activate()
                 m_b.PRICE_BAU_DEVIATION_2.activate()
-                filename = f'heuristic_bau_deviation_case.pickle'
+                filename = f"heuristic_bau_deviation_case_transition_year_{params['transition_year']}.pickle"
 
             elif params['mode'] == 'price_change_minimisation':
                 m_b.PRICE_CHANGE_DEVIATION_1.activate()
                 m_b.PRICE_CHANGE_DEVIATION_2.activate()
-                filename = f'heuristic_price_change_deviation_case.pickle'
+                filename = f"heuristic_price_change_deviation_case_transition_year_{params['transition_year']}.pickle"
 
             else:
                 raise Exception(f"Unexpected run mode: {params['mode']}")
@@ -382,7 +383,9 @@ class ModelCases:
 
             counter += 1
 
-            # Combine results into a single dictionary
+        logging.info('Finished solving model')
+
+        # Combine results into a single dictionary
         combined_results = {**rep_results, 'stage_3_price_targeting': iteration_results, 'parameters': params}
 
         # Save results
@@ -396,6 +399,8 @@ class ModelCases:
 
     def run_price_smoothing_mppdc_case(self, params, output_dir):
         """Run case to smooth prices over model horizon, subject to total revenue constraint"""
+
+        logging.info('Starting MPPDC model with params: ' + str(params))
 
         # Model parameters
         rep_filename = params['rep_filename']
@@ -415,7 +420,7 @@ class ModelCases:
         scenarios_per_year = len([s for y, s in rep_iteration['RHO'].keys() if y == final_year])
 
         # Classes used to construct and run primal and MPPDC programs
-        mppdc = MPPDCModel(first_year, final_year, scenarios_per_year)
+        mppdc = MPPDCModel(first_year, final_year, scenarios_per_year, params['transition_year'])
         primal = Primal(first_year, final_year, scenarios_per_year)
 
         # Construct MPPDC
@@ -426,7 +431,6 @@ class ModelCases:
 
         # Update MPPDC model parameters
         m_m.YEAR_AVERAGE_PRICE_0 = float(bau_initial_price)
-        m_m.SCHEME_REVENUE_ENVELOPE_LO.store_values(params['revenue_envelope_lo'])
         m_m.PRICE_WEIGHTS.store_values(params['price_weights'])
 
         # Activate necessary constraints
@@ -435,12 +439,12 @@ class ModelCases:
         if params['mode'] == 'bau_deviation_minimisation':
             m_m.PRICE_BAU_DEVIATION_1.activate()
             m_m.PRICE_BAU_DEVIATION_2.activate()
-            filename = f'mppdc_bau_deviation_case.pickle'
+            filename = f"mppdc_bau_deviation_case_transition_year_{params['transition_year']}.pickle"
 
         elif params['mode'] == 'price_change_minimisation':
             m_m.PRICE_CHANGE_DEVIATION_1.activate()
             m_m.PRICE_CHANGE_DEVIATION_2.activate()
-            filename = f'mppdc_price_change_deviation_case.pickle'
+            filename = f"mppdc_price_change_deviation_case_transition_year_{params['transition_year']}.pickle"
 
         else:
             raise Exception(f"Unexpected run mode: {params['mode']}")
@@ -508,7 +512,9 @@ class ModelCases:
 
             counter += 1
 
-            # Combine results into a single dictionary
+        logging.info('Finished solving MPPDC model')
+
+        # Combine results into a single dictionary
         combined_results = {**rep_results, 'stage_3_price_targeting': iteration_results, 'parameters': params}
 
         # Save results

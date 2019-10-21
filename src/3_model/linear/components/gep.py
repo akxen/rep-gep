@@ -1834,19 +1834,19 @@ class Dual:
 
 
 class MPPDCModel:
-    def __init__(self, start_year, final_year, scenarios_per_year):
+    def __init__(self, start_year, final_year, scenarios_per_year, transition_year):
         self.components = CommonComponents(start_year, final_year, scenarios_per_year)
         self.primal = Primal(start_year, final_year, scenarios_per_year)
         self.dual = Dual(start_year, final_year, scenarios_per_year)
         self.utilities = Utilities()
+        self.transition_year = transition_year
 
         # Solver options
         self.keepfiles = False
         self.solver_options = {}  # 'MIPGap': 0.0005, 'optimalitytarget': 2, 'simplex tolerances optimality': 1e-4
         self.opt = SolverFactory('cplex', solver_io='mps')
 
-    @staticmethod
-    def define_parameters(m):
+    def define_parameters(self, m):
         """Define MPPDC parameters"""
 
         def emissions_intensity_target_rule(_m, y):
@@ -1871,7 +1871,7 @@ class MPPDCModel:
         m.STRONG_DUALITY_VIOLATION_PENALTY = Param(initialize=float(1e5))
 
         # Year at which yearly revenue neutrality constraint will be enforced
-        m.TRANSITION_YEAR = Param(initialize=2028, mutable=True)
+        m.TRANSITION_YEAR = Param(initialize=self.transition_year, mutable=True)
 
         return m
 
@@ -1896,8 +1896,7 @@ class MPPDCModel:
 
         return m
 
-    @staticmethod
-    def define_expressions(m):
+    def define_expressions(self, m):
         """Define MPPDC expressions"""
 
         def year_absolute_price_difference_rule(_m, y):
@@ -1921,7 +1920,7 @@ class MPPDCModel:
 
         # Weighted total absolute difference
         m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED[y]
-                                                                         for y in m.Y if y <= m.TRANSITION_YEAR.value))
+                                                                         for y in m.Y if y <= self.transition_year))
 
         def year_cumulative_price_difference_weighted_rule(_m, y):
             """Cumulative weighted price difference"""
@@ -1954,8 +1953,7 @@ class MPPDCModel:
 
         return m
 
-    @staticmethod
-    def define_constraints(m):
+    def define_constraints(self, m):
         """MPPDC constraints"""
 
         def sd_1_non_negative_rule(_m):
@@ -2060,7 +2058,7 @@ class MPPDCModel:
         def non_negative_transition_revenue_rule(_m):
             """Ensure that net scheme revenue over transition period >= 0 (equivalent to a REP scheme)"""
 
-            return sum(m.YEAR_SCHEME_REVENUE[y] for y in m.Y if y <= m.TRANSITION_YEAR.value) >= 0
+            return sum(m.YEAR_SCHEME_REVENUE[y] for y in m.Y if y <= self.transition_year) >= 0
 
         # Ensure scheme is revenue neutral over transition period
         m.NON_NEGATIVE_TRANSITION_REVENUE_CONS = Constraint(rule=non_negative_transition_revenue_rule)
@@ -2068,12 +2066,11 @@ class MPPDCModel:
 
         return m
 
-    @staticmethod
-    def define_objective(m):
+    def define_objective(self, m):
         """MPPDC objective function"""
 
         # Price targeting objective
-        m.OBJECTIVE = Objective(expr=m.YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED[m.TRANSITION_YEAR.value]
+        m.OBJECTIVE = Objective(expr=m.YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED[self.transition_year]
                                      + m.STRONG_DUALITY_VIOLATION_COST,
                                 sense=minimize)
 

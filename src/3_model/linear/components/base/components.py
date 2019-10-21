@@ -679,12 +679,6 @@ class CommonComponents:
         # Interim emissions cap - default value is 0 - should be updated when running specific case
         m.INTERIM_EMISSIONS_CAP = Param(m.Y, initialize=0, mutable=True)
 
-        # Scheme revenue upper envelope
-        m.SCHEME_REVENUE_ENVELOPE_UP = Param(m.Y, initialize=0, mutable=True)
-
-        # Scheme revenue lower envelope
-        m.SCHEME_REVENUE_ENVELOPE_LO = Param(m.Y, initialize=0, mutable=True)
-
         # Price weights
         m.PRICE_WEIGHTS = Param(m.Y, initialize=0, mutable=True)
 

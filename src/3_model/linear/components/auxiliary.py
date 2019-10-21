@@ -17,10 +17,11 @@ from base.components import CommonComponents
 
 
 class BaselineUpdater:
-    def __init__(self, first_year, final_year, scenarios_per_year):
+    def __init__(self, first_year, final_year, scenarios_per_year, transition_year):
         self.common = CommonComponents(first_year, final_year, scenarios_per_year)
         self.analysis = AnalyseResults()
         self.prices = PriceSetter()
+        self.transition_year = transition_year
 
         # Solver options
         self.keepfiles = False
@@ -36,8 +37,7 @@ class BaselineUpdater:
 
         return m
 
-    @staticmethod
-    def define_parameters(m):
+    def define_parameters(self, m):
         """Define model parameters"""
 
         # Power output placeholder
@@ -47,7 +47,7 @@ class BaselineUpdater:
         m.PERMIT_PRICE = Param(m.Y, initialize=0, mutable=True)
 
         # Year after which a Refunded Emissions Payment scheme is enforced
-        m.TRANSITION_YEAR = Param(initialize=2028, mutable=True)
+        m.TRANSITION_YEAR = Param(initialize=self.transition_year, mutable=True)
 
         # Initial average price in year prior to model start
         m.YEAR_AVERAGE_PRICE_0 = Param(initialize=float(40), mutable=True)
@@ -67,8 +67,7 @@ class BaselineUpdater:
 
         return m
 
-    @staticmethod
-    def define_expressions(m, psg_results):
+    def define_expressions(self, m, psg_results):
         """
         Define model expressions
 
@@ -198,7 +197,7 @@ class BaselineUpdater:
 
         # Weighted total absolute difference
         m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED[y]
-                                                                         for y in m.Y if y <= m.TRANSITION_YEAR.value))
+                                                                         for y in m.Y if y <= self.transition_year))
 
         def year_cumulative_price_difference_weighted_rule(_m, y):
             """Cumulative weighted price difference"""
@@ -220,8 +219,7 @@ class BaselineUpdater:
 
         return m
 
-    @staticmethod
-    def define_constraints(m):
+    def define_constraints(self, m):
         """Define model constraints"""
 
         def price_change_deviation_1_rule(_m, y):
@@ -278,7 +276,7 @@ class BaselineUpdater:
         def non_negative_transition_revenue_rule(_m):
             """Ensure that net scheme revenue over transition period >= 0 (equivalent to a REP scheme)"""
 
-            return sum(m.YEAR_SCHEME_REVENUE[y] for y in m.Y if y <= m.TRANSITION_YEAR.value) >= 0
+            return sum(m.YEAR_SCHEME_REVENUE[y] for y in m.Y if y <= self.transition_year) >= 0
 
         # Ensure scheme is revenue neutral over transition period
         m.NON_NEGATIVE_TRANSITION_REVENUE_CONS = Constraint(rule=non_negative_transition_revenue_rule)
@@ -286,12 +284,11 @@ class BaselineUpdater:
 
         return m
 
-    @staticmethod
-    def define_objective(m):
+    def define_objective(self, m):
         """Define objective function"""
 
         # Minimise price difference between consecutive years
-        m.OBJECTIVE = Objective(expr=m.YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED[m.TRANSITION_YEAR.value],
+        m.OBJECTIVE = Objective(expr=m.YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED[self.transition_year],
                                 sense=minimize)
 
         return m
@@ -372,7 +369,7 @@ class BaselineUpdater:
 
 if __name__ == '__main__':
     # Model horizon and scenarios per year
-    first_year_model, final_year_model, scenarios_per_year_model = 2016, 2031, 5
+    first_year_model, final_year_model, scenarios_per_year_model, transition_year_model = 2016, 2031, 5, 2028
 
     # Output directory
     output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'local')
@@ -381,7 +378,7 @@ if __name__ == '__main__':
     results_filename = 'rep_case.pickle'
 
     # Object used to compute baseline trajectory
-    baseline = BaselineUpdater(first_year_model, final_year_model, scenarios_per_year_model)
+    baseline = BaselineUpdater(first_year_model, final_year_model, scenarios_per_year_model, transition_year_model)
 
     # Model results
     r_rep = baseline.analysis.load_results(output_directory, results_filename)
@@ -392,12 +389,3 @@ if __name__ == '__main__':
     # Construct model
     model = baseline.construct_model(psg)
 
-    # # Update parameters
-    # model = baseline.update_parameters(model, r_carbon_tax)
-    #
-    # # Solve model
-    # model.REVENUE_NEUTRAL_TRANSITION.activate()
-    #
-    # for y in range(model.TRANSITION_YEAR.value, final_year_model + 1):
-    #     model.REVENUE_NEUTRAL_YEAR[y].activate()
-    # model, status = baseline.solve_model(model)
