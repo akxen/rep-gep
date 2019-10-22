@@ -295,13 +295,39 @@ class AnalyseResults:
 
         return sum(results['YEAR_EMISSIONS'].values())
 
-    def get_year_emissions(self, results_dir, filename):
+    def get_year_emissions(self, results_dir, filename, stage=None):
         """Get total emissions in each year of model horizon"""
 
-        # Results from model
         results = self.load_results(results_dir, filename)
 
-        return results['YEAR_EMISSIONS']
+        # Results from model
+        if stage is None:
+            emissions = results['YEAR_EMISSIONS']
+
+        else:
+            if 'mppdc' in filename:
+                max_key = max(results[stage].keys())
+                emissions = results[stage][max_key]['YEAR_EMISSIONS']
+
+            elif 'heuristic' in filename:
+                max_key = max(results[stage].keys())
+                emissions = results[stage][max_key]['primal']['YEAR_EMISSIONS']
+
+            elif 'rep_case' in filename:
+                if ('price_targeting' in stage) or ('rep' in stage):
+                    max_key = max(results[stage].keys())
+                    emissions = results[stage][max_key]['YEAR_EMISSIONS']
+
+                elif 'carbon_tax' in stage:
+                    emissions = results[stage]['YEAR_EMISSIONS']
+
+                else:
+                    raise Exception(f'Unexpected stage: {filename} {stage}')
+
+            else:
+                raise Exception(f'Unexpected file: {filename} {stage}')
+
+        return pd.Series(emissions).rename_axis('year').rename('baseline')
 
     def get_baselines(self, results_dir, filename):
         """Get emissions intensity baselines from MPPDC model"""
@@ -309,16 +335,27 @@ class AnalyseResults:
         # Load results
         results = self.load_results(results_dir, filename)
 
-        # Largest key = results from last iteration
-        max_key = max(results['stage_3_price_targeting'].keys())
-
         # Extract baselines
         if 'mppdc' in filename:
+            # Largest key = results from last iteration
+            max_key = max(results['stage_3_price_targeting'].keys())
+
             baselines = results['stage_3_price_targeting'][max_key]['baseline']
+
         elif 'heuristic' in filename:
+            # Largest key = results from last iteration
+            max_key = max(results['stage_3_price_targeting'].keys())
+
             baselines = results['stage_3_price_targeting'][max_key]['primal']['baseline']
+
+        elif 'rep_case' in filename:
+            # Largest key = results from last iteration
+            max_key = max(results['stage_2_rep'].keys())
+
+            baselines = results['stage_2_rep'][max_key]['baseline']
+
         else:
-            raise Exception(f"""Expected 'mppdc' or 'heuristic' in filename: {filename}""")
+            raise Exception(f"""Expected 'mppdc', 'heuristic', or 'rep_case' in filename: {filename}""")
 
         return pd.Series(baselines).rename_axis('year').rename('baseline')
 
@@ -345,6 +382,30 @@ class AnalyseResults:
 
         return prices
 
+    def extract_results(self, results_dir, filename, key, stage=None, iteration=None, model=None):
+        """Extract results from a given object"""
+
+        results = self.load_results(results_dir, filename)
+
+        if stage is None:
+            values = results[key]
+
+        else:
+            if iteration is None:
+                values = results[stage][key]
+
+            elif iteration == 'max':
+                max_iteration = max(results[stage].keys())
+                if model is None:
+                    values = results[stage][max_iteration][key]
+                else:
+                    values = results[stage][max_iteration][model][key]
+
+            else:
+                values = results[stage][iteration][key]
+
+        return pd.Series(values).rename_axis('year')
+
 
 if __name__ == '__main__':
     # Path where results can be found
@@ -353,47 +414,34 @@ if __name__ == '__main__':
     # Object used to analyse results
     analysis = AnalyseResults()
 
+    # Transition year
+    transition_year = 2028
+
     # Load model results given a filename
-    r = analysis.load_results(results_directory, 'mppdc_price_change_deviation_case.pickle')
-    r2 = analysis.load_results(results_directory, 'heuristic_price_change_deviation_case.pickle')
+    r = analysis.load_results(results_directory, f'mppdc_price_change_deviation_case_transition_year_{transition_year}.pickle')
+    r2 = analysis.load_results(results_directory, f'heuristic_price_change_deviation_case_transition_year_{transition_year}.pickle')
+    r3 = analysis.load_results(results_directory, f'rep_case.pickle')
 
-    # Prices from different models
-    p_bau = analysis.get_average_prices(results_directory, 'bau_case.pickle', None, 'PRICES', -1)
-    p_rep = analysis.get_average_prices(results_directory, 'rep_case.pickle', 'stage_2_rep', 'PRICES', -1)
-    p_tax = analysis.get_average_prices(results_directory, 'rep_case.pickle', 'stage_1_carbon_tax', 'PRICES', -1)
-    # p_bau_dev_mppdc = analysis.get_average_prices(results_directory, 'mppdc_bau_deviation_case.pickle', 'stage_3_price_targeting', 'lamb', 1)
-    # p_bau_dev_heuristic = analysis.get_average_prices(results_directory, 'heuristic_bau_deviation_case.pickle', 'stage_3_price_targeting', 'PRICES', -1)
-    p_price_dev_mppdc = analysis.get_average_prices(results_directory, 'mppdc_price_change_deviation_case.pickle', 'stage_3_price_targeting', 'lamb', 1)
-    p_price_dev_heuristic = analysis.get_average_prices(results_directory, 'heuristic_price_change_deviation_case.pickle', 'stage_3_price_targeting', 'PRICES', -1)
-
-    # Baselines from different models
-    b_price_dev_mppdc = analysis.get_baselines(results_directory, 'mppdc_price_change_deviation_case.pickle')
-    b_price_dev_heuristic = analysis.get_baselines(results_directory, 'heuristic_price_change_deviation_case.pickle')
-    # b_bau_dev_mppdc = analysis.get_baselines(results_directory, 'mppdc_bau_deviation_case.pickle')
-    # b_bau_dev_heuristic = analysis.get_baselines(results_directory, 'heuristic_bau_deviation_case.pickle')
-
-    # Plotting baselines - price deviation objective
-    fig, ax = plt.subplots()
-    b_price_dev_mppdc.plot(ax=ax, color='red')
-    b_price_dev_heuristic.plot(ax=ax, color='blue')
-    ax.set_title('Price deviation objective')
-    plt.show()
-
-    fig, ax = plt.subplots()
-    p_price_dev_mppdc['average_price_real'].plot(ax=ax, color='red')
-    p_price_dev_heuristic['average_price_real'].plot(ax=ax, color='blue')
-    ax.set_title('Price deviation objective')
-    plt.show()
-
-    # # Plotting
+    # # Prices from different models
+    # p_bau = analysis.get_average_prices(results_directory, 'bau_case.pickle', None, 'PRICES', -1)
+    # p_rep = analysis.get_average_prices(results_directory, 'rep_case.pickle', 'stage_2_rep', 'PRICES', -1)
+    # p_tax = analysis.get_average_prices(results_directory, 'rep_case.pickle', 'stage_1_carbon_tax', 'PRICES', -1)
+    # p_price_dev_mppdc = analysis.get_average_prices(results_directory, f'mppdc_price_change_deviation_case_transition_year_{transition_year}.pickle', 'stage_3_price_targeting', 'lamb', 1)
+    # p_price_dev_heuristic = analysis.get_average_prices(results_directory, f'heuristic_price_change_deviation_case_transition_year_{transition_year}.pickle', 'stage_3_price_targeting', 'PRICES', -1)
+    #
+    # # Baselines from different models
+    # b_price_dev_mppdc = analysis.get_baselines(results_directory, f'mppdc_price_change_deviation_case_transition_year_{transition_year}.pickle')
+    # b_price_dev_heuristic = analysis.get_baselines(results_directory, f'heuristic_price_change_deviation_case_transition_year_{transition_year}.pickle')
+    #
+    # # Plotting baselines - price deviation objective
     # fig, ax = plt.subplots()
-    # b_bau_dev_mppdc.plot(ax=ax)
-    # b_bau_dev_heuristic.plot(ax=ax)
-    # ax.set_title('BAU deviation objective')
+    # b_price_dev_mppdc.plot(ax=ax, color='red')
+    # b_price_dev_heuristic.plot(ax=ax, color='blue')
+    # ax.set_title('Price deviation objective')
     # plt.show()
     #
     # fig, ax = plt.subplots()
-    # p_bau_dev_mppdc['average_price_real'].plot(ax=ax, color='red')
-    # p_bau_dev_heuristic['average_price_real'].plot(ax=ax, color='blue')
-    # ax.set_title('BAU deviation objective')
+    # p_price_dev_mppdc['average_price_real'].plot(ax=ax, color='red')
+    # p_price_dev_heuristic['average_price_real'].plot(ax=ax, color='blue')
+    # ax.set_title('Price deviation objective')
     # plt.show()

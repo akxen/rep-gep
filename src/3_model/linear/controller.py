@@ -36,7 +36,7 @@ if __name__ == '__main__':
     # cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
 
     # Run price targeting models with different transition years
-    for transition_year in [2021, 2028]:
+    for transition_year in [2022]:
         print(f'Running models with transition year: {transition_year}')
 
         # Update transition year

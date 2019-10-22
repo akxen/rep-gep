@@ -390,4 +390,78 @@ if __name__ == '__main__':
     # plot_cumulative_installed_capacity(results_directory, output_directory, 'rep_case.pickle')
 
     # Plot average prices under different schemes
-    plot_average_prices(results_directory, output_directory)
+    # plot_average_prices(results_directory, output_directory)
+
+    results_dir, output_dir = results_directory, output_directory
+    transition_year = 2022
+
+    # Prices from different models
+    p_bau = analysis.get_average_prices(results_dir, 'bau_case.pickle', None, 'PRICES', -1)
+    p_rep = analysis.get_average_prices(results_dir, 'rep_case.pickle', 'stage_2_rep', 'PRICES', -1)
+    p_tax = analysis.get_average_prices(results_dir, 'rep_case.pickle', 'stage_1_carbon_tax', 'PRICES', -1)
+    p_mppdc = analysis.get_average_prices(results_dir, f'mppdc_price_change_deviation_case_transition_year_{transition_year}.pickle', 'stage_3_price_targeting', 'lamb', 1)
+    p_heuristic = analysis.get_average_prices(results_dir, f'heuristic_price_change_deviation_case_transition_year_{transition_year}.pickle', 'stage_3_price_targeting', 'PRICES', -1)
+
+    # Baselines
+    b_rep = analysis.extract_results(results_dir, 'rep_case.pickle', 'baseline', stage='stage_2_rep', iteration='max')
+    b_mppdc = analysis.extract_results(results_dir, f'mppdc_price_change_deviation_case_transition_year_{transition_year}.pickle', 'baseline', stage='stage_3_price_targeting', iteration='max')
+    b_heuristic = analysis.extract_results(results_dir, f'heuristic_price_change_deviation_case_transition_year_{transition_year}.pickle', 'baseline', stage='stage_3_price_targeting', iteration='max', model='primal')
+
+    # Emissions
+    e_bau = analysis.extract_results(results_dir, 'bau_case.pickle', 'YEAR_EMISSIONS')
+    e_tax = analysis.extract_results(results_dir, 'rep_case.pickle', 'YEAR_EMISSIONS', stage='stage_1_carbon_tax')
+    e_rep = analysis.extract_results(results_dir, 'rep_case.pickle', 'YEAR_EMISSIONS', stage='stage_2_rep', iteration='max')
+    e_mppdc = analysis.extract_results(results_dir, f'mppdc_price_change_deviation_case_transition_year_{transition_year}.pickle', 'YEAR_EMISSIONS', stage='stage_3_price_targeting', iteration='max')
+    e_heuristic = analysis.extract_results(results_dir, f'heuristic_price_change_deviation_case_transition_year_{transition_year}.pickle', 'YEAR_EMISSIONS', stage='stage_3_price_targeting', iteration='max', model='primal')
+
+    # Cumulative scheme revenue
+    v_tax = analysis.extract_results(results_dir, 'rep_case.pickle', 'YEAR_CUMULATIVE_SCHEME_REVENUE', stage='stage_1_carbon_tax')
+    v_rep = analysis.extract_results(results_dir, 'rep_case.pickle', 'YEAR_CUMULATIVE_SCHEME_REVENUE', stage='stage_2_rep', iteration='max')
+    v_mppdc = analysis.extract_results(results_dir, f'mppdc_price_change_deviation_case_transition_year_{transition_year}.pickle', 'YEAR_CUMULATIVE_SCHEME_REVENUE', stage='stage_3_price_targeting', iteration='max')
+    v_heuristic = analysis.extract_results(results_dir, f'heuristic_price_change_deviation_case_transition_year_{transition_year}.pickle', 'YEAR_CUMULATIVE_SCHEME_REVENUE', stage='stage_3_price_targeting', iteration='max', model='primal')
+
+    # Create figures
+    c = cl.to_numeric(cl.flipper()['qual']['5']['Set1']) # ['Accent', 'Dark2', 'Paired', 'Pastel1', 'Pastel2', 'Set1', 'Set2', 'Set3'])
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(nrows=2, ncols=2)
+
+    # Average prices
+    ax1.plot(p_bau.index.tolist(), p_bau['average_price_real'].tolist(), color=scale_rgb(c[1]), alpha=0.7, linewidth=0.9)
+    ax1.plot(p_tax.index.tolist(), p_tax['average_price_real'].tolist(), color=scale_rgb(c[0]), alpha=0.7, linewidth=0.9)
+    ax1.plot(p_rep.index.tolist(), p_rep['average_price_real'].tolist(), color=scale_rgb(c[2]), alpha=0.7, linewidth=0.9)
+    ax1.plot(p_mppdc.index.tolist(), p_mppdc['average_price_real'].tolist(), color=scale_rgb(c[3]), alpha=0.7, linewidth=0.9)
+    ax1.plot(p_heuristic.index.tolist(), p_heuristic['average_price_real'].tolist(), color=scale_rgb(c[4]), alpha=0.6, linewidth=0.9)
+
+    # Baselines
+    ax2.plot(b_rep.index.tolist(), b_rep.tolist(), color=scale_rgb(c[2]), alpha=0.7, linewidth=0.9)
+    ax2.plot(b_mppdc.index.tolist(), b_mppdc.tolist(), color=scale_rgb(c[3]), alpha=0.7, linewidth=0.9)
+    ax2.plot(b_heuristic.index.tolist(), b_heuristic.tolist(), color=scale_rgb(c[4]), alpha=0.7, linewidth=0.9)
+
+    # Emissions
+    ax3.plot(e_bau.index.tolist(), e_bau.tolist(), color=scale_rgb(c[1]), alpha=0.7, linewidth=0.9)
+    ax3.plot(e_tax.index.tolist(), e_tax.tolist(), color=scale_rgb(c[0]), alpha=0.7, linewidth=0.9)
+    ax3.plot(e_rep.index.tolist(), e_rep.tolist(), color=scale_rgb(c[2]), alpha=0.7, linewidth=0.9)
+    ax3.plot(e_mppdc.index.tolist(), e_mppdc.tolist(), color=scale_rgb(c[3]), alpha=0.7, linewidth=0.9)
+    ax3.plot(e_heuristic.index.tolist(), e_heuristic.tolist(), color=scale_rgb(c[4]), alpha=0.7, linewidth=0.9)
+
+    # Cumulative scheme revenue
+    # ax4.plot(v_tax.index.tolist(), v_tax.tolist(), color=scale_rgb(c[0]), alpha=0.7, linewidth=0.9)
+    ax4.plot(v_rep.index.tolist(), v_rep.tolist(), color=scale_rgb(c[2]), alpha=0.7, linewidth=0.9)
+    ax4.plot(v_mppdc.index.tolist(), v_mppdc.tolist(), color=scale_rgb(c[3]), alpha=0.7, linewidth=0.9)
+    ax4.plot(v_heuristic.index.tolist(), v_heuristic.tolist(), color=scale_rgb(c[4]), alpha=0.7, linewidth=0.9)
+
+    fig.set_size_inches(6.5, 4.6)
+
+    ax1.set_ylabel('Average price ($/MWh)', fontsize=9, labelpad=-0.1)
+    ax1.set_xlabel('Year', fontsize=9)
+    ax1.tick_params(labelsize=8)
+    ax1.xaxis.set_major_locator(MultipleLocator(5))
+    ax1.xaxis.set_minor_locator(MultipleLocator(1))
+    ax1.yaxis.set_major_locator(MultipleLocator(20))
+    ax1.yaxis.set_minor_locator(MultipleLocator(5))
+
+    ax1.legend(['BAU', 'Tax', 'REP', 'MPPDC', 'Heuristic'], fontsize=7, ncol=2, frameon=False)
+    fig.subplots_adjust(left=0.16, bottom=0.18, top=0.98, right=0.98)
+    fig.savefig(os.path.join(output_dir, 'average_prices.png'))
+    fig.savefig(os.path.join(output_dir, 'average_prices.pdf'))
+
+    plt.show()
