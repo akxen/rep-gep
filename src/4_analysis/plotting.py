@@ -425,29 +425,72 @@ if __name__ == '__main__':
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(nrows=2, ncols=2)
 
     # Average prices
+    # --------------
+    # Dash spacing
+    p_y = 10
+    p_z = 0.05
+    p_dash_length = p_y / (3 + (3 * p_z))
+    p_dash_spacer = p_z * p_dash_length
+    p_dash_spacing = (2 * p_dash_length) + (3 * p_dash_spacer)
+
+    # p_t1 = (p_dash_spacer*6.5, (p_dash_length, p_dash_spacing))
+    # p_t2 = (p_dash_length + (2 * p_dash_spacer), (p_dash_length, p_dash_spacing))
+    # p_t3 = ((2 * p_dash_length) + (3 * p_dash_spacer), (p_dash_length, p_dash_spacing))
+
+    p_t1 = (0, (p_dash_length, p_dash_spacing))
+    p_t2 = (p_dash_length + p_dash_spacer, (p_dash_length, p_dash_spacing))
+    p_t3 = ((2 * p_dash_length) + (2 * p_dash_spacer), (p_dash_length, p_dash_spacing))
+
     ax1.plot(p_bau.index.tolist(), p_bau['average_price_real'].tolist(), color=scale_rgb(c[1]), alpha=0.7, linewidth=0.9)
     ax1.plot(p_tax.index.tolist(), p_tax['average_price_real'].tolist(), color=scale_rgb(c[0]), alpha=0.7, linewidth=0.9)
-    ax1.plot(p_rep.index.tolist(), p_rep['average_price_real'].tolist(), color=scale_rgb(c[2]), alpha=0.7, linewidth=0.9)
-    ax1.plot(p_mppdc.index.tolist(), p_mppdc['average_price_real'].tolist(), color=scale_rgb(c[3]), alpha=0.7, linewidth=0.9)
-    ax1.plot(p_heuristic.index.tolist(), p_heuristic['average_price_real'].tolist(), color=scale_rgb(c[4]), alpha=0.6, linewidth=0.9)
+
+    p_l1 = ax1.plot(p_rep.index.tolist(), p_rep['average_price_real'].tolist(), color=scale_rgb(c[2]), alpha=0.7, linewidth=0.9)
+    p_l1[0].set_linestyle(p_t1)
+
+    p_l2 = ax1.plot(p_mppdc.index.tolist(), p_mppdc['average_price_real'].tolist(), color=scale_rgb(c[3]), alpha=0.7, linewidth=0.9)
+    p_l2[0].set_linestyle(p_t2)
+
+    p_l3 = ax1.plot(p_heuristic.index.tolist(), p_heuristic['average_price_real'].tolist(), color=scale_rgb(c[4]), alpha=0.6, linewidth=0.9)
+    p_l3[0].set_linestyle(p_t3)
 
     # Baselines
     ax2.plot(b_rep.index.tolist(), b_rep.tolist(), color=scale_rgb(c[2]), alpha=0.7, linewidth=0.9)
-    ax2.plot(b_mppdc.index.tolist(), b_mppdc.tolist(), color=scale_rgb(c[3]), alpha=0.7, linewidth=0.9)
-    ax2.plot(b_heuristic.index.tolist(), b_heuristic.tolist(), color=scale_rgb(c[4]), alpha=0.7, linewidth=0.9)
+    ax2.plot(b_mppdc.index.tolist(), b_mppdc.tolist(), color=scale_rgb(c[3]), alpha=0.7, linewidth=0.9, linestyle='--')
+    ax2.plot(b_heuristic.index.tolist(), b_heuristic.tolist(), color=scale_rgb(c[4]), alpha=0.7, linewidth=0.9, linestyle=':')
 
     # Emissions
-    ax3.plot(e_bau.index.tolist(), e_bau.tolist(), color=scale_rgb(c[1]), alpha=0.7, linewidth=0.9)
-    ax3.plot(e_tax.index.tolist(), e_tax.tolist(), color=scale_rgb(c[0]), alpha=0.7, linewidth=0.9)
-    ax3.plot(e_rep.index.tolist(), e_rep.tolist(), color=scale_rgb(c[2]), alpha=0.7, linewidth=0.9)
-    ax3.plot(e_mppdc.index.tolist(), e_mppdc.tolist(), color=scale_rgb(c[3]), alpha=0.7, linewidth=0.9)
-    ax3.plot(e_heuristic.index.tolist(), e_heuristic.tolist(), color=scale_rgb(c[4]), alpha=0.7, linewidth=0.9)
+    # ---------
+    # Spacing options
+    e_y = 10
+    e_z = 0.4
+    e_dash_length = e_y / (4 + (3 * e_z))
+    e_dash_spacer = e_z * e_dash_length
+    e_dash_spacing = (3 * e_dash_length) + (4 * e_dash_spacer)
+
+    e_t1 = (e_dash_spacer, (e_dash_length, e_dash_spacing))
+    e_t2 = (e_dash_length + (2 * e_dash_spacer), (e_dash_length, e_dash_spacing))
+    e_t3 = ((2 * e_dash_length) + (3 * e_dash_spacer), (e_dash_length, e_dash_spacing))
+    e_t4 = ((3 * e_dash_length) + (4 * e_dash_spacer), (e_dash_length, e_dash_spacing))
+
+    ax3.plot(e_bau.index.tolist(), e_bau.tolist(), color=scale_rgb(c[1]), alpha=0.8, linewidth=1)
+
+    e_l2 = ax3.plot(e_tax.index.tolist(), e_tax.tolist(), color=scale_rgb(c[0]), alpha=0.8, linewidth=1, linestyle=':')
+    e_l2[0].set_linestyle(e_t1)
+
+    e_l3 = ax3.plot(e_rep.index.tolist(), e_rep.tolist(), color=scale_rgb(c[2]), alpha=0.8, linewidth=1)
+    e_l3[0].set_linestyle(e_t2)
+
+    e_l4 = ax3.plot(e_mppdc.index.tolist(), e_mppdc.tolist(), color=scale_rgb(c[3]), alpha=0.8, linewidth=1)
+    e_l4[0].set_linestyle(e_t3)
+
+    e_l5 = ax3.plot(e_heuristic.index.tolist(), e_heuristic.tolist(), color=scale_rgb(c[4]), alpha=0.8, linewidth=1)
+    e_l5[0].set_linestyle(e_t4)
 
     # Cumulative scheme revenue
     # ax4.plot(v_tax.index.tolist(), v_tax.tolist(), color=scale_rgb(c[0]), alpha=0.7, linewidth=0.9)
     ax4.plot(v_rep.index.tolist(), v_rep.tolist(), color=scale_rgb(c[2]), alpha=0.7, linewidth=0.9)
-    ax4.plot(v_mppdc.index.tolist(), v_mppdc.tolist(), color=scale_rgb(c[3]), alpha=0.7, linewidth=0.9)
-    ax4.plot(v_heuristic.index.tolist(), v_heuristic.tolist(), color=scale_rgb(c[4]), alpha=0.7, linewidth=0.9)
+    ax4.plot(v_mppdc.index.tolist(), v_mppdc.tolist(), color=scale_rgb(c[3]), alpha=0.7, linewidth=0.9, linestyle='--')
+    ax4.plot(v_heuristic.index.tolist(), v_heuristic.tolist(), color=scale_rgb(c[4]), alpha=0.7, linewidth=0.9, linestyle=':')
 
     fig.set_size_inches(6.5, 4.6)
 
@@ -461,7 +504,7 @@ if __name__ == '__main__':
 
     ax1.legend(['BAU', 'Tax', 'REP', 'MPPDC', 'Heuristic'], fontsize=7, ncol=2, frameon=False)
     fig.subplots_adjust(left=0.16, bottom=0.18, top=0.98, right=0.98)
-    fig.savefig(os.path.join(output_dir, 'average_prices.png'))
+    fig.savefig(os.path.join(output_dir, 'average_prices.png'), dpi=1200)
     fig.savefig(os.path.join(output_dir, 'average_prices.pdf'))
 
     plt.show()
