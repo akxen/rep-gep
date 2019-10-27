@@ -30,13 +30,13 @@ if __name__ == '__main__':
     case_params = {'rep_filename': 'rep_case.pickle', 'mode': 'price_change_minimisation'}
 
     # Run BAU case
-    # cases.run_bau_case(start, end, scenarios, output_directory)
+    cases.run_bau_case(start, end, scenarios, output_directory)
 
     # Run REP case
-    # cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
+    cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
 
     # Run price targeting models with different transition years
-    for transition_year in [2022]:
+    for transition_year in [2022, 2028]:
         print(f'Running models with transition year: {transition_year}')
 
         # Update transition year

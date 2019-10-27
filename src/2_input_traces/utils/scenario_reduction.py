@@ -190,7 +190,7 @@ def main(output_dir, scenarios_per_year):
     output_dir : str
         Directory where output files are to be stored (also contains outputs from previous steps)
 
-    scenarios_per_year : str
+    scenarios_per_year : int
         Number of operating scenarios per year
 
     Returns

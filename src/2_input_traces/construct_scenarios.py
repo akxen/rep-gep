@@ -23,4 +23,5 @@ if __name__ == '__main__':
     # dataset = utils.combine_traces.main(root_data_directory, output_directory)
 
     # Construct scenarios using k-means clustering algorithm
-    df_scenario_centroids = utils.scenario_reduction.main(output_directory, scenarios_per_year=5)
+    for c in [5, 6, 7, 8, 9, 10, 15, 20]:
+        df_scenario_centroids = utils.scenario_reduction.main(output_directory, scenarios_per_year=c)
