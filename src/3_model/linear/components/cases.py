@@ -102,15 +102,6 @@ class ModelCases:
         # Solve MPPDC model with fixed policy parameters
         m, status = mppdc.solve_model(m)
 
-        # # Fix capacity variables
-        # m.x_c.fix()
-        #
-        # # Re-solve to obtain correct prices
-        # m, status = mppdc.solve_model(m)
-        #
-        # # Unfix capacity variables. Ready for next solve.
-        # m.x_c.unfix()
-
         return m, status
 
     @staticmethod
@@ -128,13 +119,6 @@ class ModelCases:
 
         # Solve primal model with fixed policy parameters
         m, status = primal.solve_model(m)
-
-        # # Fix investment decisions - re-solve to obtain correct prices
-        # m.x_c.fix()
-        # m, status = primal.solve_model(m)
-        #
-        # # Unfix investment decisions (in case following solve required)
-        # m.x_c.unfix()
 
         return m, status
 
