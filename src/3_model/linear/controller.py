@@ -12,7 +12,7 @@ from cases import ModelCases
 
 if __name__ == '__main__':
     log_file_name = 'case_logger'
-    output_directory = os.path.join(os.path.dirname(__file__), 'output', 'local')
+    output_directory = os.path.join(os.path.dirname(__file__), 'output', 'remote')
 
     # Object used to run model cases
     cases = ModelCases(output_directory, log_file_name)
