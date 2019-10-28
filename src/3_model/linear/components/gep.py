@@ -3,6 +3,7 @@
 import os
 import sys
 import copy
+import time
 import pickle
 import logging
 
@@ -26,9 +27,10 @@ class Primal:
         self.utilities = Utilities()
 
         # Solver options
+        self.tee = True
         self.keepfiles = False
         self.solver_options = {}  # 'MIPGap': 0.0005
-        self.opt = SolverFactory('cplex', solver_io='mps')
+        self.opt = SolverFactory('cplex', solver_io='lp')
 
     @staticmethod
     def define_variables(m):
@@ -670,7 +672,7 @@ class Primal:
         """Solve model"""
 
         # Solve model
-        solve_status = self.opt.solve(m, tee=True, options=self.solver_options, keepfiles=self.keepfiles)
+        solve_status = self.opt.solve(m, tee=self.tee, options=self.solver_options, keepfiles=self.keepfiles)
 
         # Log infeasible constraints if they exist
         log_infeasible_constraints(m)
@@ -685,9 +687,10 @@ class Dual:
         self.utilities = Utilities()
 
         # Solver options
+        self.tee = True
         self.keepfiles = False
         self.solver_options = {}  # 'MIPGap': 0.0005
-        self.opt = SolverFactory('cplex', solver_io='mps')
+        self.opt = SolverFactory('cplex', solver_io='lp')
 
     def k(self, m, g):
         """Mapping generator to the NEM zone to which it belongs"""
@@ -1375,7 +1378,7 @@ class Dual:
         """Solve model"""
 
         # Solve model
-        solve_status = self.opt.solve(m, tee=True, options=self.solver_options, keepfiles=self.keepfiles)
+        solve_status = self.opt.solve(m, tee=self.tee, options=self.solver_options, keepfiles=self.keepfiles)
 
         # Log infeasible constraints if they exist
         log_infeasible_constraints(m)
@@ -1392,9 +1395,10 @@ class MPPDCModel:
         self.transition_year = transition_year
 
         # Solver options
+        self.tee = True
         self.keepfiles = False
         self.solver_options = {}  # 'MIPGap': 0.0005, 'optimalitytarget': 2, 'simplex tolerances optimality': 1e-4
-        self.opt = SolverFactory('cplex', solver_io='mps')
+        self.opt = SolverFactory('cplex', solver_io='lp')
 
     def define_parameters(self, m):
         """Define MPPDC parameters"""
@@ -1695,7 +1699,7 @@ class MPPDCModel:
         """Solve model"""
 
         # Solve model
-        solve_status = self.opt.solve(m, tee=True, options=self.solver_options, keepfiles=self.keepfiles)
+        solve_status = self.opt.solve(m, tee=self.tee, options=self.solver_options, keepfiles=self.keepfiles)
 
         # Log infeasible constraints if they exist
         log_infeasible_constraints(m)
@@ -1704,11 +1708,12 @@ class MPPDCModel:
 
 
 class CheckSolution:
-    def __init__(self, start_year=2016, final_year=2018, scenarios_per_year=2):
+    def __init__(self, start_year=2016, final_year=2018, scenarios_per_year=2, transition_year=2017):
         # Objects used to construct primal, dual, and MPPDC models
         self.primal = Primal(start_year=start_year, final_year=final_year, scenarios_per_year=scenarios_per_year)
         self.dual = Dual(start_year=start_year, final_year=final_year, scenarios_per_year=scenarios_per_year)
-        self.mppdc = MPPDCModel(start_year=start_year, final_year=final_year, scenarios_per_year=scenarios_per_year)
+        self.mppdc = MPPDCModel(start_year=start_year, final_year=final_year, scenarios_per_year=scenarios_per_year,
+                                transition_year=transition_year)
         self.utilities = Utilities()
 
         # Construct models
@@ -1978,6 +1983,7 @@ if __name__ == '__main__':
     output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'local')
     final_model_year = 2022
     scenarios_per_model_year = 3
+    transition_model_year = 2020
 
     # Object used to analyse model results
     # analysis = AnalyseResults()
@@ -1996,9 +2002,18 @@ if __name__ == '__main__':
     # check.check_primal_and_mppdc_solutions(permit_prices=permit_price, baselines=baseline)
     # check.check_dual_and_mppdc_solutions()
 
-    # primal = Primal(2040, 5)
-    # primal_model = primal.construct_model()
-
     # analysis.get_year_average_price(check.m_m.lamb.get_values(), factor=1)
-    mppdc = MPPDCModel(start_year=2016, final_year=final_model_year, scenarios_per_year=scenarios_per_model_year)
-    m_m = mppdc.construct_model(include_primal_constraints=True)
+    # mppdc = MPPDCModel(start_year=2016, final_year=final_model_year, scenarios_per_year=scenarios_per_model_year,
+    #                    transition_year=transition_model_year)
+    #
+    # m_m = mppdc.construct_model(include_primal_constraints=True)
+
+    primal = Primal(2016, 2022, 3)
+    primal_model = primal.construct_model()
+    primal_model.baseline.fix(0)
+    primal_model.permit_price.fix(40)
+
+    t_start = time.time()
+    primal.solve_model(primal_model)
+
+    print(f'Solved in {time.time() - t_start}s')

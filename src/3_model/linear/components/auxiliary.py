@@ -26,7 +26,7 @@ class BaselineUpdater:
         # Solver options
         self.keepfiles = False
         self.solver_options = {}  # 'MIPGap': 0.0005
-        self.opt = SolverFactory('cplex', solver_io='mps')
+        self.opt = SolverFactory('cplex', solver_io='lp')
 
     @staticmethod
     def define_sets(m):

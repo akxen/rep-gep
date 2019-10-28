@@ -125,12 +125,18 @@ class ModelCases:
     def run_bau_case(self, first_year, final_year, scenarios_per_year, output_dir):
         """Run business-as-usual case"""
 
+        message = f"""Starting case: first_year={first_year}, final_year={final_year}, 
+        scenarios_per_year={scenarios_per_year}"""
+        self.algorithm_logger('run_bau_case', message)
+
         # Permit prices and emissions intensity baselines for BAU case (all 0)
         permit_prices = {y: float(0) for y in range(first_year, final_year + 1)}
         baselines = {y: float(0) for y in range(first_year, final_year + 1)}
 
         # Run model
+        self.algorithm_logger('run_bau_case', 'Starting solve')
         m, status = self.run_primal_fixed_policy(first_year, final_year, scenarios_per_year, permit_prices, baselines)
+        self.algorithm_logger('run_bau_case', 'Finished solve')
 
         # Results to extract
         result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
@@ -149,6 +155,7 @@ class ModelCases:
 
         # Combine output in dictionary. To be returned by method.
         output = {'results': results, 'model': m, 'status': status}
+        self.algorithm_logger('run_bau_case', 'Finished BAU case')
 
         return output
 
@@ -181,6 +188,10 @@ class ModelCases:
     def run_rep_case(self, first_year, final_year, scenarios_per_year, permit_prices, output_dir):
         """Run carbon tax scenario"""
 
+        message = f"""Starting case: first_year={first_year}, final_year={final_year}, 
+        scenarios_per_year={scenarios_per_year}, permit_prices={permit_prices}"""
+        self.algorithm_logger('run_rep_case', message)
+
         # Results to extract
         result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'q', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
                        'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'C_MC', 'ETA',
@@ -190,8 +201,18 @@ class ModelCases:
         # First run carbon tax case
         baselines = {y: float(0) for y in range(first_year, final_year + 1)}
 
+        # Check that carbon tax is same for all years in model horizon
+        unique_permit_prices = list(set(permit_prices.values()))
+        if len(unique_permit_prices) != 1:
+            raise Exception(f'Permit price trajectory is not flat: {permit_prices}')
+
+        # Extract carbon price level (to be used in filename)
+        carbon_price = unique_permit_prices[0]
+
         # Run model (carbon tax case)
+        self.algorithm_logger('run_rep_case', 'Starting carbon tax case solve')
         m, status = self.run_primal_fixed_policy(first_year, final_year, scenarios_per_year, permit_prices, baselines)
+        self.algorithm_logger('run_rep_case', 'Finished carbon tax case solve')
 
         # Model results
         carbon_tax_results = {k: self.extract_result(m, k) for k in result_keys}
@@ -217,8 +238,10 @@ class ModelCases:
         while not stop_flag:
 
             # Re-run model with new baselines
+            self.algorithm_logger('run_rep_case', f'Starting solve for REP iteration={i}')
             m, status = self.run_primal_fixed_policy(first_year, final_year, scenarios_per_year, permit_prices,
                                                      rep_baselines)
+            self.algorithm_logger('run_rep_case', f'Finished solved for REP iteration={i}')
 
             # Model results
             rep_results = {k: self.extract_result(m, k) for k in result_keys}
@@ -247,18 +270,19 @@ class ModelCases:
         results = {'stage_1_carbon_tax': carbon_tax_results, 'stage_2_rep': iteration_results}
 
         # Save results
-        filename = 'rep_case.pickle'
+        filename = f'rep_cp-{carbon_price:.0f}.pickle'
         self.save_results(results, output_dir, filename)
 
         # Dictionary to be returned by method
         output = {'results': results, 'model': m, 'status': status}
+        self.algorithm_logger('run_rep_case', 'Finished REP case')
 
         return output
 
     def run_price_smoothing_heuristic_case(self, params, output_dir):
         """Smooth prices over entire model horizon using approximated price functions"""
 
-        logging.info('Starting heuristic model with params: ' + str(params))
+        self.algorithm_logger('run_price_smoothing_heuristic_case', 'Starting case with params: ' + str(params))
 
         # Model parameters
         rep_filename = params['rep_filename']
@@ -305,6 +329,8 @@ class ModelCases:
         psg_input = rep_iteration
 
         while not stop_flag:
+            self.algorithm_logger('run_price_smoothing_heuristic_case', f'Starting iteration={counter}')
+
             # Identify price setting generators
             psg = baseline.prices.get_price_setting_generators_from_model_results(psg_input)
 
@@ -365,9 +391,10 @@ class ModelCases:
                 # Update dictionary of price setting generator program inputs
                 psg_input = r_p
 
+            self.algorithm_logger('run_price_smoothing_heuristic_case', f'Finished iteration={counter}')
             counter += 1
 
-        logging.info('Finished solving model')
+        self.algorithm_logger('run_price_smoothing_heuristic_case', f'Finished solving model')
 
         # Combine results into a single dictionary
         combined_results = {**rep_results, 'stage_3_price_targeting': iteration_results, 'parameters': params}
@@ -379,12 +406,14 @@ class ModelCases:
         output = {'auxiliary_model': m_b, 'auxiliary_status': m_b_status, 'primal_model': m_p,
                   'primal_status': m_p_status, 'results': combined_results}
 
+        self.algorithm_logger('run_price_smoothing_heuristic_case', 'Finished heuristic case')
+
         return output
 
     def run_price_smoothing_mppdc_case(self, params, output_dir):
         """Run case to smooth prices over model horizon, subject to total revenue constraint"""
 
-        logging.info('Starting MPPDC model with params: ' + str(params))
+        self.algorithm_logger('run_price_smoothing_mppdc_case', 'Starting MPPDC case with params: ' + str(params))
 
         # Model parameters
         rep_filename = params['rep_filename']
@@ -459,6 +488,8 @@ class ModelCases:
         iteration_results = {}
 
         while not stop_flag:
+            self.algorithm_logger('run_price_smoothing_mppdc_case', f'Starting iteration={counter}')
+
             # Fix MPPDC variables
             m_m = mppdc.fix_variables(m_m, fixed_vars)
 
@@ -494,9 +525,10 @@ class ModelCases:
                 # Update dictionary of fixed variables to be used in next iteration
                 fixed_vars = {v: p_r[v] for v in primal_vars}
 
+            self.algorithm_logger('run_price_smoothing_mppdc_case', f'Finished iteration={counter}')
             counter += 1
 
-        logging.info('Finished solving MPPDC model')
+        self.algorithm_logger('run_price_smoothing_mppdc_case', f'Finished solving model')
 
         # Combine results into a single dictionary
         combined_results = {**rep_results, 'stage_3_price_targeting': iteration_results, 'parameters': params}
@@ -507,6 +539,8 @@ class ModelCases:
         # Method output
         output = {'mppdc_model': m_m, 'mppdc_status': m_m_status, 'primal_model': m_p, 'primal_status': m_p_status,
                   'results': combined_results}
+
+        self.algorithm_logger('run_price_smoothing_mppdc_case', 'Finished MPPDC case')
 
         return output
 
