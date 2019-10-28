@@ -322,12 +322,12 @@ class ModelCases:
             if params['mode'] == 'bau_deviation_minimisation':
                 m_b.PRICE_BAU_DEVIATION_1.activate()
                 m_b.PRICE_BAU_DEVIATION_2.activate()
-                filename = f"heuristic_bau_deviation_case_transition_year_{params['transition_year']}.pickle"
+                filename = f"heuristic_baudev_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
 
             elif params['mode'] == 'price_change_minimisation':
                 m_b.PRICE_CHANGE_DEVIATION_1.activate()
                 m_b.PRICE_CHANGE_DEVIATION_2.activate()
-                filename = f"heuristic_price_change_deviation_case_transition_year_{params['transition_year']}.pickle"
+                filename = f"heuristic_pdev_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
 
             else:
                 raise Exception(f"Unexpected run mode: {params['mode']}")
@@ -423,12 +423,12 @@ class ModelCases:
         if params['mode'] == 'bau_deviation_minimisation':
             m_m.PRICE_BAU_DEVIATION_1.activate()
             m_m.PRICE_BAU_DEVIATION_2.activate()
-            filename = f"mppdc_bau_deviation_case_transition_year_{params['transition_year']}.pickle"
+            filename = f"mppdc_baudev_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
 
         elif params['mode'] == 'price_change_minimisation':
             m_m.PRICE_CHANGE_DEVIATION_1.activate()
             m_m.PRICE_CHANGE_DEVIATION_2.activate()
-            filename = f"mppdc_price_change_deviation_case_transition_year_{params['transition_year']}.pickle"
+            filename = f"mppdc_pdev_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
 
         else:
             raise Exception(f"Unexpected run mode: {params['mode']}")

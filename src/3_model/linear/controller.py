@@ -27,20 +27,21 @@ if __name__ == '__main__':
     permit_prices_model = {y: 40.0 for y in range(start, end + 1)}
 
     # Define case parameters and run model
-    case_params = {'rep_filename': 'rep_case.pickle', 'mode': 'price_change_minimisation'}
+    case_params = {'rep_filename': 'rep_case.pickle', 'mode': 'bau_deviation_minimisation'}
 
     # Run BAU case
-    cases.run_bau_case(start, end, scenarios, output_directory)
+    # cases.run_bau_case(start, end, scenarios, output_directory)
 
     # Run REP case
-    cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
+    # cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
 
     # Run price targeting models with different transition years
-    for transition_year in [2020, 2025, 2030]:
+    for transition_year in [2025]:
         print(f'Running models with transition year: {transition_year}')
 
         # Update transition year
         case_params['transition_year'] = transition_year
+        case_params['carbon_price'] = '40'
 
         # Update scheme price weights to be used in objective function
         case_params['price_weights'] = {y: 1.0 if y <= transition_year else 0.0 for y in range(start, end + 1)}
