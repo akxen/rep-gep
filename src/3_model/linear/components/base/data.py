@@ -21,6 +21,10 @@ class ModelData:
                                          os.path.pardir, '2_input_traces', 'output')
 
     def __post_init__(self):
+        # Filename containing representative day information
+        self.centroids_filename = 'centroids_5.pickle'
+        self.n_centroids = self.get_n_centroids()
+
         # Input traces
         self.input_traces = self._load_input_traces()
         self.input_traces_dict = self.input_traces.to_dict()
@@ -130,11 +134,16 @@ class ModelData:
             output = text
         return output
 
+    def get_n_centroids(self):
+        """Get number of centroids based on centroids filename"""
+
+        return int(self.centroids_filename.split('_')[1].replace('.pickle', ''))
+
     def _load_input_traces(self):
         """Load input traces"""
 
         # Input traces for model horizon
-        df = pd.read_pickle(os.path.join(self.input_traces_dir, 'centroids_10.pickle'))
+        df = pd.read_pickle(os.path.join(self.input_traces_dir, self.centroids_filename))
 
         # Scenario index is 0-based. Want to increment each scenario index by 1.
         df.index.set_levels([i + 1 for i in df.index.levels[1]], level=1, inplace=True)
@@ -541,5 +550,3 @@ if __name__ == '__main__':
                                           os.path.pardir, '2_input_traces', 'output')
 
     model = ModelData(raw_data_directory, data_directory, input_traces_directory)
-
-

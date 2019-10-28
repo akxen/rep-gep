@@ -290,6 +290,9 @@ class CommonComponents:
             # Historic hydro output - for operating scenario
             val = self.data.input_traces_dict[('HYDRO', g, t)][(y, s)]
 
+            # Registered capacities
+            # val = self.data.existing_units_dict[('PARAMETERS', 'REG_CAP')][g]
+
             # Set output to zero if negative or very small (SCADA data collection may cause -ve values)
             if val < 0.1:
                 val = 0
@@ -641,7 +644,7 @@ class CommonComponents:
         def lost_load_cost_rule(_m, z):
             """Return cost for lost-load power in each NEM zone"""
 
-            return float(14700 + random.uniform(0, 100))
+            return float(20000 + random.uniform(0, 100))
 
         # Lost load cost for each NEM zone
         random.seed(10)

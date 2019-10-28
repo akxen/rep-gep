@@ -415,31 +415,31 @@ if __name__ == '__main__':
     analysis = AnalyseResults()
 
     # Transition year
-    transition_year = 2022
+    transition_year = 2020
 
     # Load model results given a filename
-    # r = analysis.load_results(results_directory, f'mppdc_price_change_deviation_case_transition_year_{transition_year}.pickle')
-    # r2 = analysis.load_results(results_directory, f'heuristic_price_change_deviation_case_transition_year_{transition_year}.pickle')
+    r = analysis.load_results(results_directory, f'mppdc_price_change_deviation_case_transition_year_{transition_year}.pickle')
+    r2 = analysis.load_results(results_directory, f'heuristic_price_change_deviation_case_transition_year_{transition_year}.pickle')
     r3 = analysis.load_results(results_directory, f'rep_case.pickle')
 
     # Prices from different models
     p_bau = analysis.get_average_prices(results_directory, 'bau_case.pickle', None, 'PRICES', -1)
     p_rep = analysis.get_average_prices(results_directory, 'rep_case.pickle', 'stage_2_rep', 'PRICES', -1)
     p_tax = analysis.get_average_prices(results_directory, 'rep_case.pickle', 'stage_1_carbon_tax', 'PRICES', -1)
-    # p_price_dev_mppdc = analysis.get_average_prices(results_directory, f'mppdc_price_change_deviation_case_transition_year_{transition_year}.pickle', 'stage_3_price_targeting', 'lamb', 1)
-    # p_price_dev_heuristic = analysis.get_average_prices(results_directory, f'heuristic_price_change_deviation_case_transition_year_{transition_year}.pickle', 'stage_3_price_targeting', 'PRICES', -1)
+    p_price_dev_mppdc = analysis.get_average_prices(results_directory, f'mppdc_price_change_deviation_case_transition_year_{transition_year}.pickle', 'stage_3_price_targeting', 'lamb', 1)
+    p_price_dev_heuristic = analysis.get_average_prices(results_directory, f'heuristic_price_change_deviation_case_transition_year_{transition_year}.pickle', 'stage_3_price_targeting', 'PRICES', -1)
 
-    # # Baselines from different models
-    # b_price_dev_mppdc = analysis.get_baselines(results_directory, f'mppdc_price_change_deviation_case_transition_year_{transition_year}.pickle')
-    # b_price_dev_heuristic = analysis.get_baselines(results_directory, f'heuristic_price_change_deviation_case_transition_year_{transition_year}.pickle')
-    #
-    # # Plotting baselines - price deviation objective
-    # fig, ax = plt.subplots()
-    # b_price_dev_mppdc.plot(ax=ax, color='red')
-    # b_price_dev_heuristic.plot(ax=ax, color='blue')
-    # ax.set_title('Price deviation objective')
-    # plt.show()
-    #
+    # Baselines from different models
+    b_price_dev_mppdc = analysis.get_baselines(results_directory, f'mppdc_price_change_deviation_case_transition_year_{transition_year}.pickle')
+    b_price_dev_heuristic = analysis.get_baselines(results_directory, f'heuristic_price_change_deviation_case_transition_year_{transition_year}.pickle')
+
+    # Plotting baselines - price deviation objective
+    fig, ax = plt.subplots()
+    b_price_dev_mppdc.plot(ax=ax, color='red')
+    b_price_dev_heuristic.plot(ax=ax, color='blue')
+    ax.set_title('Price deviation objective')
+    plt.show()
+
     # fig, ax = plt.subplots()
     # p_price_dev_mppdc['average_price_real'].plot(ax=ax, color='red', alpha=0.5)
     # p_price_dev_heuristic['average_price_real'].plot(ax=ax, color='blue', alpha=0.5)
@@ -451,3 +451,6 @@ if __name__ == '__main__':
     p_bau['average_price_real'].plot(ax=ax, color='red', alpha=0.5)
     p_tax['average_price_real'].plot(ax=ax, color='blue', alpha=0.5)
     p_rep['average_price_real'].plot(ax=ax, color='green', alpha=0.5)
+    p_price_dev_mppdc['average_price_real'].plot(ax=ax, color='orange', alpha=0.5)
+    p_price_dev_heuristic['average_price_real'].plot(ax=ax, color='purple', alpha=0.5)
+    plt.show()
