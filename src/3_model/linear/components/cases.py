@@ -125,8 +125,7 @@ class ModelCases:
     def run_bau_case(self, first_year, final_year, scenarios_per_year, output_dir):
         """Run business-as-usual case"""
 
-        message = f"""Starting case: first_year={first_year}, final_year={final_year}, 
-        scenarios_per_year={scenarios_per_year}"""
+        message = f"""Starting case: first_year={first_year}, final_year={final_year}, scenarios_per_year={scenarios_per_year}"""
         self.algorithm_logger('run_bau_case', message)
 
         # Permit prices and emissions intensity baselines for BAU case (all 0)
@@ -188,8 +187,7 @@ class ModelCases:
     def run_rep_case(self, first_year, final_year, scenarios_per_year, permit_prices, output_dir):
         """Run carbon tax scenario"""
 
-        message = f"""Starting case: first_year={first_year}, final_year={final_year}, 
-        scenarios_per_year={scenarios_per_year}, permit_prices={permit_prices}"""
+        message = f"""Starting case: first_year={first_year}, final_year={final_year}, scenarios_per_year={scenarios_per_year}, permit_prices={permit_prices}"""
         self.algorithm_logger('run_rep_case', message)
 
         # Results to extract
