@@ -396,8 +396,13 @@ class AnalyseResults:
 
             elif iteration == 'max':
                 max_iteration = max(results[stage].keys())
-                if model is None:
+
+                if (model is None) and (stage == 'stage_1_carbon_tax'):
+                    values = results[stage][key]
+
+                elif model is None:
                     values = results[stage][max_iteration][key]
+
                 else:
                     values = results[stage][max_iteration][model][key]
 
