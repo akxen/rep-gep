@@ -345,7 +345,6 @@ def plot_price_surface(results, model_key, transition_year=None):
     ax.plot_surface(Xi, Yi, Zi, linewidth=0, cmap=cm.plasma, rstride=1, cstride=1, alpha=1)
     ax.set_title(f'Prices: {model_key} {transition_year}')
 
-    plt.show()
     return fig, ax
 
 def plot_revenue_surface(results, model_key, transition_year=None):
@@ -806,6 +805,44 @@ def plot_mppdc_heuristic_comparison(results):
     plt.show()
 
 
+def plot_price_surface_formatted(results):
+    """Plot a formatted price surface"""
+
+    # Plot REP surfaces
+    fig, ax = plot_price_surface(results, 'rep')
+    ax.view_init(20, -90)
+
+    ax.w_xaxis.set_major_locator(MultipleLocator(20))
+    ax.w_yaxis.set_major_locator(MultipleLocator(6))
+    ax.w_zaxis.set_major_locator(MultipleLocator(20))
+
+    fig.canvas.draw()
+
+    x_labels = ax.w_xaxis.get_ticklabels()
+    ax.w_xaxis.set_ticklabels(x_labels, ha='center', va='center', fontsize=6)
+
+    y_labels = ax.w_yaxis.get_ticklabels()
+    ax.w_yaxis.set_ticklabels(y_labels, ha='center', va='center', fontsize=6)
+
+    z_labels = ax.w_zaxis.get_ticklabels()
+    ax.w_zaxis.set_ticklabels(z_labels, ha='center', va='center', fontsize=6)
+
+    ax.w_xaxis.set_tick_params(pad=0)
+    ax.w_yaxis.set_tick_params(pad=0)
+    ax.w_zaxis.set_tick_params(pad=-3)
+
+    ax.set_xlabel('Carbon price (\$/tCO$_{2}$)', fontsize=6, labelpad=-5)
+    ax.set_ylabel('Year', fontsize=6, labelpad=-5)
+    ax.set_zlabel('Price (\$/MWh)', fontsize=6, labelpad=-10)
+    ax.set_title('')
+
+    fig.set_size_inches(2.5, 2.5)
+    fig.subplots_adjust(left=0, bottom=0.11, right=0.95, top=1, wspace=0, hspace=0)
+
+    fig.savefig(os.path.join(figures_directory, 'rep_surface.png'), dpi=200)
+    plt.show()
+
+
 if __name__ == '__main__':
     results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote')
     output_directory = os.path.join(os.path.dirname(__file__), 'output', 'tmp')
@@ -875,49 +912,3 @@ if __name__ == '__main__':
     # Compare baselines from MPPDC and heuristic solution protocols
     # plot_mppdc_heuristic_comparison(m_results)
 
-    def axisEqual3D(ax):
-        extents = np.array([getattr(ax, 'get_{}lim'.format(dim))() for dim in 'xyz'])
-        sz = extents[:, 1] - extents[:, 0]
-        centers = np.mean(extents, axis=1)
-        maxsize = max(abs(sz))
-        r = maxsize / 2
-        for ctr, dim in zip(centers, 'xyz'):
-            getattr(ax, 'set_{}lim'.format(dim))(ctr - r, ctr + r)
-
-    # Plot REP surfaces
-    fig, ax = plot_price_surface(m_results, 'rep')
-    ax.set_title('')
-
-    labels = {}
-    for l_c in [2016, 2019, 2022, 2025, 2028]:
-        labels[l_c] = 'This Looks Bad'
-
-    ax.set_yticklabels(labels, rotation=-15,
-                       verticalalignment='baseline',
-                       horizontalalignment='left')
-
-    # Format axes
-    # ax.w_yaxis.set_major_locator(MultipleLocator(4))
-
-    ax.w_zaxis.set_tick_params(labelsize=6, pad=-0.1)
-    ax.w_xaxis.set_tick_params(labelsize=6, pad=-0.1, rotation=30)
-    ax.w_yaxis.set_tick_params(labelsize=6)
-    # ax.yaxis.set_minor_locator(MultipleLocator(1))
-
-    # ax.set_zlabel('Average Price (\$/MWh)', fontsize=7)
-    # ax.set_ylabel('Year', rotation=70, fontsize=7)
-    # ax.set_xlabel('Permit price', rotation=-10, fontsize=7)
-
-    ax.view_init(35, -75)
-
-    # ax.set_yticklabels()
-    # ax.tick_params(axis='both', which='major', labelsize=7)
-    # yl = ax.get_yticklabels()
-    # ax.set_yticklabels(yl, va='baseline', ha='left')
-    # fig.canvas.draw()
-
-    fig.set_size_inches(3, 2.5)
-
-    fig.savefig(os.path.join(figures_directory, 'rep_surface.png'), dpi=200)
-
-    plt.show()
