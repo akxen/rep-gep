@@ -2,6 +2,7 @@
 
 import os
 import sys
+import time
 import copy
 import pickle
 import logging
@@ -125,6 +126,9 @@ class ModelCases:
     def run_bau_case(self, first_year, final_year, scenarios_per_year, output_dir):
         """Run business-as-usual case"""
 
+        # Start timer for case run
+        t_start = time.time()
+
         message = f"""Starting case: first_year={first_year}, final_year={final_year}, scenarios_per_year={scenarios_per_year}"""
         self.algorithm_logger('run_bau_case', message)
 
@@ -154,12 +158,16 @@ class ModelCases:
 
         # Combine output in dictionary. To be returned by method.
         output = {'results': results, 'model': m, 'status': status}
-        self.algorithm_logger('run_bau_case', 'Finished BAU case')
+
+        self.algorithm_logger('run_bau_case', f'Finished BAU case in {time.time() - t_start}s')
 
         return output
 
     def run_rep_case(self, first_year, final_year, scenarios_per_year, permit_prices, output_dir):
         """Run carbon tax scenario"""
+
+        # Start timer for model run
+        t_start = time.time()
 
         message = f"""Starting case: first_year={first_year}, final_year={final_year}, scenarios_per_year={scenarios_per_year}, permit_prices={permit_prices}"""
         self.algorithm_logger('run_rep_case', message)
@@ -247,12 +255,22 @@ class ModelCases:
 
         # Dictionary to be returned by method
         output = {'results': results, 'model': m, 'status': status}
-        self.algorithm_logger('run_rep_case', 'Finished REP case')
+        self.algorithm_logger('run_rep_case', f'Finished REP case')
+
+        try:
+            total_iterations = max(iteration_results.keys())
+            message = f'Finished REP case: carbon price={carbon_price}, total solution time={time.time() - t_start}s, total iterations={total_iterations}'
+            self.algorithm_logger('run_rep_case', message)
+        except Exception as e:
+            print(f'run_rep_case: ' + str(e))
 
         return output
 
     def run_price_smoothing_heuristic_case(self, params, output_dir):
         """Smooth prices over entire model horizon using approximated price functions"""
+
+        # Start timer for model run
+        t_start = time.time()
 
         self.algorithm_logger('run_price_smoothing_heuristic_case', 'Starting case with params: ' + str(params))
 
@@ -374,16 +392,26 @@ class ModelCases:
         # Save results
         self.save_results(combined_results, output_dir, filename)
 
-        # Combine method output
+        # Combine output
         output = {'auxiliary_model': m_b, 'auxiliary_status': m_b_status, 'primal_model': m_p,
                   'primal_status': m_p_status, 'results': combined_results}
 
         self.algorithm_logger('run_price_smoothing_heuristic_case', 'Finished heuristic case')
 
+        try:
+            total_iterations = max(iteration_results.keys())
+            message = f"Finished heuristic case: carbon price={params['carbon_price']}, transition year={params['transition_year']}, total solution time={time.time() - t_start}s, total iterations={total_iterations}"
+            self.algorithm_logger('run_price_smoothing_heuristic_case', message)
+        except Exception as e:
+            print(f"run_price_smoothing_heuristic_case: " + str(e))
+
         return output
 
     def run_price_smoothing_mppdc_case(self, params, output_dir):
         """Run case to smooth prices over model horizon, subject to total revenue constraint"""
+
+        # Start timer for model run
+        t_start = time.time()
 
         self.algorithm_logger('run_price_smoothing_mppdc_case', 'Starting MPPDC case with params: ' + str(params))
 
@@ -513,6 +541,13 @@ class ModelCases:
                   'results': combined_results}
 
         self.algorithm_logger('run_price_smoothing_mppdc_case', 'Finished MPPDC case')
+
+        try:
+            total_iterations = max(iteration_results.keys())
+            message = f"Finished MPPDC case: carbon price={params['carbon_price']}, transition year={params['transition_year']}, total solution time={time.time() - t_start}s, total iterations={total_iterations}"
+            self.algorithm_logger('run_price_smoothing_mppdc_case', message)
+        except Exception as e:
+            print(f"run_price_smoothing_mppdc_case: " + str(e))
 
         return output
 
