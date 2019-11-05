@@ -158,32 +158,6 @@ class ModelCases:
 
         return output
 
-    def run_carbon_tax_case(self, output_dir, first_year, final_year, scenarios_per_year, permit_prices):
-        """Run carbon tax scenario"""
-
-        # Permit prices and emissions intensity baselines for BAU case (all 0)
-        baselines = {y: float(0) for y in range(first_year, final_year + 1)}
-
-        # Run model
-        m, status = self.run_fixed_policy(first_year, final_year, scenarios_per_year, permit_prices, baselines)
-
-        # Results to extract
-        result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
-                       'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'C_MC', 'ETA',
-                       'DELTA', 'RHO', 'EMISSIONS_RATE', 'OBJECTIVE']
-
-        # Model results
-        results = {k: self.extract_result(m, k) for k in result_keys}
-
-        # Add dual variable from power balance constraint
-        results['PRICES'] = {k: m.dual[m.POWER_BALANCE[k]] for k in m.POWER_BALANCE.keys()}
-
-        # Save results
-        filename = 'carbon_tax_case.pickle'
-        self.save_results(results, output_dir, filename)
-
-        return results
-
     def run_rep_case(self, first_year, final_year, scenarios_per_year, permit_prices, output_dir):
         """Run carbon tax scenario"""
 
