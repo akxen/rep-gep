@@ -15,9 +15,7 @@ import matplotlib.ticker
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.ticker import MultipleLocator, FormatStrFormatter, AutoMinorLocator
 
-
 from analysis import AnalyseResults
-
 
 v = {'carbon_tax': {'carbon_price': {'emissions': None, 'average_price': None, 'baselines': None}}}
 w = {'rep': {'carbon_price': {'emissions': None, 'average_price': None, 'baselines': None}}}
@@ -203,12 +201,21 @@ def extract_model_results(results_dir, output_dir):
     """Extract and parse model results. Save to file."""
 
     # Extract data
-    result_keys = ['YEAR_EMISSIONS', 'baseline', 'YEAR_AVERAGE_PRICE', 'YEAR_CUMULATIVE_SCHEME_REVENUE']
+    result_keys = ['YEAR_EMISSIONS', 'baseline', 'YEAR_AVERAGE_PRICE', 'YEAR_CUMULATIVE_SCHEME_REVENUE', 'x_c']
 
-    bau_results = extract_bau_results(results_dir, ['YEAR_EMISSIONS', 'baseline', 'YEAR_AVERAGE_PRICE'])
+    print('Extracting BAU results')
+    bau_results = extract_bau_results(results_dir, ['YEAR_EMISSIONS', 'baseline', 'YEAR_AVERAGE_PRICE', 'x_c'])
+
+    print('Extracting tax results')
     tax_results = extract_carbon_results(results_dir, result_keys)
+
+    print('Extracting REP results')
     rep_results = extract_rep_results(results_dir, result_keys)
+
+    print('Extracting heuristic results')
     heuristic_results = extract_price_targeting_results(results_dir, result_keys)
+
+    print('Extracting MPPDC results')
     mppdc_results = extract_mppdc_results(results_dir, result_keys)
 
     # Combine into single dictionary
@@ -346,6 +353,7 @@ def plot_price_surface(results, model_key, transition_year=None):
     ax.set_title(f'Prices: {model_key} {transition_year}')
 
     return fig, ax
+
 
 def plot_revenue_surface(results, model_key, transition_year=None):
     """Plot emissions surface"""
@@ -559,12 +567,12 @@ def plot_tax_rep_comparison(results, figures_dir):
     divider1 = make_axes_locatable(ax2)
     cax1 = divider1.append_axes("right", size="5%", pad=0.05)
     cb1 = fig.colorbar(im2, cax=cax1)
-    cb1.set_label('Average price (\$/MWh)', fontsize=9)
+    cb1.set_label('Average price (\$/MWh)', fontsize=7)
 
     divider2 = make_axes_locatable(ax4)
     cax2 = divider2.append_axes("right", size="5%", pad=0.05)
     cb2 = fig.colorbar(im4, cax=cax2)
-    cb2.set_label('Emissions (tCO$_{2}$)', fontsize=9)
+    cb2.set_label('Emissions price (tCO$_{2}$)', fontsize=7)
 
     cb2.formatter.set_powerlimits((6, 6))
     cb2.formatter.useMathText = True
@@ -577,21 +585,31 @@ def plot_tax_rep_comparison(results, figures_dir):
     ax1.xaxis.set_major_locator(MultipleLocator(20))
     ax1.xaxis.set_minor_locator(MultipleLocator(5))
 
-    ax3.set_xlabel('Permit price (\$/tCO$_{2}$)', fontsize=9)
-    ax4.set_xlabel('Permit price (\$/tCO$_{2}$)', fontsize=9)
+    ax3.set_xlabel('Emissions price (\$/tCO$_{2}$)', fontsize=7)
+    ax4.set_xlabel('Emissions price (\$/tCO$_{2}$)', fontsize=7)
 
-    ax1.set_ylabel('Year', fontsize=9)
-    ax3.set_ylabel('Year', fontsize=9)
+    ax1.set_ylabel('Year', fontsize=7)
+    ax3.set_ylabel('Year', fontsize=7)
 
-    ax1.set_title('Tax', fontsize=10, y=0.98)
-    ax2.set_title('REP', fontsize=10, y=0.98)
+    ax1.set_title('Tax', fontsize=8, y=0.98)
+    ax2.set_title('REP', fontsize=8, y=0.98)
 
     for a in [ax1, ax2, ax3, ax4]:
-        a.tick_params(axis='both', which='major', labelsize=7)
+        a.tick_params(axis='both', which='major', labelsize=6)
         a.tick_params(axis='both', which='minor', labelsize=6)
 
-    cb1.ax.tick_params(labelsize=7)
-    cb2.ax.tick_params(labelsize=7)
+    cb1.ax.tick_params(labelsize=6)
+    cb2.ax.tick_params(labelsize=6)
+
+    cb2.ax.yaxis.offsetText.set_fontsize(7)
+
+    # Add text
+    ax1.text(7, 2016.5, 'a', verticalalignment='bottom', horizontalalignment='left', color='white', fontsize=10,
+             weight='bold')
+    ax2.text(7, 2016.5, 'b', verticalalignment='bottom', horizontalalignment='left', color='white', fontsize=10,
+             weight='bold')
+    ax3.text(7, 2016.5, 'c', verticalalignment='bottom', horizontalalignment='left', fontsize=10, weight='bold')
+    ax4.text(7, 2016.5, 'd', verticalalignment='bottom', horizontalalignment='left', fontsize=10, weight='bold')
 
     fig.set_size_inches(6.5, 4)
     fig.subplots_adjust(left=0.09, bottom=0.10, right=0.92, top=0.95, wspace=0.1, hspace=0.16)
@@ -690,7 +708,6 @@ def plot_transition_year_comparison(results):
         """Add dividers so subplots are the the same size after adding colour bars"""
 
         for k in layout_dict.keys():
-
             divider = make_axes_locatable(layout_dict[k]['ax'])
             cax = divider.append_axes("right", size="5%", pad=0.05)
             cax.axis('off')
@@ -705,31 +722,31 @@ def plot_transition_year_comparison(results):
     layout['ax3']['cax'].axis('on')
     cb1 = fig.colorbar(layout['ax3']['im'], cax=layout['ax3']['cax'])
     cb1.ax.tick_params(labelsize=6)
-    cb1.set_label('Emissions (tCO$_{2}$)', fontsize=6)
+    cb1.set_label('Emissions (tCO$_{2}$)', fontsize=7)
     cb1.formatter.set_powerlimits((6, 6))
     cb1.formatter.useMathText = True
     t1 = cb1.ax.yaxis.get_offset_text()
-    t1.set_size(6)
+    t1.set_size(7)
     cb1.update_ticks()
 
     layout['ax6']['cax'].axis('on')
     cb2 = fig.colorbar(layout['ax6']['im'], cax=layout['ax6']['cax'])
-    cb2.set_label('Price ($/MWh)', fontsize=6)
+    cb2.set_label('Price ($/MWh)', fontsize=7)
     cb2.ax.tick_params(labelsize=6)
 
     layout['ax9']['cax'].axis('on')
     cb3 = fig.colorbar(layout['ax9']['im'], cax=layout['ax9']['cax'])
-    cb3.set_label('Baseline (tCO$_{2}$/MWh)', fontsize=6)
+    cb3.set_label('Baseline (tCO$_{2}$/MWh)', fontsize=7)
     cb3.ax.tick_params(labelsize=6)
 
     layout['ax12']['cax'].axis('on')
     cb4 = fig.colorbar(layout['ax12']['im'], cax=layout['ax12']['cax'])
-    cb4.set_label('Revenue ($)', fontsize=6)
+    cb4.set_label('Revenue ($)', fontsize=7)
     cb4.ax.tick_params(labelsize=6)
     cb4.formatter.set_powerlimits((9, 9))
     cb4.formatter.useMathText = True
     t4 = cb4.ax.yaxis.get_offset_text()
-    t4.set_size(6)
+    t4.set_size(7)
     cb4.update_ticks()
 
     # Format y-ticks and labels
@@ -746,7 +763,43 @@ def plot_transition_year_comparison(results):
         layout[a]['ax'].xaxis.set_minor_locator(MultipleLocator(10))
 
         layout[a]['ax'].tick_params(axis='both', which='major', labelsize=6)
-        layout[a]['ax'].set_xlabel('Carbon price (\$/tCO$_{2}$)', fontsize=7)
+        layout[a]['ax'].set_xlabel('Emissions price (\$/tCO$_{2}$)', fontsize=7)
+
+    # Add titles denoting transition years
+    layout['ax1']['ax'].set_title('2020', fontsize=8, pad=2)
+    layout['ax2']['ax'].set_title('2025', fontsize=8, pad=2)
+    layout['ax3']['ax'].set_title('2030', fontsize=8, pad=2)
+
+    # Add letters to differentiate plots
+    text_x = 9
+    text_y = 2016.5
+    ax1.text(text_x, text_y, 'a', verticalalignment='bottom', horizontalalignment='left', color='black', fontsize=10,
+             weight='bold')
+    ax2.text(text_x, text_y, 'b', verticalalignment='bottom', horizontalalignment='left', color='black', fontsize=10,
+             weight='bold')
+    ax3.text(text_x, text_y, 'c', verticalalignment='bottom', horizontalalignment='left', color='black', fontsize=10,
+             weight='bold')
+
+    ax4.text(text_x, text_y, 'd', verticalalignment='bottom', horizontalalignment='left', color='white', fontsize=10,
+             weight='bold')
+    ax5.text(text_x, text_y, 'e', verticalalignment='bottom', horizontalalignment='left', color='white', fontsize=10,
+             weight='bold')
+    ax6.text(text_x, text_y, 'f', verticalalignment='bottom', horizontalalignment='left', color='white', fontsize=10,
+             weight='bold')
+
+    ax7.text(text_x, text_y, 'g', verticalalignment='bottom', horizontalalignment='left', color='white', fontsize=10,
+             weight='bold')
+    ax8.text(text_x, text_y, 'h', verticalalignment='bottom', horizontalalignment='left', color='white', fontsize=10,
+             weight='bold')
+    ax9.text(text_x, text_y, 'i', verticalalignment='bottom', horizontalalignment='left', color='white', fontsize=10,
+             weight='bold')
+
+    ax10.text(text_x, text_y, 'j', verticalalignment='bottom', horizontalalignment='left', color='black', fontsize=10,
+              weight='bold')
+    ax11.text(text_x, text_y, 'k', verticalalignment='bottom', horizontalalignment='left', color='black', fontsize=10,
+              weight='bold')
+    ax12.text(text_x, text_y, 'l', verticalalignment='bottom', horizontalalignment='left', color='black', fontsize=10,
+              weight='bold')
 
     # Format labels
     fig.set_size_inches(6.5, 6)
@@ -843,6 +896,62 @@ def plot_price_surface_formatted(results):
     plt.show()
 
 
+def plot_tax_rep_comparison_first_year(results, figures_dir):
+    """REP scheme and tax comparison"""
+
+    x = [t for t in range(5, 101, 5)]
+    p_tax = [results['tax'][t]['YEAR_AVERAGE_PRICE'][2016] for t in x]
+    p_rep = [results['rep'][t]['YEAR_AVERAGE_PRICE'][2016] for t in x]
+    p_bau = results['bau']['YEAR_AVERAGE_PRICE'][2016]
+
+    fig, ax = plt.subplots()
+    ax2 = ax.twinx()
+    ax.plot([5, 100], [p_bau, p_bau], color='k', linestyle='--', alpha=0.5, linewidth=0.9)
+
+    # Plot lines
+    ax.plot(x, p_tax, 'o--', color='#d91818', alpha=0.8, linewidth=0.7, markersize=2, fillstyle='none',
+            markeredgewidth=0.5)
+    ax.plot(x, p_rep, 'o--', color='#4263f5', alpha=0.8, linestyle='--', linewidth=0.7, markersize=2, fillstyle='none',
+            markeredgewidth=0.5)
+    ax.legend(['BAU', 'Tax', 'REP'], fontsize=6, frameon=False)
+
+    # Installed gas capacity
+    g_c = [sum(v for k, v in m_results['tax'][t]['x_c'].items() if (('OCGT' in k[0]) or ('CCGT' in k[0]))
+               and (k[1] == 2016)) for t in x]
+    ax2.plot(x, g_c, 'o--', color='#4fa83d', alpha=0.8, linewidth=0.7, markersize=2, fillstyle='none',
+             markeredgewidth=0.5)
+
+    # Labels
+    ax.set_ylabel('Average price ($/MWh)', fontsize=6)
+    ax.set_xlabel('Emissions price (tCO$_{2}$/MWh', fontsize=6)
+
+    # Format axes
+    ax.yaxis.set_major_locator(MultipleLocator(20))
+    ax.yaxis.set_minor_locator(MultipleLocator(10))
+
+    ax.xaxis.set_major_locator(MultipleLocator(20))
+    ax.xaxis.set_minor_locator(MultipleLocator(5))
+
+    ax.tick_params(axis='both', which='major', labelsize=6)
+    ax2.tick_params(axis='y', which='major', labelsize=6)
+    ax2.ticklabel_format(axis='y', style='sci', scilimits=(3, 3), useMathText=True)
+    ax2.yaxis.offsetText.set_fontsize(7)
+
+    ax2.set_ylabel('New gas capacity (MW)', fontsize=6)
+    ax2.legend(['Gas'], fontsize=6, frameon=False, loc='center', bbox_to_anchor=(0.5, 0.94))
+
+    ax2.yaxis.set_major_locator(MultipleLocator(2000))
+    ax2.yaxis.set_minor_locator(MultipleLocator(1000))
+
+    fig.set_size_inches(3, 2.5)
+    fig.subplots_adjust(left=0.15, bottom=0.15, right=0.85, top=0.92)
+
+    fig.savefig(os.path.join(figures_dir, 'price_sensitivity.png'), dpi=200)
+    fig.savefig(os.path.join(figures_dir, 'price_sensitivity.pdf'))
+
+    plt.show()
+
+
 if __name__ == '__main__':
     results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote')
     output_directory = os.path.join(os.path.dirname(__file__), 'output', 'tmp')
@@ -907,8 +1016,10 @@ if __name__ == '__main__':
     # plot_tax_rep_comparison(m_results, figures_directory)
 
     # Comparing transition years
-    # plot_transition_year_comparison(m_results)
+    plot_transition_year_comparison(m_results)
 
     # Compare baselines from MPPDC and heuristic solution protocols
     # plot_mppdc_heuristic_comparison(m_results)
 
+    # Compare carbon tax and REP scheme
+    # plot_tax_rep_comparison_first_year(m_results, figures_directory)

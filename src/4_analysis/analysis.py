@@ -409,7 +409,11 @@ class AnalyseResults:
             else:
                 values = results[stage][iteration][key]
 
-        return pd.Series(values).rename_axis('year')
+        if key in ['x_c']:
+            return pd.Series(values).rename_axis(['generator', 'year'])
+
+        else:
+            return pd.Series(values).rename_axis('year')
 
 
 if __name__ == '__main__':
