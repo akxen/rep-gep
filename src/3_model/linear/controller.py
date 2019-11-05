@@ -52,6 +52,6 @@ if __name__ == '__main__':
             cases.run_price_smoothing_heuristic_case(case_params, output_directory)
 
             # Only run MPPDC if following condition(s) met. Used to compare MPPDC to heuristic solution.
-            if c == 40:
+            if c in [25, 50, 75, 100]:
                 # Target prices using MPPDC model
                 cases.run_price_smoothing_mppdc_case(case_params, output_directory)
