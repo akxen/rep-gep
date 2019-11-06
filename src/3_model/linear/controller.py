@@ -24,7 +24,7 @@ if __name__ == '__main__':
     case_params = {'mode': 'bau_deviation_minimisation'}
 
     # Run BAU case
-    cases.run_bau_case(start, end, scenarios, output_directory)
+    # cases.run_bau_case(start, end, scenarios, output_directory)
 
     # Run models with different carbon prices
     # for c in range(5, 101, 5):
@@ -33,8 +33,8 @@ if __name__ == '__main__':
         permit_prices_model = {y: float(c) for y in range(start, end + 1)}
 
         # Run REP case with given permit price
-        t_start = time.time()
-        cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
+        # t_start = time.time()
+        # cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
 
         # Run price targeting models with different transition years
         # for transition_year in [2020, 2025, 2030]:

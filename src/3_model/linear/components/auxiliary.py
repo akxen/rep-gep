@@ -59,7 +59,8 @@ class BaselineUpdater:
         """Define model variables"""
 
         # Emissions intensity baseline
-        m.baseline = Var(m.Y, initialize=0, within=NonNegativeReals)
+        # m.baseline = Var(m.Y, initialize=0, within=NonNegativeReals)
+        m.baseline = Var(m.Y, initialize=0)
 
         # Dummy variables used to minimise price difference between years in model horizon
         m.z_p1 = Var(m.Y, initialize=0, within=NonNegativeReals)
