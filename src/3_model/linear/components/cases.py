@@ -379,6 +379,14 @@ class ModelCases:
             if max_cap_difference < 1:
                 stop_flag = True
 
+            # Check if max iterations exceeded
+            elif counter > 10:
+                stop_flag = True
+
+                message = f'Max iterations exceeded. Exiting loop.'
+                print(message)
+                self.algorithm_logger('run_price_smoothing_heuristic_case', message)
+
             else:
                 # Update dictionary of price setting generator program inputs
                 psg_input = r_p
@@ -522,6 +530,14 @@ class ModelCases:
             # Check if capacity variables have changed
             if max_cap_difference < 1:
                 stop_flag = True
+
+            # Check if max iterations exceeded
+            elif counter > 10:
+                stop_flag = True
+
+                message = f'Max iterations exceeded. Exiting loop.'
+                print(message)
+                self.algorithm_logger('run_price_smoothing_mppdc_case', message)
 
             else:
                 # Update dictionary of fixed variables to be used in next iteration
