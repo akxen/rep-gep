@@ -27,8 +27,8 @@ if __name__ == '__main__':
     cases.run_bau_case(start, end, scenarios, output_directory)
 
     # Run models with different carbon prices
-    for c in range(5, 101, 5):
-
+    # for c in range(5, 101, 5):
+    for c in [25]:
         # Permit prices to be used in REP and price targeting models
         permit_prices_model = {y: float(c) for y in range(start, end + 1)}
 
@@ -37,7 +37,8 @@ if __name__ == '__main__':
         cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
 
         # Run price targeting models with different transition years
-        for transition_year in [2020, 2025, 2030]:
+        # for transition_year in [2020, 2025, 2030]:
+        for transition_year in [2030]:
             print(f'Running models with transition year: {transition_year}')
 
             # Update transition year
@@ -51,7 +52,7 @@ if __name__ == '__main__':
             # Target prices using auxiliary model
             cases.run_price_smoothing_heuristic_case(case_params, output_directory)
 
-            # Only run MPPDC if following condition(s) met. Used to compare MPPDC to heuristic solution.
-            if c in [25, 50, 75, 100]:
-                # Target prices using MPPDC model
-                cases.run_price_smoothing_mppdc_case(case_params, output_directory)
+            # # Only run MPPDC if following condition(s) met. Used to compare MPPDC to heuristic solution.
+            # if c in [25, 50, 75, 100]:
+            #     # Target prices using MPPDC model
+            #     cases.run_price_smoothing_mppdc_case(case_params, output_directory)

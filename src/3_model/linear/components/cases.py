@@ -371,7 +371,9 @@ class ModelCases:
 
             # Max difference in capacity sizing decision between iterations
             max_cap_difference = max(abs(psg_input['x_c'][k] - m_p.x_c[k].value) for k in m_p.x_c.keys())
-            print(f'Max capacity difference: {max_cap_difference} MW')
+            message = f'Max capacity difference: {max_cap_difference} MW'
+            print(message)
+            self.algorithm_logger('run_price_smoothing_heuristic_case', message)
 
             # Check if capacity variables have changed
             if max_cap_difference < 1:
