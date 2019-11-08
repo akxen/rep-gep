@@ -29,7 +29,7 @@ class Primal:
         # Solver options
         self.tee = True
         self.keepfiles = False
-        self.solver_options = {}  # 'MIPGap': 0.0005
+        self.solver_options = {'timelimit': 2}  # 'MIPGap': 0.0005
         self.opt = SolverFactory('cplex', solver_io='lp')
 
     @staticmethod
@@ -2014,6 +2014,6 @@ if __name__ == '__main__':
     primal_model.permit_price.fix(40)
 
     t_start = time.time()
-    primal.solve_model(primal_model)
+    primal_model, primal_status = primal.solve_model(primal_model)
 
     print(f'Solved in {time.time() - t_start}s')
