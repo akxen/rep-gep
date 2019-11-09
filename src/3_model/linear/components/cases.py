@@ -11,6 +11,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.
 
 from pyomo.environ import *
 import matplotlib.pyplot as plt
+from pyomo.util.infeasible import log_infeasible_constraints
 
 from targets import Targets
 from gep import MPPDCModel, Primal, Dual
@@ -139,6 +140,7 @@ class ModelCases:
         # Run model
         self.algorithm_logger('run_bau_case', 'Starting solve')
         m, status = self.run_primal_fixed_policy(first_year, final_year, scenarios_per_year, permit_prices, baselines)
+        log_infeasible_constraints(m)
         self.algorithm_logger('run_bau_case', 'Finished solve')
 
         # Results to extract
@@ -192,6 +194,7 @@ class ModelCases:
         # Run model (carbon tax case)
         self.algorithm_logger('run_rep_case', 'Starting carbon tax case solve')
         m, status = self.run_primal_fixed_policy(first_year, final_year, scenarios_per_year, permit_prices, baselines)
+        log_infeasible_constraints(m)
         self.algorithm_logger('run_rep_case', 'Finished carbon tax case solve')
 
         # Model results
@@ -221,6 +224,7 @@ class ModelCases:
             self.algorithm_logger('run_rep_case', f'Starting solve for REP iteration={i}')
             m, status = self.run_primal_fixed_policy(first_year, final_year, scenarios_per_year, permit_prices,
                                                      rep_baselines)
+            log_infeasible_constraints(m)
             self.algorithm_logger('run_rep_case', f'Finished solved for REP iteration={i}')
 
             # Model results
@@ -364,6 +368,9 @@ class ModelCases:
             # Solve primal program
             m_p, m_p_status = primal.solve_model(m_p)
 
+            # Log all infeasible constraints
+            log_infeasible_constraints(m_p)
+
             # Get results
             r_p = copy.deepcopy({v: self.extract_result(m_p, v) for v in primal_keys})
             r_p['PRICES'] = copy.deepcopy({k: m_p.dual[m_p.POWER_BALANCE[k]] for k in m_p.POWER_BALANCE.keys()})
@@ -506,6 +513,19 @@ class ModelCases:
             # Solve MPPDC
             m_m, m_m_status = mppdc.solve_model(m_m)
 
+            # Model timeout will cause sub-optimal termination condition
+            if m_m_status.solver.termination_condition != TerminationCondition.optimal:
+                iteration_results[counter] = None
+                self.algorithm_logger('run_price_smoothing_mppdc_case', f'Sub-optimal solution')
+                self.algorithm_logger('run_price_smoothing_mppdc_case', f'User time: {m_m_status.solver.user_time}s')
+
+                # No primal model solved
+                m_p, m_p_status = None, None
+                break
+
+            # Log infeasible constraints
+            log_infeasible_constraints(m_m)
+
             # Results from MPPDC program
             r_m = copy.deepcopy({v: self.extract_result(m_m, v) for v in mppdc_keys})
             iteration_results[counter] = r_m
@@ -517,6 +537,7 @@ class ModelCases:
 
             # Solve primal model
             m_p, m_p_status = primal.solve_model(m_p)
+            log_infeasible_constraints(m_p)
 
             # Results from primal program
             p_r = copy.deepcopy({v: self.extract_result(m_p, v) for v in primal_vars})
@@ -532,7 +553,7 @@ class ModelCases:
                 stop_flag = True
 
             # Check if max iterations exceeded
-            elif counter > 10:
+            elif counter > 9:
                 stop_flag = True
 
                 message = f'Max iterations exceeded. Exiting loop.'

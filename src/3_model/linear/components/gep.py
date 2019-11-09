@@ -12,7 +12,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'base'))
 sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, os.pardir, os.pardir, '4_analysis'))
 
 from pyomo.environ import *
-from pyomo.util.infeasible import log_infeasible_constraints
+from pyomo.opt import SolverStatus, TerminationCondition
 
 from base.data import ModelData
 from base.components import CommonComponents
@@ -29,7 +29,7 @@ class Primal:
         # Solver options
         self.tee = True
         self.keepfiles = False
-        self.solver_options = {}  # 'MIPGap': 0.0005, 'timelimit': 2
+        self.solver_options = {}  # 'MIPGap': 0.0005,
         self.opt = SolverFactory('cplex', solver_io='lp')
 
     @staticmethod
@@ -673,9 +673,6 @@ class Primal:
 
         # Solve model
         solve_status = self.opt.solve(m, tee=self.tee, options=self.solver_options, keepfiles=self.keepfiles)
-
-        # Log infeasible constraints if they exist
-        log_infeasible_constraints(m)
 
         return m, solve_status
 
@@ -1380,9 +1377,6 @@ class Dual:
         # Solve model
         solve_status = self.opt.solve(m, tee=self.tee, options=self.solver_options, keepfiles=self.keepfiles)
 
-        # Log infeasible constraints if they exist
-        log_infeasible_constraints(m)
-
         return m, solve_status
 
 
@@ -1397,7 +1391,7 @@ class MPPDCModel:
         # Solver options
         self.tee = True
         self.keepfiles = False
-        self.solver_options = {}  # 'MIPGap': 0.0005, 'optimalitytarget': 2, 'simplex tolerances optimality': 1e-4
+        self.solver_options = {'timelimit': 10000}  # 'MIPGap': 0.0005, 'optimalitytarget': 2, 'simplex tolerances optimality': 1e-4
         self.opt = SolverFactory('cplex', solver_io='lp')
 
     def define_parameters(self, m):
@@ -1710,9 +1704,6 @@ class MPPDCModel:
 
         # Solve model
         solve_status = self.opt.solve(m, tee=self.tee, options=self.solver_options, keepfiles=self.keepfiles)
-
-        # Log infeasible constraints if they exist
-        log_infeasible_constraints(m)
 
         return m, solve_status
 
