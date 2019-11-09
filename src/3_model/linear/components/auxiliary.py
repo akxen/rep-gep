@@ -65,6 +65,10 @@ class BaselineUpdater:
         m.z_p1 = Var(m.Y, initialize=0, within=NonNegativeReals)
         m.z_p2 = Var(m.Y, initialize=0, within=NonNegativeReals)
 
+        # Dummy variables used to minimise baseline deviation over model horizon
+        m.z_b1 = Var(m.Y, initialize=0, within=NonNegativeReals)
+        m.z_b2 = Var(m.Y, initialize=0, within=NonNegativeReals)
+
         return m
 
     def define_expressions(self, m, psg_results):
@@ -217,6 +221,17 @@ class BaselineUpdater:
         m.YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED = Expression(m.Y,
                                                                      rule=year_sum_cumulative_price_difference_weighted_rule)
 
+        def year_absolute_baseline_difference_rule(_m, y):
+            """Absolute difference in baseline's value between successive years"""
+
+            return m.z_b1[y] + m.z_b2[y]
+
+        # Sum of differences between baseline over successive years
+        m.YEAR_BASELINE_ABSOLUTE_DIFFERENCE = Expression(m.Y, rule=year_absolute_baseline_difference_rule)
+
+        # Total baseline difference
+        m.TOTAL_BASELINE_DEVIATION = Expression(expr=sum(m.YEAR_BASELINE_ABSOLUTE_DIFFERENCE[y] for y in m.Y))
+
         return m
 
     def define_constraints(self, m):
@@ -282,13 +297,36 @@ class BaselineUpdater:
         m.NON_NEGATIVE_TRANSITION_REVENUE_CONS = Constraint(rule=non_negative_transition_revenue_rule)
         m.NON_NEGATIVE_TRANSITION_REVENUE_CONS.deactivate()
 
+        def year_baseline_deviation_1_rule(_m, y):
+            """Constraints used to compute absolute difference between baselines between successive years"""
+
+            if y == m.Y.first():
+                return Constraint.Skip
+            else:
+                return m.z_b1[y] >= m.baseline[y] - m.baseline[y - 1]
+
+        # Baseline deviation between successive intervals
+        m.BASELINE_DEVIATION_1 = Constraint(m.Y, rule=year_baseline_deviation_1_rule)
+
+        def year_baseline_deviation_2_rule(_m, y):
+            """Constraints used to compute absolute difference between baselines between successive years"""
+
+            if y == m.Y.first():
+                return Constraint.Skip
+            else:
+                return m.z_b2[y] >= m.baseline[y - 1] - m.baseline[y]
+
+        # Baseline deviation between successive intervals
+        m.BASELINE_DEVIATION_2 = Constraint(m.Y, rule=year_baseline_deviation_2_rule)
+
         return m
 
     def define_objective(self, m):
         """Define objective function"""
 
         # Minimise price difference between consecutive years
-        m.OBJECTIVE = Objective(expr=m.YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED[self.transition_year],
+        m.OBJECTIVE = Objective(expr=m.YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED[self.transition_year]
+                                     + (m.TOTAL_BASELINE_DEVIATION * 10),
                                 sense=minimize)
 
         return m
@@ -388,4 +426,3 @@ if __name__ == '__main__':
 
     # Construct model
     model = baseline.construct_model(psg)
-

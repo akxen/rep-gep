@@ -29,7 +29,7 @@ class Primal:
         # Solver options
         self.tee = True
         self.keepfiles = False
-        self.solver_options = {'timelimit': 2}  # 'MIPGap': 0.0005
+        self.solver_options = {}  # 'MIPGap': 0.0005, 'timelimit': 2
         self.opt = SolverFactory('cplex', solver_io='lp')
 
     @staticmethod
@@ -1306,7 +1306,7 @@ class Dual:
 
             else:
                 return (- m.sigma_15[g, y, s, t] + m.sigma_17[g, y, s, t] - m.zeta_1[g, y, s, t] - m.sigma_18[g, y, s] +
-                       m.sigma_19[g, y, s] == 0)
+                        m.sigma_19[g, y, s] == 0)
 
         # Existing storage unit energy
         m.ENERGY_CANDIDATE_STORAGE = Constraint(m.G_C_STORAGE, m.Y, m.S, m.T, rule=energy_candidate_storage_unit)
@@ -1505,6 +1505,17 @@ class MPPDCModel:
         # Strong duality constraint violation
         m.STRONG_DUALITY_VIOLATION_COST = Expression(expr=(m.sd_1 + m.sd_2) * m.STRONG_DUALITY_VIOLATION_PENALTY)
 
+        def year_absolute_baseline_difference_rule(_m, y):
+            """Absolute difference in baseline's value between successive years"""
+
+            return m.z_b1[y] + m.z_b2[y]
+
+        # Sum of differences between baseline over successive years
+        m.YEAR_BASELINE_ABSOLUTE_DIFFERENCE = Expression(m.Y, rule=year_absolute_baseline_difference_rule)
+
+        # Total baseline difference
+        m.TOTAL_BASELINE_DEVIATION = Expression(expr=sum(m.YEAR_BASELINE_ABSOLUTE_DIFFERENCE[y] for y in m.Y))
+
         return m
 
     def define_constraints(self, m):
@@ -1580,25 +1591,23 @@ class MPPDCModel:
             """Absolute difference between baseline for successive years"""
 
             if y == m.Y.first():
-                return m.z_b1[y] >= 1 - m.baseline[y]
+                return Constraint.Skip
             else:
-                return m.z_b1[y] >= m.baseline[y - 1] - m.baseline[y]
+                return m.z_b1[y] >= m.baseline[y] - m.baseline[y - 1]
 
         # Emissions intensity baseline deviation - 1
         m.BASELINE_DEVIATION_1 = Constraint(m.Y, rule=baseline_deviation_1_rule)
-        m.BASELINE_DEVIATION_1.deactivate()
 
         def baseline_deviation_2_rule(_m, y):
             """Absolute difference between baseline for successive years"""
 
             if y == m.Y.first():
-                return m.z_b2[y] >= m.baseline[y] - 1
+                return Constraint.Skip
             else:
-                return m.z_b2[y] >= m.baseline[y] - m.baseline[y - 1]
+                return m.z_b2[y] >= m.baseline[y - 1] - m.baseline[y]
 
         # Emissions intensity baseline deviation - 2
         m.BASELINE_DEVIATION_2 = Constraint(m.Y, rule=baseline_deviation_2_rule)
-        m.BASELINE_DEVIATION_2.deactivate()
 
         def year_scheme_revenue_neutral_rule(_m, y):
             """Ensure that net scheme revenue in each year = 0 (equivalent to a REP scheme)"""
@@ -1625,7 +1634,8 @@ class MPPDCModel:
 
         # Price targeting objective
         m.OBJECTIVE = Objective(expr=m.YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED[self.transition_year]
-                                     + m.STRONG_DUALITY_VIOLATION_COST,
+                                     + m.STRONG_DUALITY_VIOLATION_COST
+                                     + (m.TOTAL_BASELINE_DEVIATION * 10),
                                 sense=minimize)
 
         return m
