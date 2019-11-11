@@ -192,7 +192,10 @@ def extract_mppdc_results(results_dir, keys):
                 r = analysis.extract_results(results_dir, f, k, stage='stage_3_price_targeting', iteration='max')
 
             # Append results to main container
-            results[transition_year][carbon_price][k] = r.to_dict()
+            if results[transition_year][carbon_price][k] is not None:
+                results[transition_year][carbon_price][k] = r.to_dict()
+            else:
+                results[transition_year][carbon_price][k] = None
 
     return results
 
@@ -953,13 +956,13 @@ def plot_tax_rep_comparison_first_year(results, figures_dir):
 
 
 if __name__ == '__main__':
-    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote')
-    output_directory = os.path.join(os.path.dirname(__file__), 'output', 'tmp')
+    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'local')
+    output_directory = os.path.join(os.path.dirname(__file__), 'output', 'tmp', 'local')
     figures_directory = os.path.join(os.path.dirname(__file__), 'output', 'figures')
 
     # Extract model results
-    # c_results = extract_model_results(results_directory, output_directory)
-    m_results = load_model_results(output_directory)
+    c_results = extract_model_results(results_directory, output_directory)
+    # m_results = load_model_results(output_directory)
 
     # # Plot surfaces
     # plot_emissions_surface(m_results, 'tax')
@@ -1016,7 +1019,7 @@ if __name__ == '__main__':
     # plot_tax_rep_comparison(m_results, figures_directory)
 
     # Comparing transition years
-    plot_transition_year_comparison(m_results)
+    # plot_transition_year_comparison(m_results)
 
     # Compare baselines from MPPDC and heuristic solution protocols
     # plot_mppdc_heuristic_comparison(m_results)

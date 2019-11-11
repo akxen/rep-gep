@@ -401,7 +401,10 @@ class AnalyseResults:
                     values = results[stage][key]
 
                 elif model is None:
-                    values = results[stage][max_iteration][key]
+                    if results[stage][max_iteration] is not None:
+                        values = results[stage][max_iteration][key]
+                    else:
+                        return None
 
                 else:
                     values = results[stage][max_iteration][model][key]
@@ -423,34 +426,34 @@ if __name__ == '__main__':
     # Object used to analyse results
     analysis = AnalyseResults()
 
-    # Transition year
-    transition_year = 2025
-
-    mppdc_filename = f"mppdc_baudev_ty-{transition_year}_cp-40.pickle"
-    heuristic_filename = f"heuristic_baudev_ty-{transition_year}_cp-40.pickle"
-
-    # Load model results given a filename
-    r = analysis.load_results(results_directory, mppdc_filename)
-    r2 = analysis.load_results(results_directory, heuristic_filename)
-    r3 = analysis.load_results(results_directory, f'rep_case.pickle')
-
-    # Prices from different models
-    p_bau = analysis.get_average_prices(results_directory, 'bau_case.pickle', None, 'PRICES', -1)
-    p_rep = analysis.get_average_prices(results_directory, 'rep_case.pickle', 'stage_2_rep', 'PRICES', -1)
-    p_tax = analysis.get_average_prices(results_directory, 'rep_case.pickle', 'stage_1_carbon_tax', 'PRICES', -1)
-    p_mppdc = analysis.get_average_prices(results_directory, mppdc_filename, 'stage_3_price_targeting', 'lamb', 1)
-    p_heuristic = analysis.get_average_prices(results_directory, heuristic_filename, 'stage_3_price_targeting', 'PRICES', -1)
-
-    # Baselines from different models
-    b_mppdc = analysis.get_baselines(results_directory, mppdc_filename)
-    b_heuristic = analysis.get_baselines(results_directory, heuristic_filename)
+    # # Transition year
+    # transition_year = 2025
+    #
+    # mppdc_filename = f"mppdc_baudev_ty-{transition_year}_cp-40.pickle"
+    # heuristic_filename = f"heuristic_baudev_ty-{transition_year}_cp-40.pickle"
+    #
+    # # Load model results given a filename
+    # r = analysis.load_results(results_directory, mppdc_filename)
+    # r2 = analysis.load_results(results_directory, heuristic_filename)
+    # r3 = analysis.load_results(results_directory, f'rep_case.pickle')
+    #
+    # # Prices from different models
+    # p_bau = analysis.get_average_prices(results_directory, 'bau_case.pickle', None, 'PRICES', -1)
+    # p_rep = analysis.get_average_prices(results_directory, 'rep_case.pickle', 'stage_2_rep', 'PRICES', -1)
+    # p_tax = analysis.get_average_prices(results_directory, 'rep_case.pickle', 'stage_1_carbon_tax', 'PRICES', -1)
+    # p_mppdc = analysis.get_average_prices(results_directory, mppdc_filename, 'stage_3_price_targeting', 'lamb', 1)
+    # p_heuristic = analysis.get_average_prices(results_directory, heuristic_filename, 'stage_3_price_targeting', 'PRICES', -1)
+    #
+    # # Baselines from different models
+    # b_mppdc = analysis.get_baselines(results_directory, mppdc_filename)
+    # b_heuristic = analysis.get_baselines(results_directory, heuristic_filename)
 
     # Plotting baselines - price deviation objective
-    fig, ax = plt.subplots()
-    b_mppdc.plot(ax=ax, color='red')
-    b_heuristic.plot(ax=ax, color='blue')
-    ax.set_title('Price deviation objective')
-    plt.show()
+    # fig, ax = plt.subplots()
+    # b_mppdc.plot(ax=ax, color='red')
+    # b_heuristic.plot(ax=ax, color='blue')
+    # ax.set_title('Price deviation objective')
+    # plt.show()
 
     # fig, ax = plt.subplots()
     # p_price_dev_mppdc['average_price_real'].plot(ax=ax, color='red', alpha=0.5)
@@ -459,10 +462,15 @@ if __name__ == '__main__':
     # ax.set_title('Price deviation objective')
     # plt.show()
 
-    fig, ax = plt.subplots()
-    p_bau['average_price_real'].plot(ax=ax, color='red', alpha=0.5)
-    p_tax['average_price_real'].plot(ax=ax, color='blue', alpha=0.5)
-    p_rep['average_price_real'].plot(ax=ax, color='green', alpha=0.5)
-    p_mppdc['average_price_real'].plot(ax=ax, color='orange', alpha=0.5)
-    p_heuristic['average_price_real'].plot(ax=ax, color='purple', alpha=0.5)
-    plt.show()
+    # fig, ax = plt.subplots()
+    # p_bau['average_price_real'].plot(ax=ax, color='red', alpha=0.5)
+    # p_tax['average_price_real'].plot(ax=ax, color='blue', alpha=0.5)
+    # p_rep['average_price_real'].plot(ax=ax, color='green', alpha=0.5)
+    # p_mppdc['average_price_real'].plot(ax=ax, color='orange', alpha=0.5)
+    # p_heuristic['average_price_real'].plot(ax=ax, color='purple', alpha=0.5)
+    # plt.show()
+
+    rr = analysis.load_results(results_directory, 'mppdc_baudev_ty-2025_cp-100.pickle')
+
+    r = analysis.extract_results(results_directory, 'mppdc_baudev_ty-2025_cp-100.pickle', 'baseline',
+                                 stage='stage_3_price_targeting', iteration='max', model=None)
