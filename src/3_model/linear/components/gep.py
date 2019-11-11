@@ -1391,7 +1391,7 @@ class MPPDCModel:
         # Solver options
         self.tee = True
         self.keepfiles = False
-        self.solver_options = {'timelimit': 10000}  # 'MIPGap': 0.0005, 'optimalitytarget': 2, 'simplex tolerances optimality': 1e-4
+        self.solver_options = {'timelimit': 7200}  # 'MIPGap': 0.0005, 'optimalitytarget': 2, 'simplex tolerances optimality': 1e-4
         self.opt = SolverFactory('cplex', solver_io='lp')
 
     def define_parameters(self, m):
