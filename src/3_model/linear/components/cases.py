@@ -387,7 +387,7 @@ class ModelCases:
                 stop_flag = True
 
             # Check if max iterations exceeded
-            elif counter > 10:
+            elif counter > 9:
                 stop_flag = True
 
                 message = f'Max iterations exceeded. Exiting loop.'

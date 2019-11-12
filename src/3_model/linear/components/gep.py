@@ -1391,7 +1391,8 @@ class MPPDCModel:
         # Solver options
         self.tee = True
         self.keepfiles = False
-        self.solver_options = {'timelimit': 7200}  # 'MIPGap': 0.0005, 'optimalitytarget': 2, 'simplex tolerances optimality': 1e-4
+        self.solver_options = {
+            'timelimit': 7200}  # 'MIPGap': 0.0005, 'optimalitytarget': 2, 'simplex tolerances optimality': 1e-4
         self.opt = SolverFactory('cplex', solver_io='lp')
 
     def define_parameters(self, m):
@@ -1414,6 +1415,9 @@ class MPPDCModel:
 
         # Average price in year prior to model start
         m.YEAR_AVERAGE_PRICE_0 = Param(initialize=100, mutable=True)
+
+        # Price targets
+        m.YEAR_AVERAGE_PRICE_TARGET = Param(m.Y, initialize=100, mutable=True)
 
         # Strong duality constraint violation penalty
         m.STRONG_DUALITY_VIOLATION_PENALTY = Param(initialize=float(1e5))
@@ -1441,6 +1445,14 @@ class MPPDCModel:
         # Dummy variables used to minimise deviations to baseline between successive years
         m.z_b1 = Var(m.Y, within=NonNegativeReals, initialize=0)
         m.z_b2 = Var(m.Y, within=NonNegativeReals, initialize=0)
+
+        # Dummy variables used to minimise deviation between average price and target trajectory
+        m.z_t1 = Var(m.Y, within=NonNegativeReals, initialize=0)
+        m.z_t2 = Var(m.Y, within=NonNegativeReals, initialize=0)
+
+        # Amount by which average price constraint is violated
+        m.pc_violation_up = Var(m.Y, within=NonNegativeReals, initialize=0)
+        m.pc_violation_lo = Var(m.Y, within=NonNegativeReals, initialize=0)
 
         return m
 
@@ -1581,6 +1593,24 @@ class MPPDCModel:
         m.PRICE_BAU_DEVIATION_2 = Constraint(m.Y, rule=price_bau_deviation_2_rule)
         m.PRICE_BAU_DEVIATION_2.deactivate()
 
+        def price_target_deviation_1_rule(_m, y):
+            """Absolute difference between prices in successive years relative to first year BAU price"""
+
+            return m.z_t1[y] >= m.YEAR_AVERAGE_PRICE[y] - m.YEAR_AVERAGE_PRICE_TARGET[y]
+
+        # BAU price deviation - 1
+        m.PRICE_TARGET_DEVIATION_1 = Constraint(m.Y, rule=price_target_deviation_1_rule)
+        m.PRICE_TARGET_DEVIATION_1.deactivate()
+
+        def price_target_deviation_2_rule(_m, y):
+            """Constraint computing absolute difference between prices in successive years"""
+
+            return m.z_t2[y] >= m.YEAR_AVERAGE_PRICE_TARGET[y] - m.YEAR_AVERAGE_PRICE[y]
+
+        # BAU price deviation - 2
+        m.PRICE_TARGET_DEVIATION_2 = Constraint(m.Y, rule=price_target_deviation_2_rule)
+        m.PRICE_TARGET_DEVIATION_2.deactivate()
+
         def baseline_deviation_1_rule(_m, y):
             """Absolute difference between baseline for successive years"""
 
@@ -1621,15 +1651,23 @@ class MPPDCModel:
         m.NON_NEGATIVE_TRANSITION_REVENUE_CONS = Constraint(rule=non_negative_transition_revenue_rule)
         m.NON_NEGATIVE_TRANSITION_REVENUE_CONS.deactivate()
 
+        def price_constraint_rule(_m, y):
+            """Enforce prices in each year meet a fixed objective"""
+
+            return m.YEAR_AVERAGE_PRICE[y] + m.pc_violation_up[y] - m.pc_violation_lo[y] == m.YEAR_AVERAGE_PRICE_0
+
+        # Constraint used to force equilibrium prices to particular values
+        m.PRICE_CONSTRAINT = Constraint(m.Y, rule=price_constraint_rule)
+
         return m
 
     def define_objective(self, m):
         """MPPDC objective function"""
 
         # Price targeting objective
-        m.OBJECTIVE = Objective(expr=m.YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED[self.transition_year]
+        m.OBJECTIVE = Objective(expr=m.TOTAL_BASELINE_DEVIATION
                                      + m.STRONG_DUALITY_VIOLATION_COST
-                                     + (m.TOTAL_BASELINE_DEVIATION * 10),
+                                     + (1000 * sum(m.pc_violation_up[y] + m.pc_violation_lo[y] for y in m.Y)),
                                 sense=minimize)
 
         return m

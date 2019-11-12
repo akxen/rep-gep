@@ -69,6 +69,10 @@ class BaselineUpdater:
         m.z_b1 = Var(m.Y, initialize=0, within=NonNegativeReals)
         m.z_b2 = Var(m.Y, initialize=0, within=NonNegativeReals)
 
+        # Amount by which average price constraint is violated
+        m.pc_violation_up = Var(m.Y, within=NonNegativeReals, initialize=0)
+        m.pc_violation_lo = Var(m.Y, within=NonNegativeReals, initialize=0)
+
         return m
 
     def define_expressions(self, m, psg_results):
@@ -319,14 +323,22 @@ class BaselineUpdater:
         # Baseline deviation between successive intervals
         m.BASELINE_DEVIATION_2 = Constraint(m.Y, rule=year_baseline_deviation_2_rule)
 
+        def price_constraint_rule(_m, y):
+            """Enforce prices in each year meet a fixed objective"""
+
+            return m.YEAR_AVERAGE_PRICE[y] + m.pc_violation_up[y] - m.pc_violation_lo[y] == m.YEAR_AVERAGE_PRICE_0
+
+        # Constraint used to force equilibrium prices to particular values
+        m.PRICE_CONSTRAINT = Constraint(m.Y, rule=price_constraint_rule)
+
         return m
 
     def define_objective(self, m):
         """Define objective function"""
 
         # Minimise price difference between consecutive years
-        m.OBJECTIVE = Objective(expr=m.YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED[self.transition_year]
-                                     + (m.TOTAL_BASELINE_DEVIATION * 10),
+        m.OBJECTIVE = Objective(expr=m.TOTAL_BASELINE_DEVIATION
+                                     + (1000 * sum(m.pc_violation_up[y] + m.pc_violation_lo[y] for y in m.Y)),
                                 sense=minimize)
 
         return m
