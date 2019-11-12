@@ -184,7 +184,12 @@ def extract_mppdc_results(results_dir, keys):
 
         # Extract information for each  key
         for k in keys:
-            if k == 'YEAR_AVERAGE_PRICE':
+            # Check that results are available by extracting the baseline (should exist for all models)
+            raw = analysis.extract_results(results_dir, f, 'baseline', stage='stage_3_price_targeting', iteration='max')
+            if raw is None:
+                r = None
+
+            elif k == 'YEAR_AVERAGE_PRICE':
                 r = analysis.get_average_prices(results_dir, f, 'stage_3_price_targeting', 'lamb', 1)
                 r = r.loc[:, 'average_price_real']
 
@@ -192,7 +197,7 @@ def extract_mppdc_results(results_dir, keys):
                 r = analysis.extract_results(results_dir, f, k, stage='stage_3_price_targeting', iteration='max')
 
             # Append results to main container
-            if results[transition_year][carbon_price][k] is not None:
+            if r is not None:
                 results[transition_year][carbon_price][k] = r.to_dict()
             else:
                 results[transition_year][carbon_price][k] = None
@@ -820,7 +825,7 @@ def plot_mppdc_heuristic_comparison(results):
     fig, (ax1, ax2, ax3) = plt.subplots(nrows=1, ncols=3, sharey=True, sharex=True)
 
     # Transition year and carbon price
-    cp = 40
+    cp = 100
 
     # Extract results
     b_r = results['rep'][cp]['baseline']
@@ -830,7 +835,10 @@ def plot_mppdc_heuristic_comparison(results):
         b_h = results['heuristic'][ty][cp]['baseline']
 
         # X-axis
-        x = list(b_m.keys())
+        try:
+            x = list(b_m.keys())
+        except:
+            continue
         x.sort()
 
         # Y-axis plots
@@ -961,8 +969,8 @@ if __name__ == '__main__':
     figures_directory = os.path.join(os.path.dirname(__file__), 'output', 'figures')
 
     # Extract model results
-    c_results = extract_model_results(results_directory, output_directory)
-    # m_results = load_model_results(output_directory)
+    # c_results = extract_model_results(results_directory, output_directory)
+    m_results = load_model_results(output_directory)
 
     # # Plot surfaces
     # plot_emissions_surface(m_results, 'tax')
@@ -1022,7 +1030,7 @@ if __name__ == '__main__':
     # plot_transition_year_comparison(m_results)
 
     # Compare baselines from MPPDC and heuristic solution protocols
-    # plot_mppdc_heuristic_comparison(m_results)
+    plot_mppdc_heuristic_comparison(m_results)
 
     # Compare carbon tax and REP scheme
     # plot_tax_rep_comparison_first_year(m_results, figures_directory)
