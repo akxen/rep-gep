@@ -869,6 +869,27 @@ def plot_mppdc_heuristic_comparison(results):
     plt.show()
 
 
+def plot_mppdc_heuristic_check(results, key, transition_year, carbon_price):
+    """Check MPPDC and heuristic results"""
+
+    fig, ax = plt.subplots()
+    r_h = results['heuristic'][transition_year][carbon_price][key]
+    r_m = results['mppdc'][transition_year][carbon_price][key]
+
+    lists_h = sorted(r_h.items())
+    x_h, y_h = zip(*lists_h)
+    ax.plot(x_h, y_h, color='red', alpha=0.8)
+
+    lists_m = sorted(r_m.items())
+    x_m, y_m = zip(*lists_m)
+    ax.plot(x_m, y_m, color='blue', alpha=0.8)
+
+    ax.legend(['heuristic', 'mppdc'])
+
+    ax.set_title(f'{key} {transition_year} {carbon_price}')
+    plt.show()
+
+
 def plot_price_surface_formatted(results):
     """Plot a formatted price surface"""
 
@@ -1030,7 +1051,14 @@ if __name__ == '__main__':
     # plot_transition_year_comparison(m_results)
 
     # Compare baselines from MPPDC and heuristic solution protocols
-    plot_mppdc_heuristic_comparison(m_results)
+    # plot_mppdc_heuristic_comparison(m_results)
 
     # Compare carbon tax and REP scheme
     # plot_tax_rep_comparison_first_year(m_results, figures_directory)
+
+    for c in [25, 50, 75]:
+        for y in [2020, 2025, 2030]:
+            try:
+                plot_mppdc_heuristic_check(m_results, key='baseline', transition_year=y, carbon_price=c)
+            except:
+                pass

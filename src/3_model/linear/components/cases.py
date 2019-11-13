@@ -349,6 +349,12 @@ class ModelCases:
                 m_b.PRICE_CHANGE_DEVIATION_2.activate()
                 filename = f"heuristic_pdev_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
 
+            elif params['mode'] == 'price_target':
+                m_b.YEAR_AVERAGE_PRICE_TARGET.store_values(params['price_target'])
+                m_b.PRICE_TARGET_DEVIATION_1.activate()
+                m_b.PRICE_TARGET_DEVIATION_2.activate()
+                filename = f"heuristic_ptar_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
+
             else:
                 raise Exception(f"Unexpected run mode: {params['mode']}")
 
@@ -475,6 +481,12 @@ class ModelCases:
             m_m.PRICE_CHANGE_DEVIATION_1.activate()
             m_m.PRICE_CHANGE_DEVIATION_2.activate()
             filename = f"mppdc_pdev_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
+
+        elif params['mode'] == 'price_target':
+            m_m.YEAR_AVERAGE_PRICE_TARGET.store_values(params['price_target'])
+            m_m.PRICE_TARGET_DEVIATION_1.activate()
+            m_m.PRICE_TARGET_DEVIATION_2.activate()
+            filename = f"mppdc_ptar_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
 
         else:
             raise Exception(f"Unexpected run mode: {params['mode']}")

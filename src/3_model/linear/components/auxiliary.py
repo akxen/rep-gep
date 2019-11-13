@@ -52,6 +52,9 @@ class BaselineUpdater:
         # Initial average price in year prior to model start
         m.YEAR_AVERAGE_PRICE_0 = Param(initialize=float(40), mutable=True)
 
+        # Parameter to store price targets
+        m.YEAR_AVERAGE_PRICE_TARGET = Param(m.Y, initialize=0, mutable=True)
+
         return m
 
     @staticmethod
@@ -68,6 +71,10 @@ class BaselineUpdater:
         # Dummy variables used to minimise baseline deviation over model horizon
         m.z_b1 = Var(m.Y, initialize=0, within=NonNegativeReals)
         m.z_b2 = Var(m.Y, initialize=0, within=NonNegativeReals)
+
+        # Dummy variables used to minimise deviation between average price and target trajectory
+        m.z_t1 = Var(m.Y, within=NonNegativeReals, initialize=0)
+        m.z_t2 = Var(m.Y, within=NonNegativeReals, initialize=0)
 
         # Amount by which average price constraint is violated
         m.pc_violation_up = Var(m.Y, within=NonNegativeReals, initialize=0)
@@ -236,6 +243,22 @@ class BaselineUpdater:
         # Total baseline difference
         m.TOTAL_BASELINE_DEVIATION = Expression(expr=sum(m.YEAR_BASELINE_ABSOLUTE_DIFFERENCE[y] for y in m.Y))
 
+        def year_price_target_difference_rule(_m, y):
+            """Absolute difference between average price and target trajectory for each year"""
+
+            return m.z_t1[y] + m.z_t2[y]
+
+        # Absolute price difference between target and average price for each year
+        m.YEAR_PRICE_TARGET_DIFFERENCE = Expression(m.Y, rule=year_price_target_difference_rule)
+
+        def total_price_target_difference_rule(_m):
+            """Total absolute difference between average price and target for all years"""
+
+            return sum(m.YEAR_PRICE_TARGET_DIFFERENCE[y] for y in m.Y)
+
+        # Total absolute price difference
+        m.TOTAL_PRICE_TARGET_DIFFERENCE = Expression(rule=total_price_target_difference_rule)
+
         return m
 
     def define_constraints(self, m):
@@ -323,13 +346,31 @@ class BaselineUpdater:
         # Baseline deviation between successive intervals
         m.BASELINE_DEVIATION_2 = Constraint(m.Y, rule=year_baseline_deviation_2_rule)
 
-        def price_constraint_rule(_m, y):
-            """Enforce prices in each year meet a fixed objective"""
+        # def price_constraint_rule(_m, y):
+        #     """Enforce prices in each year meet a fixed objective"""
+        #
+        #     return m.YEAR_AVERAGE_PRICE[y] + m.pc_violation_up[y] - m.pc_violation_lo[y] == m.YEAR_AVERAGE_PRICE_0
+        #
+        # # Constraint used to force equilibrium prices to particular values
+        # m.PRICE_CONSTRAINT = Constraint(m.Y, rule=price_constraint_rule)
 
-            return m.YEAR_AVERAGE_PRICE[y] + m.pc_violation_up[y] - m.pc_violation_lo[y] == m.YEAR_AVERAGE_PRICE_0
+        def price_target_deviation_1_rule(_m, y):
+            """Absolute difference between prices in successive years relative to first year BAU price"""
 
-        # Constraint used to force equilibrium prices to particular values
-        m.PRICE_CONSTRAINT = Constraint(m.Y, rule=price_constraint_rule)
+            return m.z_t1[y] >= m.YEAR_AVERAGE_PRICE[y] - m.YEAR_AVERAGE_PRICE_TARGET[y]
+
+        # BAU price deviation - 1
+        m.PRICE_TARGET_DEVIATION_1 = Constraint(m.Y, rule=price_target_deviation_1_rule)
+        m.PRICE_TARGET_DEVIATION_1.deactivate()
+
+        def price_target_deviation_2_rule(_m, y):
+            """Constraint computing absolute difference between prices in successive years"""
+
+            return m.z_t2[y] >= m.YEAR_AVERAGE_PRICE_TARGET[y] - m.YEAR_AVERAGE_PRICE[y]
+
+        # BAU price deviation - 2
+        m.PRICE_TARGET_DEVIATION_2 = Constraint(m.Y, rule=price_target_deviation_2_rule)
+        m.PRICE_TARGET_DEVIATION_2.deactivate()
 
         return m
 
@@ -337,8 +378,8 @@ class BaselineUpdater:
         """Define objective function"""
 
         # Minimise price difference between consecutive years
-        m.OBJECTIVE = Objective(expr=m.TOTAL_BASELINE_DEVIATION
-                                     + (1000 * sum(m.pc_violation_up[y] + m.pc_violation_lo[y] for y in m.Y)),
+        m.OBJECTIVE = Objective(expr=m.TOTAL_PRICE_TARGET_DIFFERENCE,
+                                     # + m.TOTAL_BASELINE_DEVIATION,
                                 sense=minimize)
 
         return m

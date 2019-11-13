@@ -7,6 +7,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'components'))
 sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, '4_analysis'))
 
 from cases import ModelCases
+from analysis import AnalyseResults
 
 
 if __name__ == '__main__':
@@ -16,18 +17,26 @@ if __name__ == '__main__':
     # Object used to run model cases
     cases = ModelCases(output_directory, log_file_name)
 
+    # Object used to process model results
+    analysis = AnalyseResults()
+
     # Common model parameters
     start, end, scenarios = 2016, 2030, 5
-
-    # Define case parameters and run model
-    case_params = {'mode': 'bau_deviation_minimisation'}
 
     # Run BAU case
     # cases.run_bau_case(start, end, scenarios, output_directory)
 
+    # Average prices from the BAU case are used as the target trajectory
+    bau = analysis.load_results(output_directory, 'bau_case.pickle')
+    bau_prices = analysis.get_year_average_price(bau['PRICES'], -1)
+    price_target = bau_prices['average_price_real'].to_dict()
+
+    # Define case parameters common to all price targeting models
+    case_params = {'mode': 'price_target', 'price_target': price_target}
+
     # Run models with different carbon prices
     # for c in range(5, 101, 5):
-    for c in [25, 50, 75, 100]:
+    for c in [25]:
         # Permit prices to be used in REP and price targeting models
         permit_prices_model = {y: float(c) for y in range(start, end + 1)}
 
@@ -35,7 +44,7 @@ if __name__ == '__main__':
         # cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
 
         # Run price targeting models with different transition years
-        for transition_year in [2020, 2025, 2030]:
+        for transition_year in [2025]:
             print(f'Running models with transition year: {transition_year}')
 
             # Update transition year
@@ -47,9 +56,9 @@ if __name__ == '__main__':
             case_params['price_weights'] = {y: 1.0 if y <= transition_year else 0.0 for y in range(start, end + 1)}
 
             # Target prices using auxiliary model
-            # cases.run_price_smoothing_heuristic_case(case_params, output_directory)
+            cases.run_price_smoothing_heuristic_case(case_params, output_directory)
 
             # Only run MPPDC if following condition(s) met. Used to compare MPPDC to heuristic solution.
-            if c in [50, 75, 100]:
+            if c in [25, 50, 75, 100]:
                 # Target prices using MPPDC model
                 cases.run_price_smoothing_mppdc_case(case_params, output_directory)
