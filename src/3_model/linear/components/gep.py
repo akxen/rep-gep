@@ -30,7 +30,7 @@ class Primal:
         self.tee = True
         self.keepfiles = False
         self.solver_options = {}  # 'MIPGap': 0.0005,
-        self.opt = SolverFactory('cplex', solver_io='lp')
+        self.opt = SolverFactory('cplex', solver_io='mps')
 
     @staticmethod
     def define_variables(m):
@@ -687,7 +687,7 @@ class Dual:
         self.tee = True
         self.keepfiles = False
         self.solver_options = {}  # 'MIPGap': 0.0005
-        self.opt = SolverFactory('cplex', solver_io='lp')
+        self.opt = SolverFactory('cplex', solver_io='mps')
 
     def k(self, m, g):
         """Mapping generator to the NEM zone to which it belongs"""
@@ -1391,9 +1391,9 @@ class MPPDCModel:
         # Solver options
         self.tee = True
         self.keepfiles = False
-        self.solver_options = {
-            'timelimit': 7200}  # 'MIPGap': 0.0005, 'optimalitytarget': 2, 'simplex tolerances optimality': 1e-4
-        self.opt = SolverFactory('cplex', solver_io='lp')
+        # 'MIPGap': 0.0005, 'optimalitytarget': 2, 'simplex tolerances optimality': 1e-4 'timelimit': 7200
+        self.solver_options = {'simplex tolerances optimality': 1e-3}
+        self.opt = SolverFactory('cplex', solver_io='mps')
 
     def define_parameters(self, m):
         """Define MPPDC parameters"""
@@ -1420,7 +1420,7 @@ class MPPDCModel:
         m.YEAR_AVERAGE_PRICE_TARGET = Param(m.Y, initialize=100, mutable=True)
 
         # Strong duality constraint violation penalty
-        m.STRONG_DUALITY_VIOLATION_PENALTY = Param(initialize=float(1e5))
+        m.STRONG_DUALITY_VIOLATION_PENALTY = Param(initialize=float(1e6))
 
         # Year at which yearly revenue neutrality constraint will be enforced
         m.TRANSITION_YEAR = Param(initialize=self.transition_year, mutable=True)
@@ -1562,7 +1562,8 @@ class MPPDCModel:
         def strong_duality_rule(_m):
             """Strong duality constraint"""
 
-            return m.TPV + m.sd_1 == m.DUAL_OBJECTIVE_EXPRESSION + m.sd_2
+            # return m.TPV + m.sd_1 == m.DUAL_OBJECTIVE_EXPRESSION + m.sd_2
+            return m.TPV == m.DUAL_OBJECTIVE_EXPRESSION
 
         # Strong duality constraint (primal objective = dual objective at optimality)
         m.STRONG_DUALITY = Constraint(rule=strong_duality_rule)

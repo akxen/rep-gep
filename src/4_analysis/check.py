@@ -66,7 +66,7 @@ if __name__ == '__main__':
     plot_results('Baseline', b_m_info, b_h_info)
 
     p_m_info = {'label': 'MPPDC', 'color': 'blue', 'values': p_m['average_price_real'].to_dict()}
-    p_h_info = {'label': 'MPPDC', 'color': 'red', 'values': p_h['average_price_real'].to_dict()}
-    p_bau = {'label': 'MPPDC', 'color': 'green', 'values': p_bau['average_price_real'].to_dict()}
+    p_h_info = {'label': 'Heuristic', 'color': 'red', 'values': p_h['average_price_real'].to_dict()}
+    p_bau = {'label': 'BAU', 'color': 'green', 'values': p_bau['average_price_real'].to_dict()}
     plot_results('Prices', p_m_info, p_h_info, p_bau)
     # plot_results(p_m['average_price_real'].to_dict(), p_h['average_price_real'].to_dict(), 'Prices')
