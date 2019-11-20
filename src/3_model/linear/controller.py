@@ -24,41 +24,46 @@ if __name__ == '__main__':
     start, end, scenarios = 2016, 2030, 5
 
     # Run BAU case
-    # cases.run_bau_case(start, end, scenarios, output_directory)
+    cases.run_bau_case(start, end, scenarios, output_directory)
 
     # Average prices from the BAU case are used as the target trajectory
     bau = analysis.load_results(output_directory, 'bau_case.pickle')
     bau_prices = analysis.get_year_average_price(bau['PRICES'], -1)
-    price_target = bau_prices['average_price_real'].to_dict()
-
-    # Define case parameters common to all price targeting models
-    case_params = {'mode': 'price_target', 'price_target': price_target}
+    bau_price_trajectory = bau_prices['average_price_real'].to_dict()
 
     # Run models with different carbon prices
-    # for c in range(5, 101, 5):
-    for c in [25, 50, 75]:
+    for c in range(5, 101, 5):
         # Permit prices to be used in REP and price targeting models
         permit_prices_model = {y: float(c) for y in range(start, end + 1)}
 
         # Run REP case with given permit price
-        # cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
+        cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
 
-        # Run price targeting models with different transition years
-        for transition_year in [2025]:
-            print(f'Running models with transition year: {transition_year}')
+        # For each run mode update case parameters and run price targeting model
+        for mode in ['price_target', 'bau_deviation_minimisation', 'price_change_minimisation']:
 
-            # Update transition year
-            case_params['transition_year'] = transition_year
-            case_params['carbon_price'] = c
-            case_params['rep_filename'] = f'rep_cp-{c:.0f}.pickle'
+            # Set case parameters depending on run mode
+            if mode == 'price_target':
+                case_params = {'mode': mode, 'price_target': bau_price_trajectory}
+            else:
+                case_params = {'mode': mode}
 
-            # Update scheme price weights to be used in objective function
-            case_params['price_weights'] = {y: 1.0 if y <= transition_year else 0.0 for y in range(start, end + 1)}
+            # Run price targeting models with different transition years
+            for transition_year in [2021, 2025, 2030]:
+                print(f'Running model. Carbon price: {c}, mode: {mode}, transition year: {transition_year}')
 
-            # Target prices using auxiliary model
-            # cases.run_price_smoothing_heuristic_case(case_params, output_directory)
+                # Update transition year and set case parameters
+                case_params['transition_year'] = transition_year
+                case_params['carbon_price'] = c
+                case_params['rep_filename'] = f'rep_cp-{c:.0f}.pickle'
 
-            # Only run MPPDC if following condition(s) met. Used to compare MPPDC to heuristic solution.
-            if c in [25]:
-                # Target prices using MPPDC model
-                cases.run_price_smoothing_mppdc_case(case_params, output_directory)
+                # Update scheme price weights to be used in objective function
+                case_params['price_weights'] = {y: 1.0 if y <= transition_year else 0.0 for y in range(start, end + 1)}
+
+                # Target prices using price targeting model
+                cases.run_price_smoothing_heuristic_case(case_params, output_directory)
+
+                # # Only run MPPDC if following condition(s) met. Used to compare MPPDC to heuristic solution.
+                # if c in [25, 50, 75, 100]:
+                #     # Target prices using MPPDC model
+                #     cases.run_price_smoothing_mppdc_case(case_params, output_directory)

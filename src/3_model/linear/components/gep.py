@@ -600,34 +600,6 @@ class Primal:
         # Power balance constraint for each zone and time period
         m.POWER_BALANCE = Constraint(m.Z, m.Y, m.S, m.T, rule=power_balance_rule)
 
-        def cumulative_emissions_cap_rule(_m):
-            """
-            Constraint on cumulative emissions over model horizon
-
-            Note: Minus signs used so sign of dual has correct interpretation. E.g. tightening the cap by 1 unit will
-            lead to x $ increase in operating cost - gives marginal CO2 price
-            """
-
-            return - sum(m.YEAR_EMISSIONS[y] for y in m.Y) >= - m.CUMULATIVE_EMISSIONS_CAP
-
-        # Cumulative emissions cap constraint - deactivated by default
-        m.CUMULATIVE_EMISSIONS_CAP_CONS = Constraint(rule=cumulative_emissions_cap_rule)
-        m.CUMULATIVE_EMISSIONS_CAP_CONS.deactivate()
-
-        def interim_emissions_cap_rule(_m, y):
-            """
-            Constraint on interim emissions over model horizon
-
-            Note: Minus signs used so sign of dual has correct interpretation. E.g. tightening the cap by 1 unit will
-            lead to x $ increase in operating cost - gives marginal CO2 price
-            """
-
-            return - m.YEAR_EMISSIONS[y] >= - m.INTERIM_EMISSIONS_CAP[y]
-
-        # Interim emissions cap constraint - deactivated by default
-        m.INTERIM_EMISSIONS_CAP_CONS = Constraint(m.Y, rule=interim_emissions_cap_rule)
-        m.INTERIM_EMISSIONS_CAP_CONS.deactivate()
-
         return m
 
     @staticmethod
@@ -1392,20 +1364,11 @@ class MPPDCModel:
         self.tee = True
         self.keepfiles = False
         # 'MIPGap': 0.0005, 'optimalitytarget': 2, 'simplex tolerances optimality': 1e-4 'timelimit': 7200
-        self.solver_options = {'simplex tolerances optimality': 1e-3}
+        self.solver_options = {}
         self.opt = SolverFactory('cplex', solver_io='mps')
 
     def define_parameters(self, m):
         """Define MPPDC parameters"""
-
-        def emissions_intensity_target_rule(_m, y):
-            """Emissions intensity target for each year in model horizon"""
-
-            # TODO: Update this with desired trajectory
-            return float(0.7)
-
-        # Emissions intensity target
-        m.EMISSIONS_INTENSITY_TARGET = Param(m.Y, rule=emissions_intensity_target_rule)
 
         # Fixed emissions intensity baseline values
         m.FIXED_BASELINE = Param(m.Y, initialize=0, mutable=True)
@@ -1668,14 +1631,6 @@ class MPPDCModel:
         m.NON_NEGATIVE_TRANSITION_REVENUE_CONS = Constraint(rule=non_negative_transition_revenue_rule)
         m.NON_NEGATIVE_TRANSITION_REVENUE_CONS.deactivate()
 
-        # def price_constraint_rule(_m, y):
-        #     """Enforce prices in each year meet a fixed objective"""
-        #
-        #     return m.YEAR_AVERAGE_PRICE[y] + m.pc_violation_up[y] - m.pc_violation_lo[y] == m.YEAR_AVERAGE_PRICE_0
-        #
-        # # Constraint used to force equilibrium prices to particular values
-        # m.PRICE_CONSTRAINT = Constraint(m.Y, rule=price_constraint_rule)
-
         return m
 
     def define_objective(self, m):
@@ -1683,7 +1638,6 @@ class MPPDCModel:
 
         # Price targeting objective
         m.OBJECTIVE = Objective(expr=m.TOTAL_PRICE_TARGET_DIFFERENCE
-                                     # + m.TOTAL_BASELINE_DEVIATION
                                      + m.STRONG_DUALITY_VIOLATION_COST,
                                 sense=minimize)
 
