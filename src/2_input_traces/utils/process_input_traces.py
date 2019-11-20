@@ -391,7 +391,6 @@ class ProcessTraces(ParseMMSDMTables):
         return df
 
     def process_hydro_traces(self, generator_data_dir, output_dir, save=False):
-        """Process hydro traces"""
         """
         Process traces for hydro generators (multiple months)
 
