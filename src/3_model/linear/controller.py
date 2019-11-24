@@ -49,7 +49,7 @@ if __name__ == '__main__':
                 case_params = {'mode': mode}
 
             # Run price targeting models with different transition years
-            for transition_year in [2021, 2025, 2030]:
+            for transition_year in [2020, 2025, 2030]:
                 print(f'Running model. Carbon price: {c}, mode: {mode}, transition year: {transition_year}')
 
                 # Update transition year and set case parameters
