@@ -310,10 +310,8 @@ class ModelCases:
 
         # Results to extract from baseline targeting model
         baseline_keys = ['YEAR_AVERAGE_PRICE', 'YEAR_AVERAGE_PRICE_0', 'YEAR_ABSOLUTE_PRICE_DIFFERENCE',
-                         'YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED', 'OBJECTIVE',
-                         'TOTAL_ABSOLUTE_PRICE_DIFFERENCE', 'YEAR_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED',
-                         'TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED', 'YEAR_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED',
-                         'PRICE_WEIGHTS', 'YEAR_SCHEME_REVENUE', 'YEAR_CUMULATIVE_SCHEME_REVENUE']
+                         'TOTAL_ABSOLUTE_PRICE_DIFFERENCE', 'PRICE_WEIGHTS', 'YEAR_SCHEME_REVENUE',
+                         'YEAR_CUMULATIVE_SCHEME_REVENUE', 'baseline']
 
         iteration_results = {}
         stop_flag = False
@@ -336,23 +334,44 @@ class ModelCases:
             m_b.YEAR_AVERAGE_PRICE_0 = float(bau_initial_price)
             m_b.PRICE_WEIGHTS.store_values(params['price_weights'])
 
-            # Activate constraints
+            # Activate constraints and objectives depending on case being run
             m_b.NON_NEGATIVE_TRANSITION_REVENUE_CONS.activate()
 
             if params['mode'] == 'bau_deviation_minimisation':
-                m_b.PRICE_BAU_DEVIATION_1.activate()
-                m_b.PRICE_BAU_DEVIATION_2.activate()
+                # Set the price target to be BAU price
+                bau_price_target = {y: bau_initial_price for y in m_b.Y}
+                m_b.YEAR_AVERAGE_PRICE_TARGET.store_values(bau_price_target)
+
+                # Activate price targeting constraints and objective
+                m_b.PRICE_TARGET_DEVIATION_1.activate()
+                m_b.PRICE_TARGET_DEVIATION_2.activate()
+                m_b.OBJECTIVE_PRICE_TARGET_DIFFERENCE.activate()
+
+                # Append name of objective so objective value can be extracted, and create filename for case
+                baseline_keys.append('OBJECTIVE_PRICE_TARGET_DIFFERENCE')
                 filename = f"heuristic_baudev_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
 
             elif params['mode'] == 'price_change_minimisation':
+                # Activate constraints penalised price deviations over successive years
                 m_b.PRICE_CHANGE_DEVIATION_1.activate()
                 m_b.PRICE_CHANGE_DEVIATION_2.activate()
+                m_b.OBJECTIVE_PRICE_DEVIATION.activate()
+
+                # Append name of objective so objective value can be extracted, and create filename for case
+                baseline_keys.append('OBJECTIVE_PRICE_DEVIATION')
                 filename = f"heuristic_pdev_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
 
             elif params['mode'] == 'price_target':
+                # Set target price trajectory to prices obtained from BAU model over same period
                 m_b.YEAR_AVERAGE_PRICE_TARGET.store_values(params['price_target'])
+
+                # Activate price targeting constraints and objective function
                 m_b.PRICE_TARGET_DEVIATION_1.activate()
                 m_b.PRICE_TARGET_DEVIATION_2.activate()
+                m_b.OBJECTIVE_PRICE_TARGET_DIFFERENCE.activate()
+
+                # Append name of objective so objective value can be extracted, and create filename for case
+                baseline_keys.append('OBJECTIVE_PRICE_TARGET_DIFFERENCE')
                 filename = f"heuristic_ptar_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
 
             else:

@@ -17,225 +17,6 @@ from matplotlib.ticker import MultipleLocator, FormatStrFormatter, AutoMinorLoca
 
 from analysis import AnalyseResults
 
-v = {'carbon_tax': {'carbon_price': {'emissions': None, 'average_price': None, 'baselines': None}}}
-w = {'rep': {'carbon_price': {'emissions': None, 'average_price': None, 'baselines': None}}}
-x = {'heuristic': {'transition_year': {'carbon_price': {'emissions': None, 'average_price': None, 'baselines': None}}}}
-y = {'mppdc': {'transition_year': {'carbon_price': {'emissions': None, 'average_price': None, 'baselines': None}}}}
-
-
-def extract_bau_results(results_dir, keys):
-    """Extract REP model results"""
-
-    # Object used to parse results
-    analysis = AnalyseResults()
-
-    # All REP files
-    filenames = [f for f in os.listdir(results_dir) if 'bau_case' in f]
-
-    # Container for results
-    results = {}
-
-    for f in filenames:
-
-        # Extract information for each  key
-        for k in keys:
-            if k == 'YEAR_AVERAGE_PRICE':
-                r = analysis.get_average_prices(results_dir, f, None, 'PRICES', -1)
-                r = r.loc[:, 'average_price_real']
-
-            else:
-                r = analysis.extract_results(results_dir, f, k, stage=None, iteration='max', model=None)
-
-            # Append results to main container
-            results[k] = r.to_dict()
-
-    return results
-
-
-def extract_rep_results(results_dir, keys):
-    """Extract REP model results"""
-
-    # Object used to parse results
-    analysis = AnalyseResults()
-
-    # All REP files
-    filenames = [f for f in os.listdir(results_dir) if 'rep' in f]
-
-    # Container for results
-    results = {}
-
-    for f in filenames:
-        # Get carbon price from filename
-        carbon_price = int(f.split('-')[1].replace('.pickle', ''))
-
-        if carbon_price not in results.keys():
-            results[carbon_price] = {}
-
-        # Extract information for each  key
-        for k in keys:
-            if k == 'YEAR_AVERAGE_PRICE':
-                r = analysis.get_average_prices(results_dir, f, 'stage_2_rep', 'PRICES', -1)
-                r = r.loc[:, 'average_price_real']
-
-            else:
-                r = analysis.extract_results(results_dir, f, k, stage='stage_2_rep', iteration='max', model=None)
-
-            # Append results to main container
-            results[carbon_price][k] = r.to_dict()
-
-    return results
-
-
-def extract_carbon_results(results_dir, keys):
-    """Extract REP model results"""
-
-    # Object used to parse results
-    analysis = AnalyseResults()
-
-    # All REP files
-    filenames = [f for f in os.listdir(results_dir) if 'rep' in f]
-
-    # Container for results
-    results = {}
-
-    for f in filenames:
-        # Get carbon price from filename
-        carbon_price = int(f.split('-')[1].replace('.pickle', ''))
-
-        if carbon_price not in results.keys():
-            results[carbon_price] = {}
-
-        # Extract information for each  key
-        for k in keys:
-            if k == 'YEAR_AVERAGE_PRICE':
-                r = analysis.get_average_prices(results_dir, f, 'stage_1_carbon_tax', 'PRICES', -1)
-                r = r.loc[:, 'average_price_real']
-
-            else:
-                r = analysis.extract_results(results_dir, f, k, stage='stage_1_carbon_tax', iteration='max', model=None)
-
-            # Append results to main container
-            results[carbon_price][k] = r.to_dict()
-
-    return results
-
-
-def extract_price_targeting_results(results_dir, keys):
-    """Extract REP model results"""
-
-    # Object used to parse results
-    analysis = AnalyseResults()
-
-    # All REP files
-    filenames = [f for f in os.listdir(results_dir) if 'heuristic' in f]
-
-    # Container for results
-    results = {}
-
-    for f in filenames:
-        # Get carbon price and transition year from filename
-        transition_year = int(f.split('-')[1].replace('_cp', ''))
-        carbon_price = int(f.split('-')[2].replace('.pickle', ''))
-
-        if transition_year not in results.keys():
-            results[transition_year] = {}
-
-        if carbon_price not in results[transition_year].keys():
-            results[transition_year][carbon_price] = {}
-
-        # Extract information for each  key
-        for k in keys:
-            if k == 'YEAR_AVERAGE_PRICE':
-                r = analysis.get_average_prices(results_dir, f, 'stage_3_price_targeting', 'PRICES', -1)
-                r = r.loc[:, 'average_price_real']
-
-            else:
-                r = analysis.extract_results(results_dir, f, k, stage='stage_3_price_targeting', iteration='max',
-                                             model='primal')
-
-            # Append results to main container
-            results[transition_year][carbon_price][k] = r.to_dict()
-
-    return results
-
-
-def extract_mppdc_results(results_dir, keys):
-    """Extract REP model results"""
-
-    # Object used to parse results
-    analysis = AnalyseResults()
-
-    # All REP files
-    filenames = [f for f in os.listdir(results_dir) if 'mppdc' in f]
-
-    # Container for results
-    results = {}
-
-    for f in filenames:
-        # Get carbon price and transition year from filename
-        transition_year = int(f.split('-')[1].replace('_cp', ''))
-        carbon_price = int(f.split('-')[2].replace('.pickle', ''))
-
-        if transition_year not in results.keys():
-            results[transition_year] = {}
-
-        if carbon_price not in results[transition_year].keys():
-            results[transition_year][carbon_price] = {}
-
-        # Extract information for each  key
-        for k in keys:
-            # Check that results are available by extracting the baseline (should exist for all models)
-            raw = analysis.extract_results(results_dir, f, 'baseline', stage='stage_3_price_targeting', iteration='max')
-            if raw is None:
-                r = None
-
-            elif k == 'YEAR_AVERAGE_PRICE':
-                r = analysis.get_average_prices(results_dir, f, 'stage_3_price_targeting', 'lamb', 1)
-                r = r.loc[:, 'average_price_real']
-
-            else:
-                r = analysis.extract_results(results_dir, f, k, stage='stage_3_price_targeting', iteration='max')
-
-            # Append results to main container
-            if r is not None:
-                results[transition_year][carbon_price][k] = r.to_dict()
-            else:
-                results[transition_year][carbon_price][k] = None
-
-    return results
-
-
-def extract_model_results(results_dir, output_dir):
-    """Extract and parse model results. Save to file."""
-
-    # Extract data
-    result_keys = ['YEAR_EMISSIONS', 'baseline', 'YEAR_AVERAGE_PRICE', 'YEAR_CUMULATIVE_SCHEME_REVENUE', 'x_c']
-
-    print('Extracting BAU results')
-    bau_results = extract_bau_results(results_dir, ['YEAR_EMISSIONS', 'baseline', 'YEAR_AVERAGE_PRICE', 'x_c'])
-
-    print('Extracting tax results')
-    tax_results = extract_carbon_results(results_dir, result_keys)
-
-    print('Extracting REP results')
-    rep_results = extract_rep_results(results_dir, result_keys)
-
-    print('Extracting heuristic results')
-    heuristic_results = extract_price_targeting_results(results_dir, result_keys)
-
-    print('Extracting MPPDC results')
-    mppdc_results = extract_mppdc_results(results_dir, result_keys)
-
-    # Combine into single dictionary
-    combined_results = {'bau': bau_results, 'tax': tax_results, 'rep': rep_results, 'heuristic': heuristic_results,
-                        'mppdc': mppdc_results}
-
-    # Save to pickle file
-    with open(os.path.join(output_dir, 'model_results.pickle'), 'wb') as f:
-        pickle.dump(combined_results, f)
-
-    return combined_results
-
 
 def load_model_results(directory):
     """Load model results"""
@@ -257,7 +38,7 @@ def get_surface_features(model_results, model_key, results_key, transition_year=
         x = list(results.keys())
         y = list(results[x[0]][results_key].keys())
 
-    elif model_key in ['heuristic', 'mppdc']:
+    elif model_key in ['heuristic', 'mppdc', 'baudev', 'ptar', 'pdev']:
         x = list(results[transition_year].keys())
         y = list(results[transition_year][x[0]][results_key].keys())
 
@@ -314,7 +95,6 @@ def plot_emissions_surface(results, model_key, transition_year=None):
     ax = fig.gca(projection='3d')
 
     # Plot the surface.
-    # ax.plot_surface(X, Y, Z, linewidth=0, cmap=cm.coolwarm, antialiased=True)
     ax.plot_surface(Xi, Yi, Zi, linewidth=0, cmap=cm.coolwarm, rstride=1, cstride=1, alpha=1)
     ax.set_title(f'Emissions: {model_key} {transition_year}')
 
@@ -672,7 +452,7 @@ def plot_transition_year_comparison(results):
 
         for ty in [2020, 2025, 2030]:
             # Get surface features
-            _, _, Z = get_interpolated_surface(results, 'heuristic', results_key, transition_year=ty)
+            _, _, Z = get_interpolated_surface(results, 'baudev', results_key, transition_year=ty)
 
             if Z.min() < vmin:
                 vmin = Z.min()
@@ -706,7 +486,7 @@ def plot_transition_year_comparison(results):
     layout = add_limits(layout)
 
     for k, v in layout.items():
-        X, Y, Z = get_interpolated_surface(results, 'heuristic', v['results_key'], v['transition_year'])
+        X, Y, Z = get_interpolated_surface(results, 'baudev', v['results_key'], v['transition_year'])
 
         # Construct plot and keep track of it
         im = v['ax'].pcolormesh(X, Y, Z, cmap=cmap, vmin=v['vmin'], vmax=v['vmax'], edgecolors='face')
@@ -1048,7 +828,7 @@ if __name__ == '__main__':
     # plot_tax_rep_comparison(m_results, figures_directory)
 
     # Comparing transition years
-    # plot_transition_year_comparison(m_results)
+    plot_transition_year_comparison(m_results)
 
     # Compare baselines from MPPDC and heuristic solution protocols
     # plot_mppdc_heuristic_comparison(m_results)

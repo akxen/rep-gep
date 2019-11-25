@@ -200,37 +200,20 @@ class BaselineUpdater:
         m.YEAR_ABSOLUTE_PRICE_DIFFERENCE = Expression(m.Y, rule=year_absolute_price_difference_rule)
 
         # Total absolute price difference
-        m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[y] for y in m.Y))
+        m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[y] for y in m.Y
+                                                                if y <= self.transition_year))
 
-        def year_absolute_price_difference_weighted_rule(_m, y):
-            """Weighted absolute price difference"""
+        def year_cumulative_price_difference_rule(_m, y):
+            """Cumulative sum of prices differences between successive years"""
 
-            return m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[y] * m.PRICE_WEIGHTS[y]
+            return sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE[j] for j in m.Y if j <= y)
 
-        # Weighted absolute price difference for each year
-        m.YEAR_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED = Expression(m.Y, rule=year_absolute_price_difference_weighted_rule)
+        # Year cumulative price difference
+        m.YEAR_CUMULATIVE_PRICE_DIFFERENCE = Expression(m.Y, rule=year_cumulative_price_difference_rule)
 
-        # Weighted total absolute difference
-        m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED = Expression(expr=sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED[y]
-                                                                         for y in m.Y if y <= self.transition_year))
-
-        def year_cumulative_price_difference_weighted_rule(_m, y):
-            """Cumulative weighted price difference"""
-
-            return sum(m.YEAR_ABSOLUTE_PRICE_DIFFERENCE_WEIGHTED[j] for j in m.Y if j <= y)
-
-        # Weighted cumulative absolute price difference for each year in model horizon
-        m.YEAR_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED = Expression(m.Y,
-                                                                 rule=year_cumulative_price_difference_weighted_rule)
-
-        def year_sum_cumulative_price_difference_weighted_rule(_m, y):
-            """Sum of cumulative price difference up to year, y"""
-
-            return sum(m.YEAR_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED[j] for j in m.Y if j <= y)
-
-        # Sum of cumulative price differences for each year in model horizon
-        m.YEAR_SUM_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED = Expression(m.Y,
-                                                                     rule=year_sum_cumulative_price_difference_weighted_rule)
+        # Total cumulative price difference
+        m.TOTAL_CUMULATIVE_PRICE_DIFFERENCE = Expression(expr=sum(m.YEAR_CUMULATIVE_PRICE_DIFFERENCE[y] for y in m.Y
+                                                                  if y <= self.transition_year))
 
         def year_absolute_baseline_difference_rule(_m, y):
             """Absolute difference in baseline's value between successive years"""
@@ -238,10 +221,10 @@ class BaselineUpdater:
             return m.z_b1[y] + m.z_b2[y]
 
         # Sum of differences between baseline over successive years
-        m.YEAR_BASELINE_ABSOLUTE_DIFFERENCE = Expression(m.Y, rule=year_absolute_baseline_difference_rule)
+        m.YEAR_ABSOLUTE_BASELINE_DIFFERENCE = Expression(m.Y, rule=year_absolute_baseline_difference_rule)
 
         # Total baseline difference
-        m.TOTAL_BASELINE_DEVIATION = Expression(expr=sum(m.YEAR_BASELINE_ABSOLUTE_DIFFERENCE[y] for y in m.Y))
+        m.TOTAL_BASELINE_DEVIATION = Expression(expr=sum(m.YEAR_ABSOLUTE_BASELINE_DIFFERENCE[y] for y in m.Y))
 
         def year_price_target_difference_rule(_m, y):
             """Absolute difference between average price and target trajectory for each year"""
@@ -254,7 +237,7 @@ class BaselineUpdater:
         def total_price_target_difference_rule(_m):
             """Total absolute difference between average price and target for all years"""
 
-            return sum(m.YEAR_PRICE_TARGET_DIFFERENCE[y] for y in m.Y)
+            return sum(m.YEAR_PRICE_TARGET_DIFFERENCE[y] for y in m.Y if y <= self.transition_year)
 
         # Total absolute price difference
         m.TOTAL_PRICE_TARGET_DIFFERENCE = Expression(rule=total_price_target_difference_rule)
@@ -377,10 +360,14 @@ class BaselineUpdater:
     def define_objective(self, m):
         """Define objective function"""
 
-        # Minimise price difference between consecutive years
-        m.OBJECTIVE = Objective(expr=m.TOTAL_PRICE_TARGET_DIFFERENCE,
-                                     # + m.TOTAL_BASELINE_DEVIATION,
-                                sense=minimize)
+        # Minimise difference between pre-defined trajectory over transition period
+        m.OBJECTIVE_PRICE_TARGET_DIFFERENCE = Objective(expr=m.TOTAL_PRICE_TARGET_DIFFERENCE, sense=minimize)
+        m.OBJECTIVE_PRICE_TARGET_DIFFERENCE.deactivate()
+
+        # Minimise average price deviations between successive years
+        # m.OBJECTIVE_PRICE_DEVIATION = Objective(expr=m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE, sense=minimize)
+        m.OBJECTIVE_PRICE_DEVIATION = Objective(expr=m.TOTAL_CUMULATIVE_PRICE_DIFFERENCE, sense=minimize)
+        m.OBJECTIVE_PRICE_DEVIATION.deactivate()
 
         return m
 

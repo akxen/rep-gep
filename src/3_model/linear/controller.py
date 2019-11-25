@@ -41,7 +41,6 @@ if __name__ == '__main__':
 
         # For each run mode update case parameters and run price targeting model
         for mode in ['price_target', 'bau_deviation_minimisation', 'price_change_minimisation']:
-
             # Set case parameters depending on run mode
             if mode == 'price_target':
                 case_params = {'mode': mode, 'price_target': bau_price_trajectory}
