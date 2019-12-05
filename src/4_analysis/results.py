@@ -217,14 +217,14 @@ class ResultsExtractor:
 
 
 if __name__ == '__main__':
-    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'local')
-    output_directory = os.path.join(os.path.dirname(__file__), 'output', 'tmp', 'local')
+    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote')
+    output_directory = os.path.join(os.path.dirname(__file__), 'output', 'tmp', 'remote')
 
     # Object used to parse and extract model results
     extractor = ResultsExtractor()
 
     # Extract results from all scenarios and save in tmp directory
-    # extractor.extract_all_results(results_directory, output_directory)
+    extractor.extract_all_results(results_directory, output_directory)
     
     # Combine model results into single dictionary
     model_results = extractor.combine_results(output_directory)
