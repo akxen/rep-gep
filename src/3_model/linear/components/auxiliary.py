@@ -223,8 +223,21 @@ class BaselineUpdater:
         # Sum of differences between baseline over successive years
         m.YEAR_ABSOLUTE_BASELINE_DIFFERENCE = Expression(m.Y, rule=year_absolute_baseline_difference_rule)
 
-        # Total baseline difference
-        m.TOTAL_BASELINE_DEVIATION = Expression(expr=sum(m.YEAR_ABSOLUTE_BASELINE_DIFFERENCE[y] for y in m.Y))
+        def year_cumulative_baseline_difference_rule(_m, y):
+            """Cumulative sum of baseline differences between successive years"""
+
+            return sum(m.YEAR_ABSOLUTE_BASELINE_DIFFERENCE[j] for j in m.Y if j <= y)
+
+        # Year cumulative baseline difference
+        m.YEAR_CUMULATIVE_BASELINE_DIFFERENCE = Expression(m.Y, rule=year_cumulative_baseline_difference_rule)
+
+        # Total cumulative baseline deviation over transitional period
+        m.TOTAL_CUMULATIVE_BASELINE_DIFFERENCE = Expression(expr=sum(m.YEAR_CUMULATIVE_BASELINE_DIFFERENCE[y]
+                                                                     for y in m.Y if y <= self.transition_year))
+
+        # Total baseline difference over transitional period
+        m.TOTAL_BASELINE_DIFFERENCE = Expression(expr=sum(m.YEAR_ABSOLUTE_BASELINE_DIFFERENCE[y] for y in m.Y
+                                                          if y <= self.transition_year))
 
         def year_price_target_difference_rule(_m, y):
             """Absolute difference between average price and target trajectory for each year"""
@@ -311,6 +324,7 @@ class BaselineUpdater:
             """Constraints used to compute absolute difference between baselines between successive years"""
 
             if y == m.Y.first():
+                # return m.z_b1[y] >= m.baseline[y] - 1.0
                 return Constraint.Skip
             else:
                 return m.z_b1[y] >= m.baseline[y] - m.baseline[y - 1]
@@ -322,6 +336,7 @@ class BaselineUpdater:
             """Constraints used to compute absolute difference between baselines between successive years"""
 
             if y == m.Y.first():
+                # return m.z_b2[y] >= 1.0 - m.baseline[y]
                 return Constraint.Skip
             else:
                 return m.z_b2[y] >= m.baseline[y - 1] - m.baseline[y]
@@ -361,12 +376,16 @@ class BaselineUpdater:
         """Define objective function"""
 
         # Minimise difference between pre-defined trajectory over transition period
-        m.OBJECTIVE_PRICE_TARGET_DIFFERENCE = Objective(expr=m.TOTAL_PRICE_TARGET_DIFFERENCE, sense=minimize)
+        m.OBJECTIVE_PRICE_TARGET_DIFFERENCE = Objective(expr=m.TOTAL_PRICE_TARGET_DIFFERENCE
+                                                        + m.YEAR_CUMULATIVE_BASELINE_DIFFERENCE[self.transition_year],
+                                                        sense=minimize)
         m.OBJECTIVE_PRICE_TARGET_DIFFERENCE.deactivate()
 
         # Minimise average price deviations between successive years
         # m.OBJECTIVE_PRICE_DEVIATION = Objective(expr=m.TOTAL_ABSOLUTE_PRICE_DIFFERENCE, sense=minimize)
-        m.OBJECTIVE_PRICE_DEVIATION = Objective(expr=m.TOTAL_CUMULATIVE_PRICE_DIFFERENCE, sense=minimize)
+        m.OBJECTIVE_PRICE_DEVIATION = Objective(expr=m.TOTAL_CUMULATIVE_PRICE_DIFFERENCE
+                                                + m.YEAR_CUMULATIVE_BASELINE_DIFFERENCE[self.transition_year],
+                                                sense=minimize)
         m.OBJECTIVE_PRICE_DEVIATION.deactivate()
 
         return m

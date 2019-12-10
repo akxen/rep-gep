@@ -408,7 +408,7 @@ class ModelCases:
             self.algorithm_logger('run_price_smoothing_heuristic_case', message)
 
             # Check if capacity variables have changed
-            if max_cap_difference < 1:
+            if max_cap_difference < 5:
                 stop_flag = True
 
             # Check if max iterations exceeded
@@ -580,7 +580,7 @@ class ModelCases:
             print(f'Max capacity difference: {max_cap_difference} MW')
 
             # Check if capacity variables have changed
-            if max_cap_difference < 1:
+            if max_cap_difference < 5:
                 stop_flag = True
 
             # Check if max iterations exceeded

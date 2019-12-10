@@ -171,7 +171,8 @@ class ResultsExtractor:
         self.extract_bau_results(results_dir, bau_results_keys, output_dir)
 
         # Extract these keys for all other scenarios
-        result_keys = ['YEAR_EMISSIONS', 'baseline', 'YEAR_AVERAGE_PRICE', 'YEAR_CUMULATIVE_SCHEME_REVENUE', 'x_c']
+        result_keys = ['YEAR_EMISSIONS', 'baseline', 'YEAR_AVERAGE_PRICE', 'YEAR_CUMULATIVE_SCHEME_REVENUE', 'x_c',
+                       'YEAR_SCHEME_EMISSIONS_INTENSITY', 'YEAR_EMISSIONS_INTENSITY']
 
         print('Extracting tax results')
         self.extract_carbon_tax_results(results_dir, result_keys, output_dir)

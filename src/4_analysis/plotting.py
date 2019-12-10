@@ -47,16 +47,19 @@ class CreatePlots:
         # Results for a given model
         if model_key == 'ptar_diff':
             results = self.plot_data.results['ptar']
+
+        elif model_key == 'baudev_diff':
+            results = self.plot_data.results['baudev']
+
         else:
             results = self.plot_data.results[model_key]
-
 
         # Carbon prices
         if model_key in ['rep', 'tax']:
             x = list(results.keys())
             y = list(results[x[0]][results_key].keys())
 
-        elif model_key in ['heuristic', 'mppdc', 'baudev', 'ptar', 'pdev', 'ptar_diff']:
+        elif model_key in ['heuristic', 'mppdc', 'baudev', 'ptar', 'pdev', 'ptar_diff', 'baudev_diff']:
             x = list(results[transition_year].keys())
             y = list(results[transition_year][x[0]][results_key].keys())
 
@@ -85,7 +88,7 @@ class CreatePlots:
                     elif model_key in ['baudev', 'pdev', 'ptar']:
                         Z.append(results[transition_year][x_cord][results_key][y_cord])
 
-                    elif model_key in ['ptar_diff']:
+                    elif model_key in ['ptar_diff', 'baudev_diff']:
                         Z.append(results[transition_year][x_cord][results_key][y_cord] - price_target[y_cord])
 
                     else:
@@ -341,23 +344,22 @@ class CreatePlots:
 
         # Add letters to differentiate plots
         text_x, text_y = 9, 2016.5
-        text_style = {'verticalalignment': 'bottom', 'horizontalalignment': 'left', 'color': 'k', 'fontsize': 10,
-                      'weight': 'bold'}
-        ax1.text(text_x, text_y, 'a', )
-        ax2.text(text_x, text_y, 'b', **text_style)
-        ax3.text(text_x, text_y, 'c', **text_style)
+        text_style = {'verticalalignment': 'bottom', 'horizontalalignment': 'left', 'fontsize': 10, 'weight': 'bold'}
+        ax1.text(text_x, text_y, 'a', color='k', **text_style)
+        ax2.text(text_x, text_y, 'b', color='k', **text_style)
+        ax3.text(text_x, text_y, 'c', color='k', **text_style)
 
-        ax4.text(text_x, text_y, 'd', **text_style)
-        ax5.text(text_x, text_y, 'e', **text_style)
-        ax6.text(text_x, text_y, 'f', **text_style)
+        ax4.text(text_x, text_y, 'd', color='w', **text_style)
+        ax5.text(text_x, text_y, 'e', color='w', **text_style)
+        ax6.text(text_x, text_y, 'f', color='w', **text_style)
 
-        ax7.text(text_x, text_y, 'g', **text_style)
-        ax8.text(text_x, text_y, 'h', **text_style)
-        ax9.text(text_x, text_y, 'i', **text_style)
+        ax7.text(text_x, text_y, 'g', color='w', **text_style)
+        ax8.text(text_x, text_y, 'h', color='w', **text_style)
+        ax9.text(text_x, text_y, 'i', color='w', **text_style)
 
-        ax10.text(text_x, text_y, 'j', **text_style)
-        ax11.text(text_x, text_y, 'k', **text_style)
-        ax12.text(text_x, text_y, 'l', **text_style)
+        ax10.text(text_x, text_y, 'j', color='w', **text_style)
+        ax11.text(text_x, text_y, 'k', color='w', **text_style)
+        ax12.text(text_x, text_y, 'l', color='w', **text_style)
 
         # Format labels
         fig.set_size_inches(6.5, 6)
@@ -367,22 +369,104 @@ class CreatePlots:
 
         plt.show()
 
-    def price_target_difference(self, price_target):
+    def price_target_difference(self, **kwds):
         """Plot difference between price target and realised prices"""
 
         fig, ((ax1, ax2, ax3), (ax4, ax5, ax6)) = plt.subplots(nrows=2, ncols=3, sharex=True, sharey=True)
 
         # Get interpolated surfaces
-        X1, Y1, Z1 = self.get_interpolated_surface('ptar_diff', 'YEAR_AVERAGE_PRICE', 2020, price_target=price_target)
-        X2, Y2, Z2 = self.get_interpolated_surface('ptar_diff', 'YEAR_AVERAGE_PRICE', 2025, price_target=price_target)
-        X3, Y3, Z3 = self.get_interpolated_surface('ptar_diff', 'YEAR_AVERAGE_PRICE', 2030, price_target=price_target)
+        X1, Y1, Z1 = self.get_interpolated_surface('ptar_diff', 'YEAR_AVERAGE_PRICE', 2020, price_target=kwds['price_trajectory'])
+        X2, Y2, Z2 = self.get_interpolated_surface('ptar_diff', 'YEAR_AVERAGE_PRICE', 2025, price_target=kwds['price_trajectory'])
+        X3, Y3, Z3 = self.get_interpolated_surface('ptar_diff', 'YEAR_AVERAGE_PRICE', 2030, price_target=kwds['price_trajectory'])
+
+        X4, Y4, Z4 = self.get_interpolated_surface('baudev_diff', 'YEAR_AVERAGE_PRICE', 2020, price_target=kwds['bau_price'])
+        X5, Y5, Z5 = self.get_interpolated_surface('baudev_diff', 'YEAR_AVERAGE_PRICE', 2025, price_target=kwds['bau_price'])
+        X6, Y6, Z6 = self.get_interpolated_surface('baudev_diff', 'YEAR_AVERAGE_PRICE', 2030, price_target=kwds['bau_price'])
 
         # Construct plot and keep track of it
-        plot_style = {'vmin': -10, 'vmax': 10, 'edgecolors': 'face'}
-        im = ax1.pcolormesh(X1, Y1, Z1, **plot_style)
-        im = ax2.pcolormesh(X2, Y2, Z2, **plot_style)
-        im = ax3.pcolormesh(X3, Y3, Z3, **plot_style)
+        plot_style_trajectory = {'vmin': -30, 'vmax': 30, 'edgecolors': 'face', 'cmap': 'bwr'}
+        im1 = ax1.pcolormesh(X1, Y1, Z1, **plot_style_trajectory)
+        im2 = ax2.pcolormesh(X2, Y2, Z2, **plot_style_trajectory)
+        im3 = ax3.pcolormesh(X3, Y3, Z3, **plot_style_trajectory)
 
+        plot_style_bau = {'vmin': -30, 'vmax': 30, 'edgecolors': 'face', 'cmap': 'bwr'}
+        im4 = ax4.pcolormesh(X4, Y4, Z4, **plot_style_bau)
+        im5 = ax5.pcolormesh(X5, Y5, Z5, **plot_style_bau)
+        im6 = ax6.pcolormesh(X6, Y6, Z6, **plot_style_bau)
+
+        # Add dividers so subplots are the the same size after adding colour bars
+        for ax in [ax1, ax2, ax3, ax4, ax5, ax6]:
+            divider = make_axes_locatable(ax)
+
+            if ax == ax3:
+                cax3 = divider.append_axes("right", size="5%", pad=0.05)
+            elif ax == ax6:
+                cax6 = divider.append_axes("right", size="5%", pad=0.05)
+            else:
+                divider.append_axes("right", size="5%", pad=0.05).axis('off')
+
+        # Add colour bars
+        cb3 = fig.colorbar(im3, cax=cax3)
+        cb3.ax.tick_params(labelsize=6)
+        cb3.set_label('Price difference ($)', fontsize=7)
+
+        cb6 = fig.colorbar(im6, cax=cax6)
+        cb6.ax.tick_params(labelsize=6)
+        cb6.set_label('Price difference ($)', fontsize=7)
+
+        # Format y-ticks and labels
+        for ax in [ax1, ax4]:
+            ax.yaxis.set_major_locator(MultipleLocator(6))
+            ax.yaxis.set_minor_locator(MultipleLocator(2))
+
+            ax.tick_params(axis='both', which='major', labelsize=6)
+            ax.set_ylabel('Year', fontsize=7)
+
+        # Format x-ticks
+        for ax in [ax4, ax5, ax6]:
+            ax.xaxis.set_major_locator(MultipleLocator(20))
+            ax.xaxis.set_minor_locator(MultipleLocator(10))
+
+            ax.tick_params(axis='both', which='major', labelsize=6)
+            ax.set_xlabel('Emissions price (\$/tCO$_{2}$)', fontsize=7)
+
+        # Add titles denoting transition years
+        ax1.set_title('2020', fontsize=8, pad=2)
+        ax2.set_title('2025', fontsize=8, pad=2)
+        ax3.set_title('2030', fontsize=8, pad=2)
+
+        # Add letters to differentiate plots
+        text_x, text_y = 9, 2016.5
+        text_style = {'verticalalignment': 'bottom', 'horizontalalignment': 'left', 'fontsize': 10, 'weight': 'bold'}
+        ax1.text(text_x, text_y, 'a', color='k', **text_style)
+        ax2.text(text_x, text_y, 'b', color='k', **text_style)
+        ax3.text(text_x, text_y, 'c', color='k', **text_style)
+
+        ax4.text(text_x, text_y, 'd', color='k', **text_style)
+        ax5.text(text_x, text_y, 'e', color='k', **text_style)
+        ax6.text(text_x, text_y, 'f', color='k', **text_style)
+
+        # Set figure size
+        fig.set_size_inches(6.5, 3.5)
+        fig.subplots_adjust(left=0.08, bottom=0.11, right=0.93, top=0.96, wspace=0.01)
+        fig.savefig(os.path.join(self.figures_dir, f'price_difference.png'), dpi=200)
+        fig.savefig(os.path.join(self.figures_dir, f'price_difference.pdf'))
+
+        plt.show()
+
+    def baseline_slice(self):
+        """Plot slice of baseline and average emissions intensity for permit price 50 $/tCO2"""
+
+        x = range(2016, 2031)
+        y1 = [self.plot_data.results['pdev'][2025][60]['baseline'][y] for y in x]
+        y2 = [self.plot_data.results['pdev'][2025][60]['YEAR_SCHEME_EMISSIONS_INTENSITY'][y] for y in x]
+        y12 = [self.plot_data.results['pdev'][2025][60]['YEAR_AVERAGE_PRICE'][y] for y in x]
+
+        fig, ax = plt.subplots()
+        ax2 = ax.twinx()
+        ax.plot(x, y1, color='r')
+        ax.plot(x, y2, color='b')
+        ax2.plot(x, y12, color='k')
         plt.show()
 
 
@@ -404,8 +488,9 @@ if __name__ == '__main__':
     bau_first_year_trajectory = {y: bau_price_trajectory[2016] for y in range(2016, 2031)}
 
     # plots.plot_tax_rep_comparison()
-    # plots.plot_transition_year_comparison('baudev')
-    # plots.plot_transition_year_comparison('ptar')
-    # plots.plot_transition_year_comparison('pdev')
-    plots.price_target_difference(bau_price_trajectory)
+    plots.plot_transition_year_comparison('baudev')
+    plots.plot_transition_year_comparison('ptar')
+    plots.plot_transition_year_comparison('pdev')
 
+    plot_params = {'price_trajectory': bau_price_trajectory, 'bau_price': bau_first_year_trajectory}
+    plots.price_target_difference(**plot_params)
