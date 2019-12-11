@@ -5,6 +5,7 @@ import sys
 import time
 import copy
 import pickle
+import hashlib
 import logging
 
 sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir, '4_analysis'))
@@ -21,7 +22,7 @@ from analysis import AnalyseResults
 
 class ModelCases:
     def __init__(self, output_dir, log_name):
-        logging.basicConfig(filename=os.path.join(output_dir, f'{log_name}.log'), filemode='w',
+        logging.basicConfig(filename=os.path.join(output_dir, f'{log_name}.log'), filemode='a',
                             format='%(asctime)s %(name)s %(levelname)s %(message)s',
                             datefmt='%Y-%m-%d %H:%M:%S', level=logging.DEBUG)
 
@@ -88,6 +89,31 @@ class ModelCases:
             pickle.dump(results, f)
 
     @staticmethod
+    def get_hash(params):
+        """Get hash string of model parameters. Used to identify cases in log file."""
+
+        return hashlib.sha224(str(params).encode('utf-8', 'ignore')).hexdigest()[:10]
+
+    @staticmethod
+    def save_hash(case_id, params, output_dir):
+        """Save case ID and associated parameters to file"""
+
+        # Include case ID in dictionary
+        params['case_id'] = case_id
+
+        # Save case IDs and all associated params to file
+        with open(os.path.join(output_dir, 'case_ids.txt'), 'a+') as f:
+            f.write(str(params) + '\n')
+
+    @staticmethod
+    def save_solution_summary(summary, output_dir):
+        """Save solution summary"""
+
+        # Save summary of total solution time + number of iterations (if specified)
+        with open(os.path.join(output_dir, 'solution_summary.txt'), 'a+') as f:
+            f.write(str(summary) + '\n')
+
+    @staticmethod
     def run_mppdc_fixed_policy(final_year, scenarios_per_year, permit_prices, baselines,
                                include_primal_constraints=True):
         """Run MPPDC model with fixed policy parameters"""
@@ -124,8 +150,26 @@ class ModelCases:
 
         return m, status
 
-    def run_bau_case(self, first_year, final_year, scenarios_per_year, output_dir):
+    def run_bau_case(self, params, output_dir, overwrite=False):
         """Run business-as-usual case"""
+
+        # Case filename
+        filename = 'bau_case.pickle'
+
+        # Check if case exists
+        if not overwrite:
+            if filename in os.listdir(output_dir):
+                print(filename, 'already solved')
+                return
+
+        # Construct hash for case
+        case_id = self.get_hash(params)
+
+        # Save case params and associated hash
+        self.save_hash(case_id, params, output_dir)
+
+        # Extract case parameters for model
+        first_year, final_year, scenarios_per_year = params['start'], params['end'], params['scenarios']
 
         # Start timer for case run
         t_start = time.time()
@@ -155,18 +199,51 @@ class ModelCases:
         results['PRICES'] = {k: m.dual[m.POWER_BALANCE[k]] for k in m.POWER_BALANCE.keys()}
 
         # Save results
-        filename = 'bau_case.pickle'
         self.save_results(results, output_dir, filename)
 
         # Combine output in dictionary. To be returned by method.
         output = {'results': results, 'model': m, 'status': status}
 
-        self.algorithm_logger('run_bau_case', f'Finished BAU case in {time.time() - t_start}s')
+        # Solution summary
+        solution_summary = {'case_id': case_id, 'mode': params['mode'], 'total_solution_time': time.time() - t_start}
+        self.save_solution_summary(solution_summary, output_dir)
+
+        self.algorithm_logger('run_bau_case', f'Finished BAU case: case_id={case_id}, total_solution_time={time.time() - t_start}s')
 
         return output
 
-    def run_rep_case(self, first_year, final_year, scenarios_per_year, permit_prices, output_dir):
+    def run_rep_case(self, params, output_dir, overwrite=False):
         """Run carbon tax scenario"""
+
+        # Extract case parameters
+        first_year, final_year, scenarios_per_year = params['start'], params['end'], params['scenarios']
+        permit_prices = params['permit_prices']
+
+        # First run carbon tax case
+        baselines = {y: float(0) for y in range(first_year, final_year + 1)}
+
+        # Check that carbon tax is same for all years in model horizon
+        unique_permit_prices = list(set(permit_prices.values()))
+        if len(unique_permit_prices) != 1:
+            raise Exception(f'Permit price trajectory is not flat: {permit_prices}')
+
+        # Extract carbon price level (to be used in filename)
+        carbon_price = unique_permit_prices[0]
+
+        # Filename for REP case
+        filename = f'rep_cp-{carbon_price:.0f}.pickle'
+
+        # Check if model has already been solved
+        if not overwrite:
+            if filename in os.listdir(output_dir):
+                print(filename, 'already solved')
+                return
+
+        # Construct hash for case ID
+        case_id = self.get_hash(params)
+
+        # Save hash and associated parameters
+        self.save_hash(case_id, params, output_dir)
 
         # Start timer for model run
         t_start = time.time()
@@ -179,17 +256,6 @@ class ModelCases:
                        'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'C_MC', 'ETA',
                        'DELTA', 'RHO', 'EMISSIONS_RATE', 'YEAR_SCHEME_EMISSIONS_INTENSITY',
                        'YEAR_CUMULATIVE_SCHEME_REVENUE', 'OBJECTIVE']
-
-        # First run carbon tax case
-        baselines = {y: float(0) for y in range(first_year, final_year + 1)}
-
-        # Check that carbon tax is same for all years in model horizon
-        unique_permit_prices = list(set(permit_prices.values()))
-        if len(unique_permit_prices) != 1:
-            raise Exception(f'Permit price trajectory is not flat: {permit_prices}')
-
-        # Extract carbon price level (to be used in filename)
-        carbon_price = unique_permit_prices[0]
 
         # Run model (carbon tax case)
         self.algorithm_logger('run_rep_case', 'Starting carbon tax case solve')
@@ -254,7 +320,6 @@ class ModelCases:
         results = {'stage_1_carbon_tax': carbon_tax_results, 'stage_2_rep': iteration_results}
 
         # Save results
-        filename = f'rep_cp-{carbon_price:.0f}.pickle'
         self.save_results(results, output_dir, filename)
 
         # Dictionary to be returned by method
@@ -263,15 +328,45 @@ class ModelCases:
 
         try:
             total_iterations = max(iteration_results.keys())
-            message = f'Finished REP case: carbon price={carbon_price}, total solution time={time.time() - t_start}s, total iterations={total_iterations}'
+
+            # Save summary of the solution time
+            solution_summary = {'case_id': case_id, 'mode': params['mode'], 'carbon_price': carbon_price,
+                                'total_solution_time': time.time() - t_start, 'total_iterations': total_iterations,
+                                'max_capacity_difference': cap_diff}
+            self.save_solution_summary(solution_summary, output_dir)
+
+            message = f'Finished REP case: case_id={case_id}, carbon_price={carbon_price}, total_solution_time={time.time() - t_start}s, total_iterations={total_iterations}'
             self.algorithm_logger('run_rep_case', message)
         except Exception as e:
             print(f'run_rep_case: ' + str(e))
 
         return output
 
-    def run_price_smoothing_heuristic_case(self, params, output_dir):
+    def run_price_smoothing_heuristic_case(self, params, output_dir, overwrite=False):
         """Smooth prices over entire model horizon using approximated price functions"""
+
+        # Get filename
+        if params['mode'] == 'bau_deviation_minimisation':
+            filename = f"heuristic_baudev_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
+        elif params['mode'] == 'price_change_minimisation':
+            filename = f"heuristic_pdev_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
+        elif params['mode'] == 'price_target':
+            filename = f"heuristic_ptar_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
+        else:
+            raise Exception(f"Unexpected run mode: {params['mode']}")
+
+        # Check if case already solved
+        if not overwrite:
+            is_solved = filename in os.listdir(output_dir)
+            if is_solved:
+                print(filename, 'already solved')
+                return
+
+        # Get hash for case
+        case_id = self.get_hash(params)
+
+        # Save case ID and associated model parameters
+        self.save_hash(case_id, params, output_dir)
 
         # Start timer for model run
         t_start = time.time()
@@ -349,7 +444,6 @@ class ModelCases:
 
                 # Append name of objective so objective value can be extracted, and create filename for case
                 baseline_keys.append('OBJECTIVE_PRICE_TARGET_DIFFERENCE')
-                filename = f"heuristic_baudev_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
 
             elif params['mode'] == 'price_change_minimisation':
                 # Activate constraints penalised price deviations over successive years
@@ -359,7 +453,6 @@ class ModelCases:
 
                 # Append name of objective so objective value can be extracted, and create filename for case
                 baseline_keys.append('OBJECTIVE_PRICE_DEVIATION')
-                filename = f"heuristic_pdev_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
 
             elif params['mode'] == 'price_target':
                 # Set target price trajectory to prices obtained from BAU model over same period
@@ -372,7 +465,6 @@ class ModelCases:
 
                 # Append name of objective so objective value can be extracted, and create filename for case
                 baseline_keys.append('OBJECTIVE_PRICE_TARGET_DIFFERENCE')
-                filename = f"heuristic_ptar_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
 
             else:
                 raise Exception(f"Unexpected run mode: {params['mode']}")
@@ -442,7 +534,15 @@ class ModelCases:
 
         try:
             total_iterations = max(iteration_results.keys())
-            message = f"Finished heuristic case: carbon price={params['carbon_price']}, transition year={params['transition_year']}, total solution time={time.time() - t_start}s, total iterations={total_iterations}"
+
+            # Save summary of the solution time
+            solution_summary = {'case_id': case_id, 'mode': params['mode'], 'carbon_price': params['carbon_price'],
+                                'transition_year': params['transition_year'],
+                                'total_solution_time': time.time() - t_start, 'total_iterations': total_iterations,
+                                'max_capacity_difference': max_cap_difference}
+            self.save_solution_summary(solution_summary, output_dir)
+
+            message = f"Finished heuristic case: case_id={case_id}, carbon_price={params['carbon_price']}, transition_year={params['transition_year']}, total_solution_time={time.time() - t_start}s, total_iterations={total_iterations}"
             self.algorithm_logger('run_price_smoothing_heuristic_case', message)
         except Exception as e:
             print(f"run_price_smoothing_heuristic_case: " + str(e))
@@ -614,7 +714,7 @@ class ModelCases:
 
         try:
             total_iterations = max(iteration_results.keys())
-            message = f"Finished MPPDC case: carbon price={params['carbon_price']}, transition year={params['transition_year']}, total solution time={time.time() - t_start}s, total iterations={total_iterations}"
+            message = f"Finished MPPDC case: carbon_price={params['carbon_price']}, transition_year={params['transition_year']}, total_solution_time={time.time() - t_start}s, total_iterations={total_iterations}"
             self.algorithm_logger('run_price_smoothing_mppdc_case', message)
         except Exception as e:
             print(f"run_price_smoothing_mppdc_case: " + str(e))

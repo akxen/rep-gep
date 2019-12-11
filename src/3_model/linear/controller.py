@@ -24,7 +24,8 @@ if __name__ == '__main__':
     start, end, scenarios = 2016, 2030, 5
 
     # Run BAU case
-    # cases.run_bau_case(start, end, scenarios, output_directory)
+    bau_params = {'start': start, 'end': end, 'scenarios': scenarios, 'mode': 'bau'}
+    cases.run_bau_case(bau_params, output_directory)
 
     # Average prices from the BAU case are used as the target trajectory
     bau = analysis.load_results(output_directory, 'bau_case.pickle')
@@ -32,19 +33,17 @@ if __name__ == '__main__':
     bau_price_trajectory = bau_prices['average_price_real'].to_dict()
 
     # Run models with different carbon prices
-    # for c in range(5, 101, 5):
-    for c in [90]:
-    # for c in [15, 20, 25, 30, 35]:
+    for c in range(5, 101, 5):
         # Permit prices to be used in REP and price targeting models
         permit_prices_model = {y: float(c) for y in range(start, end + 1)}
 
         # Run REP case with given permit price
-        # cases.run_rep_case(start, end, scenarios, permit_prices_model, output_directory)
+        rep_params = {'start': start, 'end': end, 'scenarios': scenarios, 'permit_prices': permit_prices_model,
+                      'mode': 'rep'}
+        cases.run_rep_case(rep_params, output_directory)
 
         # For each run mode update case parameters and run price targeting model
-        # for mode in ['price_target', 'bau_deviation_minimisation', 'price_change_minimisation']:
-        for mode in ['price_change_minimisation']:
-        # for mode in ['bau_deviation_minimisation']:
+        for mode in ['price_target', 'bau_deviation_minimisation', 'price_change_minimisation']:
             # Set case parameters depending on run mode
             if mode == 'price_target':
                 case_params = {'mode': mode, 'price_target': bau_price_trajectory}
@@ -52,8 +51,7 @@ if __name__ == '__main__':
                 case_params = {'mode': mode}
 
             # Run price targeting models with different transition years
-            # for transition_year in [2020, 2025, 2030]:
-            for transition_year in [2030]:
+            for transition_year in [2020, 2025, 2030]:
                 print(f'Running model. Carbon price: {c}, mode: {mode}, transition year: {transition_year}')
 
                 # Update transition year and set case parameters
