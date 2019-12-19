@@ -218,8 +218,8 @@ class ResultsExtractor:
 
 
 if __name__ == '__main__':
-    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote')
-    output_directory = os.path.join(os.path.dirname(__file__), 'output', 'tmp', 'remote')
+    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'local')
+    output_directory = os.path.join(os.path.dirname(__file__), 'output', 'tmp', 'local')
 
     # Object used to parse and extract model results
     extractor = ResultsExtractor()

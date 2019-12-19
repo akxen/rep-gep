@@ -471,8 +471,8 @@ class CreatePlots:
 
 
 if __name__ == '__main__':
-    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'remote')
-    tmp_directory = os.path.join(os.path.dirname(__file__), 'output', 'tmp', 'remote')
+    results_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, '3_model', 'linear', 'output', 'local')
+    tmp_directory = os.path.join(os.path.dirname(__file__), 'output', 'tmp', 'local')
     figures_directory = os.path.join(os.path.dirname(__file__), 'output', 'figures')
 
     # Object used to analyse results and get price target trajectory
