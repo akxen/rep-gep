@@ -321,6 +321,19 @@ class CreatePlots:
         t4.set_size(7)
         cb4.update_ticks()
 
+        # Add lines to denote transition years and set y-lim
+        for a in ['ax1', 'ax4', 'ax7', 'ax10']:
+            layout[a]['ax'].plot([5, 100], [2020, 2020], color='w', linestyle='--', linewidth=0.8)
+            layout[a]['ax'].set_ylim([2016, 2030])
+
+        for a in ['ax2', 'ax5', 'ax8', 'ax11']:
+            layout[a]['ax'].plot([5, 100], [2025, 2025], color='w', linestyle='--', linewidth=0.8)
+            layout[a]['ax'].set_ylim([2016, 2030])
+
+        for a in ['ax3', 'ax6', 'ax9', 'ax12']:
+            layout[a]['ax'].plot([5, 100], [2029.9, 2029.9], color='w', linestyle='--', linewidth=0.8)
+            layout[a]['ax'].set_ylim([2016, 2030])
+
         # Format y-ticks and labels
         for a in ['ax1', 'ax4', 'ax7', 'ax10']:
             layout[a]['ax'].yaxis.set_major_locator(MultipleLocator(6))
@@ -375,13 +388,13 @@ class CreatePlots:
         fig, ((ax1, ax2, ax3), (ax4, ax5, ax6)) = plt.subplots(nrows=2, ncols=3, sharex=True, sharey=True)
 
         # Get interpolated surfaces
-        X1, Y1, Z1 = self.get_interpolated_surface('ptar_diff', 'YEAR_AVERAGE_PRICE', 2020, price_target=kwds['price_trajectory'])
-        X2, Y2, Z2 = self.get_interpolated_surface('ptar_diff', 'YEAR_AVERAGE_PRICE', 2025, price_target=kwds['price_trajectory'])
-        X3, Y3, Z3 = self.get_interpolated_surface('ptar_diff', 'YEAR_AVERAGE_PRICE', 2030, price_target=kwds['price_trajectory'])
+        X1, Y1, Z1 = self.get_interpolated_surface('baudev_diff', 'YEAR_AVERAGE_PRICE', 2020, price_target=kwds['bau_price'])
+        X2, Y2, Z2 = self.get_interpolated_surface('baudev_diff', 'YEAR_AVERAGE_PRICE', 2025, price_target=kwds['bau_price'])
+        X3, Y3, Z3 = self.get_interpolated_surface('baudev_diff', 'YEAR_AVERAGE_PRICE', 2030, price_target=kwds['bau_price'])
 
-        X4, Y4, Z4 = self.get_interpolated_surface('baudev_diff', 'YEAR_AVERAGE_PRICE', 2020, price_target=kwds['bau_price'])
-        X5, Y5, Z5 = self.get_interpolated_surface('baudev_diff', 'YEAR_AVERAGE_PRICE', 2025, price_target=kwds['bau_price'])
-        X6, Y6, Z6 = self.get_interpolated_surface('baudev_diff', 'YEAR_AVERAGE_PRICE', 2030, price_target=kwds['bau_price'])
+        X4, Y4, Z4 = self.get_interpolated_surface('ptar_diff', 'YEAR_AVERAGE_PRICE', 2020, price_target=kwds['price_trajectory'])
+        X5, Y5, Z5 = self.get_interpolated_surface('ptar_diff', 'YEAR_AVERAGE_PRICE', 2025, price_target=kwds['price_trajectory'])
+        X6, Y6, Z6 = self.get_interpolated_surface('ptar_diff', 'YEAR_AVERAGE_PRICE', 2030, price_target=kwds['price_trajectory'])
 
         # Construct plot and keep track of it
         plot_style_trajectory = {'vmin': -30, 'vmax': 30, 'edgecolors': 'face', 'cmap': 'bwr'}
@@ -413,6 +426,16 @@ class CreatePlots:
         cb6 = fig.colorbar(im6, cax=cax6)
         cb6.ax.tick_params(labelsize=6)
         cb6.set_label('Price difference ($)', fontsize=7)
+
+        # Add lines to denote transition years
+        for a in [ax1, ax4]:
+            a.plot([5, 100], [2020, 2020], color='k', linestyle='--', linewidth=0.8, alpha=0.9)
+
+        for a in [ax2, ax5]:
+            a.plot([5, 100], [2025, 2025], color='k', linestyle='--', linewidth=0.8, alpha=0.9)
+
+        for a in [ax3, ax6]:
+            a.plot([5, 100], [2029.85, 2029.85], color='k', linestyle='--', linewidth=0.8, alpha=0.9)
 
         # Format y-ticks and labels
         for ax in [ax1, ax4]:
@@ -454,6 +477,60 @@ class CreatePlots:
 
         plt.show()
 
+    def plot_tax_rep_comparison_first_year(self):
+        """REP scheme and tax comparison"""
+
+        x = [t for t in range(5, 101, 5)]
+        p_tax = [self.plot_data.results['tax'][t]['YEAR_AVERAGE_PRICE'][2016] for t in x]
+        p_rep = [self.plot_data.results['rep'][t]['YEAR_AVERAGE_PRICE'][2016] for t in x]
+        p_bau = self.plot_data.results['bau']['YEAR_AVERAGE_PRICE'][2016]
+
+        fig, ax = plt.subplots()
+        ax2 = ax.twinx()
+        bau_style = {'color': 'k', 'linestyle': '--', 'alpha': 0.5, 'linewidth': 0.9}
+        ax.plot([5, 100], [p_bau, p_bau], **bau_style)
+
+        # Plot lines
+        line_properties = {'alpha': 0.8, 'linewidth': 0.7, 'markersize': 2, 'fillstyle': 'none', 'markeredgewidth': 0.5}
+        ax.plot(x, p_tax, 'o--', color='#d91818', **line_properties)
+        ax.plot(x, p_rep, 'o--', color='#4263f5', **line_properties)
+        ax.legend(['BAU', 'Tax', 'REP'], fontsize=6, frameon=False)
+
+        # Installed gas capacity
+        g_c = [sum(v for k, v in self.plot_data.results['tax'][t]['x_c'].items()
+                   if (('OCGT' in k[0]) or ('CCGT' in k[0])) and (k[1] == 2016)) for t in x]
+        ax2.plot(x, g_c, 'o--', color='#4fa83d', **line_properties)
+
+        # Labels
+        ax.set_ylabel('Average price ($/MWh)', fontsize=6)
+        ax.set_xlabel('Emissions price (tCO$_{2}$/MWh', fontsize=6)
+
+        # Format axes
+        ax.yaxis.set_major_locator(MultipleLocator(20))
+        ax.yaxis.set_minor_locator(MultipleLocator(10))
+
+        ax.xaxis.set_major_locator(MultipleLocator(20))
+        ax.xaxis.set_minor_locator(MultipleLocator(5))
+
+        ax.tick_params(axis='both', which='major', labelsize=6)
+        ax2.tick_params(axis='y', which='major', labelsize=6)
+        ax2.ticklabel_format(axis='y', style='sci', scilimits=(3, 3), useMathText=True)
+        ax2.yaxis.offsetText.set_fontsize(7)
+
+        ax2.set_ylabel('New gas capacity (MW)', fontsize=6)
+        ax2.legend(['Gas'], fontsize=6, frameon=False, loc='center', bbox_to_anchor=(0.5, 0.94))
+
+        ax2.yaxis.set_major_locator(MultipleLocator(2000))
+        ax2.yaxis.set_minor_locator(MultipleLocator(1000))
+
+        fig.set_size_inches(3, 2.5)
+        fig.subplots_adjust(left=0.15, bottom=0.15, right=0.85, top=0.92)
+
+        fig.savefig(os.path.join(self.figures_dir, 'price_sensitivity.png'), dpi=200)
+        fig.savefig(os.path.join(self.figures_dir, 'price_sensitivity.pdf'))
+
+        plt.show()
+
     def baseline_slice(self):
         """Plot slice of baseline and average emissions intensity for permit price 50 $/tCO2"""
 
@@ -488,9 +565,11 @@ if __name__ == '__main__':
     bau_first_year_trajectory = {y: bau_price_trajectory[2016] for y in range(2016, 2031)}
 
     # plots.plot_tax_rep_comparison()
-    plots.plot_transition_year_comparison('baudev')
-    plots.plot_transition_year_comparison('ptar')
-    plots.plot_transition_year_comparison('pdev')
+    # plots.plot_transition_year_comparison('baudev')
+    # plots.plot_transition_year_comparison('ptar')
+    # plots.plot_transition_year_comparison('pdev')
 
     plot_params = {'price_trajectory': bau_price_trajectory, 'bau_price': bau_first_year_trajectory}
     plots.price_target_difference(**plot_params)
+    plots.plot_tax_rep_comparison_first_year()
+
