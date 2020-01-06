@@ -253,7 +253,7 @@ class CreatePlots:
                 # Get vmin and vmax
                 vmin, vmax = get_limits(layout_dict[k]['results_key'])
 
-                # Manually adjust some colour ranges
+                # Manually adjust min an max for some colour ranges
                 if layout_dict[k]['results_key'] == 'baseline':
                     vmin, vmax = 0, 2
 
@@ -321,18 +321,22 @@ class CreatePlots:
         t4.set_size(7)
         cb4.update_ticks()
 
+        # Set y-lim for all plots
+        for a in [f'ax{i}' for i in range(1, 13)]:
+            layout[a]['ax'].set_ylim([2016, 2030])
+
         # Add lines to denote transition years and set y-lim
         for a in ['ax1', 'ax4', 'ax7', 'ax10']:
             layout[a]['ax'].plot([5, 100], [2020, 2020], color='w', linestyle='--', linewidth=0.8)
-            layout[a]['ax'].set_ylim([2016, 2030])
 
         for a in ['ax2', 'ax5', 'ax8', 'ax11']:
             layout[a]['ax'].plot([5, 100], [2025, 2025], color='w', linestyle='--', linewidth=0.8)
-            layout[a]['ax'].set_ylim([2016, 2030])
 
-        for a in ['ax3', 'ax6', 'ax9', 'ax12']:
+        for a in ['ax3', 'ax6']:
             layout[a]['ax'].plot([5, 100], [2029.9, 2029.9], color='w', linestyle='--', linewidth=0.8)
-            layout[a]['ax'].set_ylim([2016, 2030])
+
+        for a in ['ax9', 'ax12']:
+            layout[a]['ax'].plot([5, 100], [2029.85, 2029.85], color='w', linestyle='--', linewidth=0.8)
 
         # Format y-ticks and labels
         for a in ['ax1', 'ax4', 'ax7', 'ax10']:
@@ -427,6 +431,10 @@ class CreatePlots:
         cb6.ax.tick_params(labelsize=6)
         cb6.set_label('Price difference ($)', fontsize=7)
 
+        # Set y-lim for all plots
+        for a in [ax1, ax2, ax3, ax4, ax5, ax6]:
+            a.set_ylim([2016, 2030])
+
         # Add lines to denote transition years
         for a in [ax1, ax4]:
             a.plot([5, 100], [2020, 2020], color='k', linestyle='--', linewidth=0.8, alpha=0.9)
@@ -434,8 +442,8 @@ class CreatePlots:
         for a in [ax2, ax5]:
             a.plot([5, 100], [2025, 2025], color='k', linestyle='--', linewidth=0.8, alpha=0.9)
 
-        for a in [ax3, ax6]:
-            a.plot([5, 100], [2029.85, 2029.85], color='k', linestyle='--', linewidth=0.8, alpha=0.9)
+        ax3.plot([5, 100], [2029.9, 2029.9], color='k', linestyle='--', linewidth=0.8, alpha=0.9)
+        ax6.plot([5, 100], [2029.85, 2029.85], color='k', linestyle='--', linewidth=0.8, alpha=0.9)
 
         # Format y-ticks and labels
         for ax in [ax1, ax4]:
@@ -565,11 +573,10 @@ if __name__ == '__main__':
     bau_first_year_trajectory = {y: bau_price_trajectory[2016] for y in range(2016, 2031)}
 
     # plots.plot_tax_rep_comparison()
-    # plots.plot_transition_year_comparison('baudev')
-    # plots.plot_transition_year_comparison('ptar')
-    # plots.plot_transition_year_comparison('pdev')
+    plots.plot_transition_year_comparison('baudev')
+    plots.plot_transition_year_comparison('ptar')
+    plots.plot_transition_year_comparison('pdev')
 
     plot_params = {'price_trajectory': bau_price_trajectory, 'bau_price': bau_first_year_trajectory}
     plots.price_target_difference(**plot_params)
     plots.plot_tax_rep_comparison_first_year()
-
