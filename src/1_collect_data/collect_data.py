@@ -1,3 +1,5 @@
+"""Class used to collate unit data"""
+
 import os
 
 import numpy as np
@@ -973,7 +975,8 @@ class ConstructDataset:
                 'Ramp Down Rate (MW/h)': 'RR_DOWN',
                 'Warm Start-up Costs ($/MW sent-out)': 'SU_COST_WARM_MW',
                 'No Load Fuel Consumption (% of Full Load Fuel Consumption)': 'NL_FUEL_CONS',
-                'Min Gen (%)': 'MIN_GEN_PERCENT'}
+                'Min Gen (%)': 'MIN_GEN_PERCENT',
+                'Economic Life': 'ECONOMIC_LIFE'}
 
         # ACIL Allen technical parameter information for candidate units
         df_acil_merge = df_acil.rename(columns=cols)[cols.values()]
@@ -1342,6 +1345,21 @@ class ConstructDataset:
 
         return df
 
+    def get_existing_storage_units(self):
+        """
+        Consider Hornsdale power reserve as an existing unit. Construct basic inputs based on NEM Registration and
+        Exemptions list
+        """
+
+        # Storage unit info for Hornsdale Power Reserve
+        info = {'DUID': 'HPRL1', 'REG_CAP': 100, 'ENERGY': 129, 'NEM_ZONE': 'NSA'}
+
+        # Convert to DataFrame
+        df = pd.Series(info).to_frame().T.set_index('DUID')
+
+        return df
+
+
     def get_battery_build_cost(self):
         """Load and format batter build cost information"""
 
@@ -1493,8 +1511,12 @@ class ConstructDataset:
         # Divide charge efficiency by 100 (convert to number between 0 and 1)
         df['CHARGE_EFFICIENCY'] = df['CHARGE_EFFICIENCY'].div(100)
 
+        # Get FOM cost from ACIL Allen dataset. Note: divide by 1000 to get $/kW/year
+        fom = self.df_acil_technical_parameters.loc['Large Scale Battery Storage', 'Fixed Op Cost ($/MW/year)']
+        df['FOM'] = fom / 1000
+
         # Retain selected columns
-        df_o = df[['CHARGE_EFFICIENCY', 'ECONOMIC_LIFE']]
+        df_o = df[['CHARGE_EFFICIENCY', 'ECONOMIC_LIFE', 'FOM']]
 
         return df_o
 
@@ -1522,28 +1544,32 @@ if __name__ == '__main__':
     output_directory = os.path.join(os.path.dirname(__file__), 'output')
 
     # Object used to construct dataset
-    Dataset = ConstructDataset(data_directory, scenario='neutral')
+    dataset = ConstructDataset(data_directory, scenario='neutral')
 
     # Candidate unit parameters
-    candidate_units = Dataset.get_candidate_unit_parameters()
+    candidate_units = dataset.get_candidate_unit_parameters()
     candidate_units.to_csv(os.path.join(output_directory, 'candidate_units.csv'))
 
-    # Parameters for existing units
-    existing_units = Dataset.get_existing_unit_parameters()
+    # Parameters for existing units (excluding existing storage units)
+    existing_units = dataset.get_existing_unit_parameters()
     existing_units.to_csv(os.path.join(output_directory, 'existing_units.csv'))
 
+    # Parameters for existing storage units
+    existing_storage_units = dataset.get_existing_storage_units()
+    existing_storage_units.to_csv(os.path.join(output_directory, 'existing_storage_units.csv'))
+
     # Candidate unit build costs
-    battery_build_costs = Dataset.get_battery_build_cost()
+    battery_build_costs = dataset.get_battery_build_cost()
     battery_build_costs.to_csv(os.path.join(output_directory, 'battery_build_costs.csv'))
 
     # Candidate battery properties
-    batter_properties = Dataset.get_candidate_battery_properties()
-    batter_properties.to_csv(os.path.join(output_directory, 'battery_properties.csv'))
+    battery_properties = dataset.get_candidate_battery_properties()
+    battery_properties.to_csv(os.path.join(output_directory, 'battery_properties.csv'))
 
     # Candidate unit build limits
-    candidate_unit_build_limits = Dataset.get_candidate_unit_build_limits()
+    candidate_unit_build_limits = dataset.get_candidate_unit_build_limits()
     candidate_unit_build_limits.to_csv(os.path.join(output_directory, 'candidate_unit_build_limits.csv'))
 
     # Minimum reserve levels
-    minimum_reserve_levels = Dataset.get_minimum_reserve_levels()
+    minimum_reserve_levels = dataset.get_minimum_reserve_levels()
     minimum_reserve_levels.to_csv(os.path.join(output_directory, 'minimum_reserve_levels.csv'))

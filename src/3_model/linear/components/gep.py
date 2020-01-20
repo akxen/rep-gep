@@ -2020,10 +2020,10 @@ if __name__ == '__main__':
 
     primal = Primal(2016, 2022, 3)
     primal_model = primal.construct_model()
-    primal_model.baseline.fix(0)
-    primal_model.permit_price.fix(40)
-
-    t_start = time.time()
-    primal_model, primal_status = primal.solve_model(primal_model)
-
-    print(f'Solved in {time.time() - t_start}s')
+    # primal_model.baseline.fix(0)
+    # primal_model.permit_price.fix(40)
+    #
+    # t_start = time.time()
+    # primal_model, primal_status = primal.solve_model(primal_model)
+    #
+    # print(f'Solved in {time.time() - t_start}s')

@@ -168,9 +168,13 @@ class CommonComponents:
             elif g in m.G_C_THERM.union(m.G_C_WIND, m.G_C_SOLAR):
                 return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')][g] * 1000)
 
-            elif g in m.G_STORAGE:
-                # TODO: Need to find reasonable FOM cost for storage units - setting = MEL-WIND for now
-                return float(self.data.candidate_units_dict[('PARAMETERS', 'FOM')]['MEL-WIND'] * 1000)
+            elif g in m.G_C_STORAGE:
+                return float(self.data.battery_properties_dict['FOM'][g] * 1000)
+
+            elif g in m.G_E_STORAGE:
+                # Note: all candidate storage units have a FOM cost of 30 $/kW/year. Assuming existing units face
+                # similar costs
+                return float(30)
 
             else:
                 raise Exception(f'Unexpected generator encountered: {g}')
@@ -181,8 +185,14 @@ class CommonComponents:
         def asset_life_rule(_m, g):
             """Assumed lifetime (years) for candidate generators"""
 
-            # TODO: Update this assumption with better data
-            return float(25)
+            if g in m.G_STORAGE:
+                return float(self.data.battery_properties_dict['ECONOMIC_LIFE'][g])
+
+            elif g in m.G_C_THERM.union(m.G_C_WIND, m.G_C_SOLAR):
+                return float(self.data.candidate_units_dict[('PARAMETERS', 'ECONOMIC_LIFE')][g])
+
+            else:
+                raise Exception(f'Unexpected generator encountered: {g}')
 
         # Asset lifetime for candidate generators
         m.ASSET_LIFE = Param(m.G_C, rule=asset_life_rule)
