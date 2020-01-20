@@ -305,7 +305,14 @@ class ModelCases:
             # Check if stop criterion satisfied
             cap_diff = max([abs(result_input['x_c'][k] - rep_results['x_c'][k]) for k in result_input['x_c'].keys()])
             print(f'{i}: Maximum capacity difference = {cap_diff} MW')
-            if cap_diff < 1:
+
+            # Max absolute baseline difference between successive iterations
+            baseline_diff = max([abs(result_input['baseline'][k] - rep_results['baseline'][k])
+                                 for k in result_input['baseline'].keys()])
+            print(f'{i}: Maximum baseline difference = {baseline_diff} tCO2/MWh')
+
+            # If no materially large difference can stop iterating
+            if baseline_diff < 0.05:
                 stop_flag = True
 
             # Update input results (used to check stopping criterion in next iteration)
@@ -332,7 +339,8 @@ class ModelCases:
             # Save summary of the solution time
             solution_summary = {'case_id': case_id, 'mode': params['mode'], 'carbon_price': carbon_price,
                                 'total_solution_time': time.time() - t_start, 'total_iterations': total_iterations,
-                                'max_capacity_difference': cap_diff}
+                                'max_capacity_difference': cap_diff, 'max_baseline_difference': baseline_diff}
+
             self.save_solution_summary(solution_summary, output_dir)
 
             message = f'Finished REP case: case_id={case_id}, carbon_price={carbon_price}, total_solution_time={time.time() - t_start}s, total_iterations={total_iterations}'
@@ -499,8 +507,12 @@ class ModelCases:
             print(message)
             self.algorithm_logger('run_price_smoothing_heuristic_case', message)
 
-            # Check if capacity variables have changed
-            if max_cap_difference < 5:
+            # Max absolute baseline difference between successive iterations
+            baseline_diff = max([abs(psg_input['baseline'][k] - m_p.baseline[k].value) for k in m_p.baseline.keys()])
+            print(f'{counter}: Maximum baseline difference = {baseline_diff} tCO2/MWh')
+
+            # If no materially large difference can stop iterating
+            if baseline_diff < 0.05:
                 stop_flag = True
 
             # Check if max iterations exceeded
@@ -539,7 +551,7 @@ class ModelCases:
             solution_summary = {'case_id': case_id, 'mode': params['mode'], 'carbon_price': params['carbon_price'],
                                 'transition_year': params['transition_year'],
                                 'total_solution_time': time.time() - t_start, 'total_iterations': total_iterations,
-                                'max_capacity_difference': max_cap_difference}
+                                'max_capacity_difference': max_cap_difference, 'max_baseline_difference': baseline_diff}
             self.save_solution_summary(solution_summary, output_dir)
 
             message = f"Finished heuristic case: case_id={case_id}, carbon_price={params['carbon_price']}, transition_year={params['transition_year']}, total_solution_time={time.time() - t_start}s, total_iterations={total_iterations}"
