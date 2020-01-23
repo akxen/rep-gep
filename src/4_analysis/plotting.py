@@ -4,6 +4,7 @@ import os
 import pickle
 
 import numpy as np
+import pandas as pd
 from scipy import interpolate
 from scipy.interpolate import griddata
 from matplotlib.colors import BoundaryNorm
@@ -572,7 +573,12 @@ if __name__ == '__main__':
     bau_price_trajectory = bau_prices['average_price_real'].to_dict()
     bau_first_year_trajectory = {y: bau_price_trajectory[2016] for y in range(2016, 2031)}
 
-    # plots.plot_tax_rep_comparison()
+    ptar = analysis.load_results(results_directory, 'heuristic_ptar_ty-2030_cp-35.pickle')
+    ptar_prices = analysis.get_year_average_price(ptar['stage_3_price_targeting'][2]['primal']['PRICES'], -1)
+    s = pd.Series(bau_price_trajectory)
+    d = ptar_prices['average_price_real'].subtract(s)
+
+    plots.plot_tax_rep_comparison()
     plots.plot_transition_year_comparison('baudev')
     plots.plot_transition_year_comparison('ptar')
     plots.plot_transition_year_comparison('pdev')

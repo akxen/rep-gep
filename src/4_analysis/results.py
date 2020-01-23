@@ -225,7 +225,7 @@ if __name__ == '__main__':
     extractor = ResultsExtractor()
 
     # Extract results from all scenarios and save in tmp directory
-    extractor.extract_all_results(results_directory, output_directory)
+    # extractor.extract_all_results(results_directory, output_directory)
     
     # Combine model results into single dictionary
     model_results = extractor.combine_results(output_directory)
