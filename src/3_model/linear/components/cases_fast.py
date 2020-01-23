@@ -20,6 +20,377 @@ from auxiliary import BaselineUpdater
 from analysis import AnalyseResults
 
 
+class REP:
+    def __init__(self, output_dir, params):
+        # Timer
+        t_start = time.time()
+        print(f'Constructing class: {t_start}')
+
+        # Output directory
+        self.output_dir = output_dir
+
+        # Placeholder for object used to construct and run models
+        self.primal = Primal(params['start'], params['end'], params['scenarios'])
+
+        # Key model parameters
+        self.params = params
+
+        # Placeholder for model object
+        self.m = self.primal.construct_model()
+
+        print(f'Initialised model: {time.time() - t_start}s')
+
+    @staticmethod
+    def extract_results(m, component_name):
+        """Extract values associated with model components"""
+
+        model_component = m.__getattribute__(component_name)
+
+        if type(model_component) == pyomo.core.base.expression.IndexedExpression:
+            return {k: model_component[k].expr() for k in model_component.keys()}
+
+        elif type(model_component) == pyomo.core.base.expression.SimpleExpression:
+            return model_component.expr()
+
+        elif type(model_component) == pyomo.core.base.var.SimpleVar:
+            return model_component.value
+
+        elif type(model_component) == pyomo.core.base.var.IndexedVar:
+            return model_component.get_values()
+
+        elif type(model_component) == pyomo.core.base.param.IndexedParam:
+            try:
+                return {k: v.value for k, v in model_component.items()}
+            except AttributeError:
+                return {k: v for k, v in model_component.items()}
+
+        elif type(model_component) == pyomo.core.base.param.SimpleParam:
+            return model_component.value
+
+        elif type(model_component) == pyomo.core.base.objective.SimpleObjective:
+            return model_component.expr()
+
+        else:
+            raise Exception(f'Unexpected model component: {component_name}')
+
+    @staticmethod
+    def get_hash(params):
+        """Get hash string of model parameters. Used to identify cases in log file."""
+
+        return hashlib.sha224(str(params).encode('utf-8', 'ignore')).hexdigest()[:10]
+
+    def save_hash(self, case_id, params):
+        """Save case ID and associated parameters to file"""
+
+        # Include case ID in dictionary
+        params['case_id'] = case_id
+
+        # Save case IDs and all associated params to file
+        with open(os.path.join(self.output_dir, 'case_ids.txt'), 'a+') as f:
+            f.write(str(params) + '\n')
+
+    def save_results(self, results, filename):
+        """Save model results"""
+
+        with open(os.path.join(self.output_dir, filename), 'wb') as f:
+            pickle.dump(results, f)
+
+    def save_solution_summary(self, summary):
+        """Save solution summary"""
+
+        # Save summary of total solution time + number of iterations (if specified)
+        with open(os.path.join(self.output_dir, 'solution_summary.txt'), 'a+') as f:
+            f.write(str(summary) + '\n')
+
+    def update_baseline(self, baselines):
+        """Update emissions intensity baseline"""
+
+        for y in self.m.Y:
+            self.m.baseline[y].fix(baselines[y])
+
+    def update_permit_price(self, permit_price):
+        """Update permit price"""
+
+        for y in self.m.Y:
+            self.m.permit_price[y].fix(permit_price)
+
+    @staticmethod
+    def get_iteration_difference(i_input, i_output, key):
+        """Get max absolute difference between successive iterations for a particular model component"""
+
+        return max([abs(i_input[key][k] - i_output[key][k]) for k in i_input[key].keys()])
+
+    def get_results(self):
+        """Extract results"""
+
+        # Results to extract
+        keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'q', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
+                'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'C_MC', 'ETA',
+                'DELTA', 'RHO', 'EMISSIONS_RATE', 'YEAR_SCHEME_EMISSIONS_INTENSITY',
+                'YEAR_CUMULATIVE_SCHEME_REVENUE', 'OBJECTIVE']
+
+        # Model results
+        results = {k: self.extract_results(self.m, k) for k in keys}
+
+        # Add dual variable from power balance constraint
+        results['PRICES'] = {k: self.m.dual[self.m.POWER_BALANCE[k]] for k in self.m.POWER_BALANCE.keys()}
+
+        return results
+
+    def run_model(self, baselines, permit_price):
+        """Run carbon tax case"""
+
+        # Start timer
+        t_start = time.time()
+
+        # Fix baseline and permit price
+        self.update_baseline(baselines)
+        print(f'Fixed baselines: {time.time() - t_start}')
+
+        self.update_permit_price(permit_price)
+        print(f'Fixed permit prices: {time.time() - t_start}')
+
+        # Solve model
+        self.m, status = self.primal.solve_model(self.m)
+        print(f'Solved model: {time.time() - t_start}')
+
+        # Get results
+        results = self.get_results()
+        print(f'Extracted results model: {time.time() - t_start}')
+
+        return results, status
+
+    def run_case(self, carbon_price, overwrite=False):
+        """Run REP case"""
+
+        # Filename for REP case
+        filename = f'rep_cp-{carbon_price:.0f}.pickle'
+
+        # Check if model has already been solved
+        if (not overwrite) and (filename in os.listdir(self.output_dir)):
+            print(f'Already solved: {filename}')
+            return
+
+        # Construct hash for case ID and save case hash with associated parameters
+        case_id = self.get_hash(self.params)
+        self.save_hash(case_id, self.params)
+
+        # Start time
+        t_start = time.time()
+
+        # First run carbon tax case
+        baselines = {y: 0 for y in self.m.Y}
+        carbon_tax_results, carbon_tax_status = self.run_model(baselines, carbon_price)
+
+        # Container for iteration results
+        i_results = dict()
+
+        # Iteration input
+        i_input = carbon_tax_results
+
+        # Initialise iteration counter
+        counter = 1
+
+        while True:
+            # Re-run model with new baselines
+            i_output, i_status = self.run_model(baselines, carbon_price)
+            log_infeasible_constraints(self.m)
+
+            # Add results to iteration results container
+            i_results[counter] = copy.deepcopy(i_output)
+
+            # Check max absolute capacity difference between successive iterations
+            max_capacity_difference = self.get_iteration_difference(i_input, i_output, 'x_c')
+            print(f'{counter}: Maximum capacity difference = {max_capacity_difference} MW')
+
+            # Max absolute baseline difference between successive iterations
+            max_baseline_difference = self.get_iteration_difference(i_input, i_output, 'baseline')
+            print(f'{counter}: Maximum baseline difference = {max_baseline_difference} tCO2/MWh')
+
+            # If max absolute difference between successive iterations is sufficiently small stop iterating
+            if max_baseline_difference < 0.05:
+                break
+
+            # If iteration limit exceeded
+            elif counter > 9:
+                print('Max iterations exceeded. Exiting loop.')
+                break
+
+            # Update iteration inputs (used to check stopping criterion in next iteration)
+            i_input = copy.deepcopy(i_output)
+
+            # Update baselines to be used in next iteration
+            baselines = i_output['YEAR_SCHEME_EMISSIONS_INTENSITY']
+
+            # Update iteration counter
+            counter += 1
+
+        # Combine results into single dictionary
+        results = {'stage_1_carbon_tax': carbon_tax_results, 'stage_2_rep': i_results}
+
+        # Save results
+        self.save_results(results, filename)
+
+        # Dictionary to be returned by method
+        output = {'results': results, 'model': self.m, 'status': i_status}
+
+        # Total number of iterations processed
+        total_iterations = max(i_results.keys())
+
+        # Save summary of the solution time
+        solution_summary = {'case_id': case_id, 'mode': 'rep', 'carbon_price': carbon_price,
+                            'total_solution_time': time.time() - t_start, 'total_iterations': total_iterations,
+                            'max_capacity_difference': max_capacity_difference,
+                            'max_baseline_difference': max_baseline_difference}
+
+        self.save_solution_summary(solution_summary)
+        message = 'Finished REP case: ' + str(solution_summary)
+
+        return output
+
+    def run_cases(self, carbon_prices):
+        """Run REP model for a range of carbon prices"""
+
+        for c in carbon_prices:
+            self.run_case(c)
+
+
+    # def run_case_old(self, params, output_dir, overwrite=False):
+    #     """Run case for a given permit price (same for all years in model horizon)"""
+    #
+    #     # Extract case parameters
+    #     start, end, scenarios = params['start'], params['end'], params['scenarios']
+    #     permit_prices = params['permit_prices']
+    #
+    #     # First run carbon tax case
+    #     baselines = {y: float(0) for y in range(start, end + 1)}
+    #
+    #     # Check that carbon tax is same for all years in model horizon
+    #     assert len(set(permit_prices.values())) == 1, f'Permit price trajectory is not flat: {permit_prices}'
+    #
+    #     # Extract carbon price in first year (same as all other used). To be used in filename.
+    #     carbon_price = permit_prices[start]
+    #
+    #     # Filename for REP case
+    #     filename = f'rep_cp-{carbon_price:.0f}.pickle'
+    #
+    #     # Check if model has already been solved
+    #     if (not overwrite) and (filename in os.listdir(output_dir)):
+    #         print(f'Already solved: {filename}')
+    #         return
+    #
+    #     # Construct hash for case ID
+    #     case_id = self.get_hash(params)
+    #
+    #     # Save hash and associated parameters
+    #     self.save_hash(case_id, params, output_dir)
+    #
+    #     # Start timer for model run
+    #     t_start = time.time()
+    #
+    #     self.algorithm_logger('run_rep_case', 'Starting case with params: ' + str(params))
+    #
+    #     # Results to extract
+    #     result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'q', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
+    #                    'YEAR_EMISSIONS_INTENSITY', 'YEAR_SCHEME_REVENUE', 'TOTAL_SCHEME_REVENUE', 'C_MC', 'ETA',
+    #                    'DELTA', 'RHO', 'EMISSIONS_RATE', 'YEAR_SCHEME_EMISSIONS_INTENSITY',
+    #                    'YEAR_CUMULATIVE_SCHEME_REVENUE', 'OBJECTIVE']
+    #
+    #     # Run carbon tax case
+    #     self.algorithm_logger('run_rep_case', 'Starting carbon tax case solve')
+    #     m, status = self.run_primal_fixed_policy(start, end, scenarios, permit_prices, baselines)
+    #     log_infeasible_constraints(m)
+    #     self.algorithm_logger('run_rep_case', 'Finished carbon tax case solve')
+    #
+    #     # Model results
+    #     carbon_tax_results = {k: self.extract_result(m, k) for k in result_keys}
+    #
+    #     # Add dual variable from power balance constraint
+    #     carbon_tax_results['PRICES'] = {k: m.dual[m.POWER_BALANCE[k]] for k in m.POWER_BALANCE.keys()}
+    #
+    #     # Update baselines so they = emissions intensity of output from participating generators
+    #     baselines = carbon_tax_results['YEAR_SCHEME_EMISSIONS_INTENSITY']
+    #
+    #     # Container for iteration results
+    #     i_results = dict()
+    #
+    #     # Iteration counter
+    #     counter = 1
+    #
+    #     # Initialise iteration input to carbon tax scenario results (used to check stopping criterion)
+    #     i_input = carbon_tax_results
+    #
+    #     while True:
+    #         # Re-run model with new baselines
+    #         self.algorithm_logger('run_rep_case', f'Starting solve for REP iteration={counter}')
+    #         m, status = self.run_primal_fixed_policy(start, end, scenarios, permit_prices, baselines)
+    #         log_infeasible_constraints(m)
+    #         self.algorithm_logger('run_rep_case', f'Finished solved for REP iteration={counter}')
+    #
+    #         # Model results
+    #         i_output = {k: self.extract_result(m, k) for k in result_keys}
+    #
+    #         # Get dual variable values from power balance constraint
+    #         i_output['PRICES'] = {k: m.dual[m.POWER_BALANCE[k]] for k in m.POWER_BALANCE.keys()}
+    #
+    #         # Add results to iteration results container
+    #         i_results[counter] = copy.deepcopy(i_output)
+    #
+    #         # Check max absolute capacity difference between successive iterations
+    #         max_capacity_difference = self.get_successive_iteration_difference(i_input, i_output, 'x_c')
+    #         print(f'{counter}: Maximum capacity difference = {max_capacity_difference} MW')
+    #
+    #         # Max absolute baseline difference between successive iterations
+    #         max_baseline_difference = self.get_successive_iteration_difference(i_input, i_output, 'baseline')
+    #         print(f'{counter}: Maximum baseline difference = {max_baseline_difference} tCO2/MWh')
+    #
+    #         # If max absolute difference between successive iterations is sufficiently small stop iterating
+    #         if max_baseline_difference < 0.05:
+    #             break
+    #
+    #         # If iteration limit exceeded
+    #         elif counter > 9:
+    #             message = f'Max iterations exceeded. Exiting loop.'
+    #             print(message)
+    #             self.algorithm_logger('run_rep_case', message)
+    #             break
+    #
+    #         # Update iteration inputs (used to check stopping criterion in next iteration)
+    #         i_input = copy.deepcopy(i_output)
+    #
+    #         # Update baselines to be used in next iteration
+    #         baselines = i_output['YEAR_SCHEME_EMISSIONS_INTENSITY']
+    #
+    #         # Update iteration counter
+    #         counter += 1
+    #
+    #     # Combine results into single dictionary
+    #     results = {'stage_1_carbon_tax': carbon_tax_results, 'stage_2_rep': i_results}
+    #
+    #     # Save results
+    #     self.save_results(results, output_dir, filename)
+    #
+    #     # Dictionary to be returned by method
+    #     output = {'results': results, 'model': m, 'status': status}
+    #     self.algorithm_logger('run_rep_case', f'Finished REP case')
+    #
+    #     # Total number of iterations processed
+    #     total_iterations = max(i_results.keys())
+    #
+    #     # Save summary of the solution time
+    #     solution_summary = {'case_id': case_id, 'mode': params['mode'], 'carbon_price': carbon_price,
+    #                         'total_solution_time': time.time() - t_start, 'total_iterations': total_iterations,
+    #                         'max_capacity_difference': max_capacity_difference,
+    #                         'max_baseline_difference': max_baseline_difference}
+    #
+    #     self.save_solution_summary(solution_summary, output_dir)
+    #
+    #     message = 'Finished REP case: ' + str(solution_summary)
+    #     self.algorithm_logger('run_rep_case', message)
+    #
+    #     return output
+
+
 class ModelCases:
     def __init__(self, output_dir, log_name):
         logging.basicConfig(filename=os.path.join(output_dir, f'{log_name}.log'), filemode='a',
@@ -772,7 +1143,15 @@ class ModelCases:
 
 if __name__ == '__main__':
     log_file_name = 'case_logger'
-    output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'local')
+    output_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output', 'local2')
 
     # Object used to run model cases
     cases = ModelCases(output_directory, log_file_name)
+
+    p = {'start': 2016, 'end': 2030, 'scenarios': 5}
+    rep = REP(output_directory, p)
+
+    b = {y: 0 for y in range(p['start'], p['end'] + 1)}
+    # r = rep.run_model(b, 20)
+
+    rep.run_cases(range(5, 11, 5))

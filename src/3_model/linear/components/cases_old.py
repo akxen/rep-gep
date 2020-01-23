@@ -113,25 +113,6 @@ class ModelCases:
         with open(os.path.join(output_dir, 'solution_summary.txt'), 'a+') as f:
             f.write(str(summary) + '\n')
 
-    def get_bau_initial_price(self, output_dir, first_year):
-        """Get BAU price in first year"""
-
-        # Load BAU results
-        with open(os.path.join(output_dir, 'bau_case.pickle'), 'rb') as f:
-            results = pickle.load(f)
-
-        # Get BAU average price in first year
-        prices = self.analysis.get_year_average_price(results['PRICES'], factor=-1)
-        initial_price = prices.loc[first_year, 'average_price_real']
-
-        return initial_price
-
-    @staticmethod
-    def get_successive_iteration_difference(i_input, i_output, key):
-        """Get max absolute difference between successive iterations for a particular model component"""
-
-        return max([abs(i_input[key][k] - i_output[key][k]) for k in i_input[key].keys()])
-
     @staticmethod
     def run_mppdc_fixed_policy(final_year, scenarios_per_year, permit_prices, baselines,
                                include_primal_constraints=True):
@@ -176,9 +157,10 @@ class ModelCases:
         filename = 'bau_case.pickle'
 
         # Check if case exists
-        if (not overwrite) and (filename in os.listdir(output_dir)):
-            print(f'Already solved: {filename}')
-            return
+        if not overwrite:
+            if filename in os.listdir(output_dir):
+                print(filename, 'already solved')
+                return
 
         # Construct hash for case
         case_id = self.get_hash(params)
@@ -187,21 +169,21 @@ class ModelCases:
         self.save_hash(case_id, params, output_dir)
 
         # Extract case parameters for model
-        start, end, scenarios = params['start'], params['end'], params['scenarios']
+        first_year, final_year, scenarios_per_year = params['start'], params['end'], params['scenarios']
 
         # Start timer for case run
         t_start = time.time()
 
-        message = f"""Starting case: first_year={start}, final_year={end}, scenarios_per_year={scenarios}"""
+        message = f"""Starting case: first_year={first_year}, final_year={final_year}, scenarios_per_year={scenarios_per_year}"""
         self.algorithm_logger('run_bau_case', message)
 
         # Permit prices and emissions intensity baselines for BAU case (all 0)
-        permit_prices = {y: float(0) for y in range(start, end + 1)}
-        baselines = {y: float(0) for y in range(start, end + 1)}
+        permit_prices = {y: float(0) for y in range(first_year, final_year + 1)}
+        baselines = {y: float(0) for y in range(first_year, final_year + 1)}
 
         # Run model
         self.algorithm_logger('run_bau_case', 'Starting solve')
-        m, status = self.run_primal_fixed_policy(start, end, scenarios, permit_prices, baselines)
+        m, status = self.run_primal_fixed_policy(first_year, final_year, scenarios_per_year, permit_prices, baselines)
         log_infeasible_constraints(m)
         self.algorithm_logger('run_bau_case', 'Finished solve')
 
@@ -234,25 +216,28 @@ class ModelCases:
         """Run carbon tax scenario"""
 
         # Extract case parameters
-        start, end, scenarios = params['start'], params['end'], params['scenarios']
+        first_year, final_year, scenarios_per_year = params['start'], params['end'], params['scenarios']
         permit_prices = params['permit_prices']
 
         # First run carbon tax case
-        baselines = {y: float(0) for y in range(start, end + 1)}
+        baselines = {y: float(0) for y in range(first_year, final_year + 1)}
 
         # Check that carbon tax is same for all years in model horizon
-        assert len(set(permit_prices.values())) == 1, f'Permit price trajectory is not flat: {permit_prices}'
+        unique_permit_prices = list(set(permit_prices.values()))
+        if len(unique_permit_prices) != 1:
+            raise Exception(f'Permit price trajectory is not flat: {permit_prices}')
 
-        # Extract carbon price in first year (same as all other used). To be used in filename.
-        carbon_price = permit_prices[start]
+        # Extract carbon price level (to be used in filename)
+        carbon_price = unique_permit_prices[0]
 
         # Filename for REP case
         filename = f'rep_cp-{carbon_price:.0f}.pickle'
 
         # Check if model has already been solved
-        if (not overwrite) and (filename in os.listdir(output_dir)):
-            print(f'Already solved: {filename}')
-            return
+        if not overwrite:
+            if filename in os.listdir(output_dir):
+                print(filename, 'already solved')
+                return
 
         # Construct hash for case ID
         case_id = self.get_hash(params)
@@ -263,7 +248,8 @@ class ModelCases:
         # Start timer for model run
         t_start = time.time()
 
-        self.algorithm_logger('run_rep_case', 'Starting case with params: ' + str(params))
+        message = f"""Starting case: first_year={first_year}, final_year={final_year}, scenarios_per_year={scenarios_per_year}, permit_prices={permit_prices}"""
+        self.algorithm_logger('run_rep_case', message)
 
         # Results to extract
         result_keys = ['x_c', 'p', 'p_V', 'p_in', 'p_out', 'q', 'p_L', 'baseline', 'permit_price', 'YEAR_EMISSIONS',
@@ -271,9 +257,9 @@ class ModelCases:
                        'DELTA', 'RHO', 'EMISSIONS_RATE', 'YEAR_SCHEME_EMISSIONS_INTENSITY',
                        'YEAR_CUMULATIVE_SCHEME_REVENUE', 'OBJECTIVE']
 
-        # Run carbon tax case
+        # Run model (carbon tax case)
         self.algorithm_logger('run_rep_case', 'Starting carbon tax case solve')
-        m, status = self.run_primal_fixed_policy(start, end, scenarios, permit_prices, baselines)
+        m, status = self.run_primal_fixed_policy(first_year, final_year, scenarios_per_year, permit_prices, baselines)
         log_infeasible_constraints(m)
         self.algorithm_logger('run_rep_case', 'Finished carbon tax case solve')
 
@@ -284,63 +270,61 @@ class ModelCases:
         carbon_tax_results['PRICES'] = {k: m.dual[m.POWER_BALANCE[k]] for k in m.POWER_BALANCE.keys()}
 
         # Update baselines so they = emissions intensity of output from participating generators
-        baselines = carbon_tax_results['YEAR_SCHEME_EMISSIONS_INTENSITY']
+        rep_baselines = carbon_tax_results['YEAR_SCHEME_EMISSIONS_INTENSITY']
 
         # Container for iteration results
-        i_results = dict()
+        iteration_results = {}
+
+        # Flag used to terminate loop if stopping criterion met
+        stop_flag = False
 
         # Iteration counter
-        counter = 1
+        i = 1
 
-        # Initialise iteration input to carbon tax scenario results (used to check stopping criterion)
-        i_input = carbon_tax_results
+        # Initialise result input to carbon tax scenario for first iteration (used to check stopping criterion)
+        result_input = carbon_tax_results
 
-        while True:
+        while not stop_flag:
+
             # Re-run model with new baselines
-            self.algorithm_logger('run_rep_case', f'Starting solve for REP iteration={counter}')
-            m, status = self.run_primal_fixed_policy(start, end, scenarios, permit_prices, baselines)
+            self.algorithm_logger('run_rep_case', f'Starting solve for REP iteration={i}')
+            m, status = self.run_primal_fixed_policy(first_year, final_year, scenarios_per_year, permit_prices,
+                                                     rep_baselines)
             log_infeasible_constraints(m)
-            self.algorithm_logger('run_rep_case', f'Finished solved for REP iteration={counter}')
+            self.algorithm_logger('run_rep_case', f'Finished solved for REP iteration={i}')
 
             # Model results
-            i_output = {k: self.extract_result(m, k) for k in result_keys}
+            rep_results = {k: self.extract_result(m, k) for k in result_keys}
 
-            # Get dual variable values from power balance constraint
-            i_output['PRICES'] = {k: m.dual[m.POWER_BALANCE[k]] for k in m.POWER_BALANCE.keys()}
+            # Add dual variable from power balance constraint
+            rep_results['PRICES'] = {k: m.dual[m.POWER_BALANCE[k]] for k in m.POWER_BALANCE.keys()}
 
             # Add results to iteration results container
-            i_results[counter] = copy.deepcopy(i_output)
+            iteration_results[i] = copy.deepcopy(rep_results)
 
-            # Check max absolute capacity difference between successive iterations
-            max_capacity_difference = self.get_successive_iteration_difference(i_input, i_output, 'x_c')
-            print(f'{counter}: Maximum capacity difference = {max_capacity_difference} MW')
+            # Check if stop criterion satisfied
+            cap_diff = max([abs(result_input['x_c'][k] - rep_results['x_c'][k]) for k in result_input['x_c'].keys()])
+            print(f'{i}: Maximum capacity difference = {cap_diff} MW')
 
             # Max absolute baseline difference between successive iterations
-            max_baseline_difference = self.get_successive_iteration_difference(i_input, i_output, 'baseline')
-            print(f'{counter}: Maximum baseline difference = {max_baseline_difference} tCO2/MWh')
+            baseline_diff = max([abs(result_input['baseline'][k] - rep_results['baseline'][k])
+                                 for k in result_input['baseline'].keys()])
+            print(f'{i}: Maximum baseline difference = {baseline_diff} tCO2/MWh')
 
-            # If max absolute difference between successive iterations is sufficiently small stop iterating
-            if max_baseline_difference < 0.05:
-                break
+            # If no materially large difference can stop iterating
+            if baseline_diff < 0.05:
+                stop_flag = True
 
-            # If iteration limit exceeded
-            elif counter > 9:
-                message = f'Max iterations exceeded. Exiting loop.'
-                print(message)
-                self.algorithm_logger('run_rep_case', message)
-                break
-
-            # Update iteration inputs (used to check stopping criterion in next iteration)
-            i_input = copy.deepcopy(i_output)
+            # Update input results (used to check stopping criterion in next iteration)
+            result_input = copy.deepcopy(rep_results)
 
             # Update baselines to be used in next iteration
-            baselines = i_output['YEAR_SCHEME_EMISSIONS_INTENSITY']
+            rep_baselines = result_input['YEAR_SCHEME_EMISSIONS_INTENSITY']
 
-            # Update iteration counter
-            counter += 1
+            i += 1
 
         # Combine results into single dictionary
-        results = {'stage_1_carbon_tax': carbon_tax_results, 'stage_2_rep': i_results}
+        results = {'stage_1_carbon_tax': carbon_tax_results, 'stage_2_rep': iteration_results}
 
         # Save results
         self.save_results(results, output_dir, filename)
@@ -349,42 +333,42 @@ class ModelCases:
         output = {'results': results, 'model': m, 'status': status}
         self.algorithm_logger('run_rep_case', f'Finished REP case')
 
-        # Total number of iterations processed
-        total_iterations = max(i_results.keys())
+        try:
+            total_iterations = max(iteration_results.keys())
 
-        # Save summary of the solution time
-        solution_summary = {'case_id': case_id, 'mode': params['mode'], 'carbon_price': carbon_price,
-                            'total_solution_time': time.time() - t_start, 'total_iterations': total_iterations,
-                            'max_capacity_difference': max_capacity_difference,
-                            'max_baseline_difference': max_baseline_difference}
+            # Save summary of the solution time
+            solution_summary = {'case_id': case_id, 'mode': params['mode'], 'carbon_price': carbon_price,
+                                'total_solution_time': time.time() - t_start, 'total_iterations': total_iterations,
+                                'max_capacity_difference': cap_diff, 'max_baseline_difference': baseline_diff}
 
-        self.save_solution_summary(solution_summary, output_dir)
+            self.save_solution_summary(solution_summary, output_dir)
 
-        message = 'Finished REP case: ' + str(solution_summary)
-        self.algorithm_logger('run_rep_case', message)
+            message = f'Finished REP case: case_id={case_id}, carbon_price={carbon_price}, total_solution_time={time.time() - t_start}s, total_iterations={total_iterations}'
+            self.algorithm_logger('run_rep_case', message)
+        except Exception as e:
+            print(f'run_rep_case: ' + str(e))
 
         return output
 
     def run_price_smoothing_heuristic_case(self, params, output_dir, overwrite=False):
         """Smooth prices over entire model horizon using approximated price functions"""
 
-        # Get filename based on run mode
+        # Get filename
         if params['mode'] == 'bau_deviation_minimisation':
             filename = f"heuristic_baudev_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
-
         elif params['mode'] == 'price_change_minimisation':
             filename = f"heuristic_pdev_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
-
         elif params['mode'] == 'price_target':
             filename = f"heuristic_ptar_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
-
         else:
             raise Exception(f"Unexpected run mode: {params['mode']}")
 
         # Check if case already solved
-        if (not overwrite) and (filename in os.listdir(output_dir)):
-            print(f'Already solved: {filename}')
-            return
+        if not overwrite:
+            is_solved = filename in os.listdir(output_dir)
+            if is_solved:
+                print(filename, 'already solved')
+                return
 
         # Get hash for case
         case_id = self.get_hash(params)
@@ -397,20 +381,26 @@ class ModelCases:
 
         self.algorithm_logger('run_price_smoothing_heuristic_case', 'Starting case with params: ' + str(params))
 
+        # Model parameters
+        rep_filename = params['rep_filename']
+
         # Load REP results
-        with open(os.path.join(output_dir, params['rep_filename']), 'rb') as f:
+        with open(os.path.join(output_dir, rep_filename), 'rb') as f:
             rep_results = pickle.load(f)
 
         # Get results corresponding to last iteration of REP solution
         rep_iteration = rep_results['stage_2_rep'][max(rep_results['stage_2_rep'].keys())]
 
-        # Model parameters used to initialise classes that construct and run models
-        start, end, scenarios = params['start'], params['end'], params['scenarios']
-        bau_initial_price = self.get_bau_initial_price(output_dir, start)
+        # Extract parameters from last iteration of REP program results
+        permit_prices = rep_iteration['permit_price']
+        first_year = min(permit_prices.keys())
+        final_year = max(permit_prices.keys())
+        bau_initial_price = self.get_bau_initial_price(output_dir, first_year)
+        scenarios_per_year = len([s for y, s in rep_iteration['RHO'].keys() if y == final_year])
 
         # Classes used to construct and run primal and MPPDC programs
-        primal = Primal(start, end, scenarios)
-        baseline = BaselineUpdater(start, end, scenarios, params['transition_year'])
+        primal = Primal(first_year, final_year, scenarios_per_year)
+        baseline = BaselineUpdater(first_year, final_year, scenarios_per_year, params['transition_year'])
 
         # Construct primal program
         m_p = primal.construct_model()
@@ -426,22 +416,20 @@ class ModelCases:
                          'TOTAL_ABSOLUTE_PRICE_DIFFERENCE', 'PRICE_WEIGHTS', 'YEAR_SCHEME_REVENUE',
                          'YEAR_CUMULATIVE_SCHEME_REVENUE', 'baseline']
 
-        # Container for iteration results
-        i_results = dict()
+        iteration_results = {}
+        stop_flag = False
+        counter = 1
 
         # Initialise price setting generator input as results obtained from final REP iteration
         psg_input = rep_iteration
 
-        # Initialise iteration counter
-        counter = 1
-
-        while True:
+        while not stop_flag:
             self.algorithm_logger('run_price_smoothing_heuristic_case', f'Starting iteration={counter}')
 
             # Identify price setting generators
             psg = baseline.prices.get_price_setting_generators_from_model_results(psg_input)
 
-            # Construct model used to calibrate baseline
+            # Construct model
             m_b = baseline.construct_model(psg)
 
             # Update parameters
@@ -511,110 +499,96 @@ class ModelCases:
             # Get results
             r_p = copy.deepcopy({v: self.extract_result(m_p, v) for v in primal_keys})
             r_p['PRICES'] = copy.deepcopy({k: m_p.dual[m_p.POWER_BALANCE[k]] for k in m_p.POWER_BALANCE.keys()})
-            i_results[counter] = {'primal': r_p, 'auxiliary': r_b}
+            iteration_results[counter] = {'primal': r_p, 'auxiliary': r_b}
 
             # Max difference in capacity sizing decision between iterations
-            max_capacity_difference = self.get_successive_iteration_difference(psg_input, r_p, 'x_c')
-            print(f'Max capacity difference: {max_capacity_difference} MW')
+            max_cap_difference = max(abs(psg_input['x_c'][k] - m_p.x_c[k].value) for k in m_p.x_c.keys())
+            message = f'Max capacity difference: {max_cap_difference} MW'
+            print(message)
+            self.algorithm_logger('run_price_smoothing_heuristic_case', message)
 
             # Max absolute baseline difference between successive iterations
-            max_baseline_difference = self.get_successive_iteration_difference(psg_input, r_p, 'baseline')
-            print(f'{counter}: Maximum baseline difference = {max_baseline_difference} tCO2/MWh')
+            baseline_diff = max([abs(psg_input['baseline'][k] - m_p.baseline[k].value) for k in m_p.baseline.keys()])
+            print(f'{counter}: Maximum baseline difference = {baseline_diff} tCO2/MWh')
 
-            self.algorithm_logger('run_price_smoothing_heuristic_case', f'Finished iteration={counter}')
+            # If no materially large difference can stop iterating
+            if baseline_diff < 0.05:
+                stop_flag = True
 
-            # If baseline difference between successive iterations is sufficiently small then stop
-            if max_baseline_difference < 0.05:
-                break
-
-            # Stop iterating if max iteration limit exceeded
+            # Check if max iterations exceeded
             elif counter > 9:
+                stop_flag = True
+
                 message = f'Max iterations exceeded. Exiting loop.'
                 print(message)
                 self.algorithm_logger('run_price_smoothing_heuristic_case', message)
-                break
 
             else:
                 # Update dictionary of price setting generator program inputs
                 psg_input = r_p
 
-            # Update iteration counter
+            self.algorithm_logger('run_price_smoothing_heuristic_case', f'Finished iteration={counter}')
             counter += 1
 
         self.algorithm_logger('run_price_smoothing_heuristic_case', f'Finished solving model')
 
         # Combine results into a single dictionary
-        results = {**rep_results, 'stage_3_price_targeting': i_results, 'parameters': params}
+        combined_results = {**rep_results, 'stage_3_price_targeting': iteration_results, 'parameters': params}
 
         # Save results
-        self.save_results(results, output_dir, filename)
+        self.save_results(combined_results, output_dir, filename)
 
-        # Combine output for method (can be used for debugging)
+        # Combine output
         output = {'auxiliary_model': m_b, 'auxiliary_status': m_b_status, 'primal_model': m_p,
-                  'primal_status': m_p_status, 'results': results}
+                  'primal_status': m_p_status, 'results': combined_results}
 
-        # Total iterations
-        total_iterations = max(i_results.keys())
+        self.algorithm_logger('run_price_smoothing_heuristic_case', 'Finished heuristic case')
 
-        # Save summary of the solution time
-        solution_summary = {'case_id': case_id, 'mode': params['mode'], 'carbon_price': params['carbon_price'],
-                            'transition_year': params['transition_year'],
-                            'total_solution_time': time.time() - t_start, 'total_iterations': total_iterations,
-                            'max_capacity_difference': max_capacity_difference,
-                            'max_baseline_difference': max_baseline_difference}
-        self.save_solution_summary(solution_summary, output_dir)
+        try:
+            total_iterations = max(iteration_results.keys())
 
-        message = f"Finished heuristic case: " + str(solution_summary)
-        self.algorithm_logger('run_price_smoothing_heuristic_case', message)
+            # Save summary of the solution time
+            solution_summary = {'case_id': case_id, 'mode': params['mode'], 'carbon_price': params['carbon_price'],
+                                'transition_year': params['transition_year'],
+                                'total_solution_time': time.time() - t_start, 'total_iterations': total_iterations,
+                                'max_capacity_difference': max_cap_difference, 'max_baseline_difference': baseline_diff}
+            self.save_solution_summary(solution_summary, output_dir)
+
+            message = f"Finished heuristic case: case_id={case_id}, carbon_price={params['carbon_price']}, transition_year={params['transition_year']}, total_solution_time={time.time() - t_start}s, total_iterations={total_iterations}"
+            self.algorithm_logger('run_price_smoothing_heuristic_case', message)
+        except Exception as e:
+            print(f"run_price_smoothing_heuristic_case: " + str(e))
 
         return output
 
-    def run_price_smoothing_mppdc_case(self, params, output_dir, overwrite=False):
+    def run_price_smoothing_mppdc_case(self, params, output_dir):
         """Run case to smooth prices over model horizon, subject to total revenue constraint"""
-
-        # Get case filename based on run mode
-        if params['mode'] == 'bau_deviation_minimisation':
-            filename = f"mppdc_baudev_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
-
-        elif params['mode'] == 'price_change_minimisation':
-            filename = f"mppdc_pdev_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
-
-        elif params['mode'] == 'price_target':
-            filename = f"mppdc_ptar_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
-
-        else:
-            raise Exception(f"Unexpected run mode: {params['mode']}")
-
-        # Check if case already solved
-        if (not overwrite) and (filename in os.listdir(output_dir)):
-            print(f'Already solved: {filename}')
-            return
-
-        # Construct hash for case ID
-        case_id = self.get_hash(params)
-
-        # Save hash and associated parameters
-        self.save_hash(case_id, params, output_dir)
 
         # Start timer for model run
         t_start = time.time()
 
         self.algorithm_logger('run_price_smoothing_mppdc_case', 'Starting MPPDC case with params: ' + str(params))
 
+        # Model parameters
+        rep_filename = params['rep_filename']
+
         # Load REP results
-        with open(os.path.join(output_dir, params['rep_filename']), 'rb') as f:
+        with open(os.path.join(output_dir, rep_filename), 'rb') as f:
             rep_results = pickle.load(f)
 
         # Get results corresponding to last iteration of REP solution
         rep_iteration = rep_results['stage_2_rep'][max(rep_results['stage_2_rep'].keys())]
 
         # Extract parameters from last iteration of REP program results
-        start, end, scenarios = params['start'], params['end'], params['scenarios']
-        bau_initial_price = self.get_bau_initial_price(output_dir, start)
+        permit_prices = rep_iteration['permit_price']
+        first_year = min(permit_prices.keys())
+        final_year = max(permit_prices.keys())
+        bau_initial_price = self.get_bau_initial_price(output_dir, first_year)
+        scenarios_per_year = len([s for y, s in rep_iteration['RHO'].keys() if y == final_year])
 
         # Classes used to construct and run primal and MPPDC programs
-        mppdc = MPPDCModel(start, end, scenarios, params['transition_year'])
-        primal = Primal(start, end, scenarios)
+        mppdc = MPPDCModel(first_year, final_year, scenarios_per_year, params['transition_year'])
+        primal = Primal(first_year, final_year, scenarios_per_year)
 
         # Construct MPPDC
         m_m = mppdc.construct_model(include_primal_constraints=True)
@@ -626,21 +600,24 @@ class ModelCases:
         m_m.YEAR_AVERAGE_PRICE_0 = float(bau_initial_price)
         m_m.PRICE_WEIGHTS.store_values(params['price_weights'])
 
-        # Activate necessary constraints depending on run mode
+        # Activate necessary constraints
         m_m.NON_NEGATIVE_TRANSITION_REVENUE_CONS.activate()
 
         if params['mode'] == 'bau_deviation_minimisation':
             m_m.PRICE_BAU_DEVIATION_1.activate()
             m_m.PRICE_BAU_DEVIATION_2.activate()
+            filename = f"mppdc_baudev_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
 
         elif params['mode'] == 'price_change_minimisation':
             m_m.PRICE_CHANGE_DEVIATION_1.activate()
             m_m.PRICE_CHANGE_DEVIATION_2.activate()
+            filename = f"mppdc_pdev_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
 
         elif params['mode'] == 'price_target':
             m_m.YEAR_AVERAGE_PRICE_TARGET.store_values(params['price_target'])
             m_m.PRICE_TARGET_DEVIATION_1.activate()
             m_m.PRICE_TARGET_DEVIATION_2.activate()
+            filename = f"mppdc_ptar_ty-{params['transition_year']}_cp-{params['carbon_price']}.pickle"
 
         else:
             raise Exception(f"Unexpected run mode: {params['mode']}")
@@ -663,17 +640,14 @@ class ModelCases:
                       'YEAR_CUMULATIVE_PRICE_DIFFERENCE_WEIGHTED', 'sd_1', 'sd_2', 'STRONG_DUALITY_VIOLATION_COST',
                       'TRANSITION_YEAR', 'PRICE_WEIGHTS']
 
-        # Container for iteration results
-        i_results = {}
-
-        # Initialise iteration counter
+        # Stop flag and iteration counter
+        stop_flag = False
         counter = 1
 
-        # Placeholder for max difference variables
-        max_baseline_difference = None
-        max_capacity_difference = None
+        # Container for iteration results
+        iteration_results = {}
 
-        while True:
+        while not stop_flag:
             self.algorithm_logger('run_price_smoothing_mppdc_case', f'Starting iteration={counter}')
 
             # Fix MPPDC variables
@@ -684,7 +658,7 @@ class ModelCases:
 
             # Model timeout will cause sub-optimal termination condition
             if m_m_status.solver.termination_condition != TerminationCondition.optimal:
-                i_results[counter] = None
+                iteration_results[counter] = None
                 self.algorithm_logger('run_price_smoothing_mppdc_case', f'Sub-optimal solution')
                 self.algorithm_logger('run_price_smoothing_mppdc_case', f'User time: {m_m_status.solver.user_time}s')
 
@@ -697,7 +671,7 @@ class ModelCases:
 
             # Results from MPPDC program
             r_m = copy.deepcopy({v: self.extract_result(m_m, v) for v in mppdc_keys})
-            i_results[counter] = r_m
+            iteration_results[counter] = r_m
 
             # Update primal program with baselines and permit prices obtained from MPPDC model
             for y in m_p.Y:
@@ -711,26 +685,23 @@ class ModelCases:
             # Results from primal program
             p_r = copy.deepcopy({v: self.extract_result(m_p, v) for v in primal_vars})
             p_r['PRICES'] = copy.deepcopy({k: m_p.dual[m_p.POWER_BALANCE[k]] for k in m_p.POWER_BALANCE.keys()})
-            i_results[counter]['primal'] = p_r
+            iteration_results[counter]['primal'] = p_r
 
-            # Max absolute capacity difference between MPPDC and primal program
-            max_capacity_difference = max(abs(m_m.x_c[k].value - m_p.x_c[k].value) for k in m_m.x_c.keys())
-            print(f'Max capacity difference: {max_capacity_difference} MW')
-
-            # Max absolute baseline difference between MPPDC and primal program
-            max_baseline_difference = max(abs(m_m.baseline[k].value - m_p.baseline[k].value) for k in m_m.baseline.keys())
-            print(f'Max baseline difference: {max_baseline_difference} tCO2/MWh')
+            # Max difference in capacity sizing decision between MPPDC and primal program
+            max_cap_difference = max(abs(m_m.x_c[k].value - m_p.x_c[k].value) for k in m_m.x_c.keys())
+            print(f'Max capacity difference: {max_cap_difference} MW')
 
             # Check if capacity variables have changed
-            if max_baseline_difference < 0.05:
-                break
+            if max_cap_difference < 5:
+                stop_flag = True
 
             # Check if max iterations exceeded
             elif counter > 9:
+                stop_flag = True
+
                 message = f'Max iterations exceeded. Exiting loop.'
                 print(message)
                 self.algorithm_logger('run_price_smoothing_mppdc_case', message)
-                break
 
             else:
                 # Update dictionary of fixed variables to be used in next iteration
@@ -742,32 +713,38 @@ class ModelCases:
         self.algorithm_logger('run_price_smoothing_mppdc_case', f'Finished solving model')
 
         # Combine results into a single dictionary
-        results = {**rep_results, 'stage_3_price_targeting': i_results, 'parameters': params}
+        combined_results = {**rep_results, 'stage_3_price_targeting': iteration_results, 'parameters': params}
 
         # Save results
-        self.save_results(results, output_dir, filename)
+        self.save_results(combined_results, output_dir, filename)
 
         # Method output
         output = {'mppdc_model': m_m, 'mppdc_status': m_m_status, 'primal_model': m_p, 'primal_status': m_p_status,
-                  'results': results}
+                  'results': combined_results}
 
         self.algorithm_logger('run_price_smoothing_mppdc_case', 'Finished MPPDC case')
 
-        # Total iterations
-        total_iterations = max(i_results.keys())
-
-        # Save summary of the solution time
-        solution_summary = {'case_id': case_id, 'mode': params['mode'], 'carbon_price': params['carbon_price'],
-                            'transition_year': params['transition_year'],
-                            'total_solution_time': time.time() - t_start, 'total_iterations': total_iterations,
-                            'max_capacity_difference': max_capacity_difference,
-                            'max_baseline_difference': max_baseline_difference}
-        self.save_solution_summary(solution_summary, output_dir)
-
-        message = f"Finished MPPDC case: " + str(solution_summary)
-        self.algorithm_logger('run_price_smoothing_mppdc_case', message)
+        try:
+            total_iterations = max(iteration_results.keys())
+            message = f"Finished MPPDC case: carbon_price={params['carbon_price']}, transition_year={params['transition_year']}, total_solution_time={time.time() - t_start}s, total_iterations={total_iterations}"
+            self.algorithm_logger('run_price_smoothing_mppdc_case', message)
+        except Exception as e:
+            print(f"run_price_smoothing_mppdc_case: " + str(e))
 
         return output
+
+    def get_bau_initial_price(self, output_dir, first_year):
+        """Get BAU price in first year"""
+
+        # Load BAU results
+        with open(os.path.join(output_dir, 'bau_case.pickle'), 'rb') as f:
+            bau_results = pickle.load(f)
+
+        # Get BAU average price in first year
+        bau_prices = self.analysis.get_year_average_price(bau_results['PRICES'], factor=-1)
+        initial_price = bau_prices.loc[first_year, 'average_price_real']
+
+        return initial_price
 
 
 if __name__ == '__main__':
