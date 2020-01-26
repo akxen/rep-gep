@@ -22,9 +22,10 @@ if __name__ == '__main__':
 
     # Common model parameters
     start, end, scenarios = 2016, 2030, 5
+    common_params = {'start': start, 'end': end, 'scenarios': scenarios}
 
     # Run BAU case
-    bau_params = {'start': start, 'end': end, 'scenarios': scenarios, 'mode': 'bau'}
+    bau_params = {**common_params, 'mode': 'bau'}
     cases.run_bau_case(bau_params, output_directory)
 
     # Average prices from the BAU case are used as the target trajectory
@@ -38,17 +39,16 @@ if __name__ == '__main__':
         permit_prices_model = {y: float(c) for y in range(start, end + 1)}
 
         # Run REP case with given permit price
-        rep_params = {'start': start, 'end': end, 'scenarios': scenarios, 'permit_prices': permit_prices_model,
-                      'mode': 'rep'}
+        rep_params = {**common_params, 'permit_prices': permit_prices_model, 'mode': 'rep'}
         cases.run_rep_case(rep_params, output_directory)
 
         # For each run mode update case parameters and run price targeting model
         for mode in ['price_target', 'bau_deviation_minimisation', 'price_change_minimisation']:
             # Set case parameters depending on run mode
             if mode == 'price_target':
-                case_params = {'mode': mode, 'price_target': bau_price_trajectory}
+                case_params = {**common_params, 'mode': mode, 'price_target': bau_price_trajectory}
             else:
-                case_params = {'mode': mode}
+                case_params = {**common_params, 'mode': mode}
 
             # Run price targeting models with different transition years
             for transition_year in [2020, 2025, 2030]:
