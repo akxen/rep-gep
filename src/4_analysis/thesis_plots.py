@@ -42,6 +42,11 @@ class CreatePlots:
         # Directory to place output figures
         self.figures_dir = figures_dir
 
+    @staticmethod
+    def cm_to_in(cm):
+        """Convert cm to inches"""
+        return cm / 2.54
+
     def get_surface_features(self, model_key, results_key, transition_year=None, price_target=None):
         """Get surface features for a given model"""
 
@@ -174,23 +179,36 @@ class CreatePlots:
         ax1.xaxis.set_major_locator(MultipleLocator(20))
         ax1.xaxis.set_minor_locator(MultipleLocator(5))
 
-        ax3.set_xlabel('Emissions price (\$/tCO$_{2}$)', fontsize=7)
-        ax4.set_xlabel('Emissions price (\$/tCO$_{2}$)', fontsize=7)
+        ax3.set_xlabel('Emissions price (\$/tCO$_{2}$)')
+        ax4.set_xlabel('Emissions price (\$/tCO$_{2}$)')
 
-        ax1.set_ylabel('Year', fontsize=7)
-        ax3.set_ylabel('Year', fontsize=7)
-
-        ax1.set_title('Tax', fontsize=8, y=0.98)
-        ax2.set_title('REP', fontsize=8, y=0.98)
+        ax1.set_ylabel('Year')
+        ax3.set_ylabel('Year')
 
         for a in [ax1, ax2, ax3, ax4]:
             a.tick_params(axis='both', which='major', labelsize=6)
             a.tick_params(axis='both', which='minor', labelsize=6)
 
+        # Set font size
+        ax1.set_title('Tax', fontsize=8, y=0.98)
+        ax2.set_title('REP', fontsize=8, y=0.98)
+
         cb1.ax.tick_params(labelsize=6)
         cb2.ax.tick_params(labelsize=6)
 
         cb2.ax.yaxis.offsetText.set_fontsize(7)
+
+        ax1.xaxis.label.set_size(8)
+        ax1.yaxis.label.set_size(8)
+
+        ax2.xaxis.label.set_size(8)
+        ax2.yaxis.label.set_size(8)
+
+        ax3.xaxis.label.set_size(8)
+        ax3.yaxis.label.set_size(8)
+
+        ax4.xaxis.label.set_size(8)
+        ax4.yaxis.label.set_size(8)
 
         # Add text to denote subfigures
         text_style = {'verticalalignment': 'bottom', 'horizontalalignment': 'left', 'color': 'white', 'fontsize': 10,
@@ -200,12 +218,12 @@ class CreatePlots:
         ax3.text(7, 2016.5, 'c', **text_style)
         ax4.text(7, 2016.5, 'd', **text_style)
 
-        fig.set_size_inches(6.5, 4)
-        fig.subplots_adjust(left=0.09, bottom=0.10, right=0.92, top=0.95, wspace=0.1, hspace=0.16)
+        fig.set_size_inches(self.cm_to_in(14), self.cm_to_in(14) / 1.8)
+        fig.subplots_adjust(left=0.09, bottom=0.12, right=0.92, top=0.95, wspace=0.1, hspace=0.16)
 
         # Save figure
-        fig.savefig(os.path.join(self.figures_dir, 'manuscript', 'tax_rep.pdf'))
-        fig.savefig(os.path.join(self.figures_dir, 'manuscript', 'tax_rep.png'), dpi=200)
+        fig.savefig(os.path.join(self.figures_dir, 'thesis', 'tax_rep.pdf'))
+        fig.savefig(os.path.join(self.figures_dir, 'thesis', 'tax_rep.png'), dpi=200)
         plt.show()
 
     def plot_transition_year_comparison(self, model_key):
@@ -345,7 +363,7 @@ class CreatePlots:
             layout[a]['ax'].yaxis.set_minor_locator(MultipleLocator(2))
 
             layout[a]['ax'].tick_params(axis='both', which='major', labelsize=6)
-            layout[a]['ax'].set_ylabel('Year', fontsize=7)
+            layout[a]['ax'].set_ylabel('Year', fontsize=8)
 
         # Format x-ticks
         for a in ['ax10', 'ax11', 'ax12']:
@@ -353,7 +371,7 @@ class CreatePlots:
             layout[a]['ax'].xaxis.set_minor_locator(MultipleLocator(10))
 
             layout[a]['ax'].tick_params(axis='both', which='major', labelsize=6)
-            layout[a]['ax'].set_xlabel('Emissions price (\$/tCO$_{2}$)', fontsize=7)
+            layout[a]['ax'].set_xlabel('Emissions price (\$/tCO$_{2}$)', fontsize=8)
 
         # Add titles denoting transition years
         layout['ax1']['ax'].set_title('2020', fontsize=8, pad=2)
@@ -380,26 +398,32 @@ class CreatePlots:
         ax12.text(text_x, text_y, 'l', color='w', **text_style)
 
         # Format labels
-        fig.set_size_inches(6.5, 6)
-        fig.subplots_adjust(left=0.08, bottom=0.06, right=0.92, top=0.97, wspace=0.01)
-        fig.savefig(os.path.join(self.figures_dir, 'manuscript', f'transition_years_{model_key}.png'), dpi=200)
-        fig.savefig(os.path.join(self.figures_dir, 'manuscript', f'transition_years_{model_key}.pdf'))
+        fig.set_size_inches(self.cm_to_in(14), self.cm_to_in(14) / 1.05)
+        fig.subplots_adjust(left=0.09, bottom=0.08, right=0.92, top=0.97, wspace=0.01)
+        fig.savefig(os.path.join(self.figures_dir, 'thesis', f'transition_years_{model_key}.png'), dpi=200)
+        fig.savefig(os.path.join(self.figures_dir, 'thesis', f'transition_years_{model_key}.pdf'))
 
         plt.show()
 
-    def price_target_difference(self, **kwds):
+    def plot_price_target_difference(self, **kwds):
         """Plot difference between price target and realised prices"""
 
         fig, ((ax1, ax2, ax3), (ax4, ax5, ax6)) = plt.subplots(nrows=2, ncols=3, sharex=True, sharey=True)
 
         # Get interpolated surfaces
-        X1, Y1, Z1 = self.get_interpolated_surface('baudev_diff', 'YEAR_AVERAGE_PRICE', 2020, price_target=kwds['bau_price'])
-        X2, Y2, Z2 = self.get_interpolated_surface('baudev_diff', 'YEAR_AVERAGE_PRICE', 2025, price_target=kwds['bau_price'])
-        X3, Y3, Z3 = self.get_interpolated_surface('baudev_diff', 'YEAR_AVERAGE_PRICE', 2030, price_target=kwds['bau_price'])
+        X1, Y1, Z1 = self.get_interpolated_surface('baudev_diff', 'YEAR_AVERAGE_PRICE', 2020,
+                                                   price_target=kwds['bau_price'])
+        X2, Y2, Z2 = self.get_interpolated_surface('baudev_diff', 'YEAR_AVERAGE_PRICE', 2025,
+                                                   price_target=kwds['bau_price'])
+        X3, Y3, Z3 = self.get_interpolated_surface('baudev_diff', 'YEAR_AVERAGE_PRICE', 2030,
+                                                   price_target=kwds['bau_price'])
 
-        X4, Y4, Z4 = self.get_interpolated_surface('ptar_diff', 'YEAR_AVERAGE_PRICE', 2020, price_target=kwds['price_trajectory'])
-        X5, Y5, Z5 = self.get_interpolated_surface('ptar_diff', 'YEAR_AVERAGE_PRICE', 2025, price_target=kwds['price_trajectory'])
-        X6, Y6, Z6 = self.get_interpolated_surface('ptar_diff', 'YEAR_AVERAGE_PRICE', 2030, price_target=kwds['price_trajectory'])
+        X4, Y4, Z4 = self.get_interpolated_surface('ptar_diff', 'YEAR_AVERAGE_PRICE', 2020,
+                                                   price_target=kwds['price_trajectory'])
+        X5, Y5, Z5 = self.get_interpolated_surface('ptar_diff', 'YEAR_AVERAGE_PRICE', 2025,
+                                                   price_target=kwds['price_trajectory'])
+        X6, Y6, Z6 = self.get_interpolated_surface('ptar_diff', 'YEAR_AVERAGE_PRICE', 2030,
+                                                   price_target=kwds['price_trajectory'])
 
         # Construct plot and keep track of it
         plot_style_trajectory = {'vmin': -30, 'vmax': 30, 'edgecolors': 'face', 'cmap': 'bwr'}
@@ -426,11 +450,11 @@ class CreatePlots:
         # Add colour bars
         cb3 = fig.colorbar(im3, cax=cax3)
         cb3.ax.tick_params(labelsize=6)
-        cb3.set_label('Price difference ($)', fontsize=7)
+        cb3.set_label('Price difference ($)', fontsize=8)
 
         cb6 = fig.colorbar(im6, cax=cax6)
         cb6.ax.tick_params(labelsize=6)
-        cb6.set_label('Price difference ($)', fontsize=7)
+        cb6.set_label('Price difference ($)', fontsize=8)
 
         # Set y-lim for all plots
         for a in [ax1, ax2, ax3, ax4, ax5, ax6]:
@@ -452,7 +476,7 @@ class CreatePlots:
             ax.yaxis.set_minor_locator(MultipleLocator(2))
 
             ax.tick_params(axis='both', which='major', labelsize=6)
-            ax.set_ylabel('Year', fontsize=7)
+            ax.set_ylabel('Year', fontsize=8)
 
         # Format x-ticks
         for ax in [ax4, ax5, ax6]:
@@ -460,7 +484,7 @@ class CreatePlots:
             ax.xaxis.set_minor_locator(MultipleLocator(10))
 
             ax.tick_params(axis='both', which='major', labelsize=6)
-            ax.set_xlabel('Emissions price (\$/tCO$_{2}$)', fontsize=7)
+            ax.set_xlabel('Emissions price (\$/tCO$_{2}$)', fontsize=8)
 
         # Add titles denoting transition years
         ax1.set_title('2020', fontsize=8, pad=2)
@@ -479,10 +503,10 @@ class CreatePlots:
         ax6.text(text_x, text_y, 'f', color='k', **text_style)
 
         # Set figure size
-        fig.set_size_inches(6.5, 3.5)
-        fig.subplots_adjust(left=0.08, bottom=0.11, right=0.93, top=0.96, wspace=0.01)
-        fig.savefig(os.path.join(self.figures_dir, 'manuscript', 'price_difference.png'), dpi=200)
-        fig.savefig(os.path.join(self.figures_dir, 'manuscript', 'price_difference.pdf'))
+        fig.set_size_inches(self.cm_to_in(14), self.cm_to_in(14) / 1.7)
+        fig.subplots_adjust(left=0.09, bottom=0.12, right=0.92, top=0.96, wspace=0.01)
+        fig.savefig(os.path.join(self.figures_dir, 'thesis', 'price_difference.png'), dpi=200)
+        fig.savefig(os.path.join(self.figures_dir, 'thesis', 'price_difference.pdf'))
 
         plt.show()
 
@@ -496,14 +520,14 @@ class CreatePlots:
 
         fig, ax = plt.subplots()
         ax2 = ax.twinx()
-        bau_style = {'color': 'k', 'linestyle': '--', 'alpha': 0.5, 'linewidth': 0.9}
+        bau_style = {'color': 'k', 'linestyle': ':', 'alpha': 0.8, 'linewidth': 0.7}
         ax.plot([5, 100], [p_bau, p_bau], **bau_style)
 
         # Plot lines
-        line_properties = {'alpha': 0.8, 'linewidth': 0.7, 'markersize': 2, 'fillstyle': 'none', 'markeredgewidth': 0.5}
+        line_properties = {'alpha': 0.8, 'linewidth': 1.1, 'markersize': 3.5, 'fillstyle': 'none', 'markeredgewidth': 0.5}
         ax.plot(x, p_tax, 'o--', color='#d91818', **line_properties)
         ax.plot(x, p_rep, 'o--', color='#4263f5', **line_properties)
-        ax.legend(['BAU', 'Tax', 'REP'], fontsize=6, frameon=False)
+        ax.legend(['BAU', 'Tax', 'REP'], fontsize=9, frameon=False)
 
         # Installed gas capacity
         g_c = [sum(v for k, v in self.plot_data.results['tax'][t]['x_c'].items()
@@ -511,32 +535,44 @@ class CreatePlots:
         ax2.plot(x, g_c, 'o--', color='#4fa83d', **line_properties)
 
         # Labels
-        ax.set_ylabel('Average price ($/MWh)', fontsize=6)
-        ax.set_xlabel('Emissions price (tCO$_{2}$/MWh', fontsize=6)
+        ax.set_ylabel('Average price ($/MWh)')
+        ax.set_xlabel('Emissions price (tCO$_{2}$/MWh')
 
         # Format axes
         ax.yaxis.set_major_locator(MultipleLocator(20))
-        ax.yaxis.set_minor_locator(MultipleLocator(10))
+        ax.yaxis.set_minor_locator(MultipleLocator(5))
 
         ax.xaxis.set_major_locator(MultipleLocator(20))
         ax.xaxis.set_minor_locator(MultipleLocator(5))
 
-        ax.tick_params(axis='both', which='major', labelsize=6)
-        ax2.tick_params(axis='y', which='major', labelsize=6)
-        ax2.ticklabel_format(axis='y', style='sci', scilimits=(3, 3), useMathText=True)
-        ax2.yaxis.offsetText.set_fontsize(7)
-
-        ax2.set_ylabel('New gas capacity (MW)', fontsize=6)
-        ax2.legend(['Gas'], fontsize=6, frameon=False, loc='center', bbox_to_anchor=(0.5, 0.94))
+        ax2.set_ylabel('New gas capacity (MW)')
+        ax2.legend(['Gas'], fontsize=9, frameon=False, loc='lower right',
+                   # bbox_to_anchor=(0.5, 0.5),
+                   )
 
         ax2.yaxis.set_major_locator(MultipleLocator(2000))
         ax2.yaxis.set_minor_locator(MultipleLocator(1000))
 
-        fig.set_size_inches(3, 2.5)
-        fig.subplots_adjust(left=0.15, bottom=0.15, right=0.85, top=0.92)
+        ax.set_ylim([0, 120])
 
-        fig.savefig(os.path.join(self.figures_dir, 'manuscript', 'price_sensitivity.png'), dpi=200)
-        fig.savefig(os.path.join(self.figures_dir, 'manuscript', 'price_sensitivity.pdf'))
+        # Set font size
+        ax.xaxis.label.set_size(10)
+        ax.yaxis.label.set_size(10)
+
+        ax2.xaxis.label.set_size(10)
+        ax2.yaxis.label.set_size(10)
+
+        ax.tick_params(axis='both', which='major', labelsize=9)
+        ax2.tick_params(axis='y', which='major', labelsize=9)
+        ax2.ticklabel_format(axis='y', style='sci', scilimits=(3, 3), useMathText=True)
+        ax2.yaxis.offsetText.set_fontsize(9)
+
+        # Adjust figures
+        fig.set_size_inches(self.cm_to_in(14), self.cm_to_in(14) / 1.7)
+        fig.subplots_adjust(left=0.11, bottom=0.14, right=0.91, top=0.94)
+
+        fig.savefig(os.path.join(self.figures_dir, 'thesis', 'price_sensitivity.png'), dpi=200)
+        fig.savefig(os.path.join(self.figures_dir, 'thesis', 'price_sensitivity.pdf'))
 
         plt.show()
 
@@ -581,5 +617,5 @@ if __name__ == '__main__':
     plots.plot_transition_year_comparison('pdev')
 
     plot_params = {'price_trajectory': bau_price_trajectory, 'bau_price': bau_first_year_trajectory}
-    plots.price_target_difference(**plot_params)
+    plots.plot_price_target_difference(**plot_params)
     plots.plot_tax_rep_comparison_first_year()
