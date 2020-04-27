@@ -211,12 +211,11 @@ class CreatePlots:
         ax4.yaxis.label.set_size(8)
 
         # Add text to denote subfigures
-        text_style = {'verticalalignment': 'bottom', 'horizontalalignment': 'left', 'color': 'white', 'fontsize': 10,
-                      'weight': 'bold'}
-        ax1.text(7, 2016.5, 'a', **text_style)
-        ax2.text(7, 2016.5, 'b', **text_style)
-        ax3.text(7, 2016.5, 'c', **text_style)
-        ax4.text(7, 2016.5, 'd', **text_style)
+        text_style = {'verticalalignment': 'bottom', 'horizontalalignment': 'left', 'fontsize': 10, 'weight': 'bold'}
+        ax1.text(7, 2016.5, 'a', color='white', **text_style)
+        ax2.text(7, 2016.5, 'b', color='white', **text_style)
+        ax3.text(7, 2016.5, 'c', color='k', **text_style)
+        ax4.text(7, 2016.5, 'd', color='k', **text_style)
 
         fig.set_size_inches(self.cm_to_in(14), self.cm_to_in(14) / 1.8)
         fig.subplots_adjust(left=0.09, bottom=0.12, right=0.92, top=0.95, wspace=0.1, hspace=0.16)
