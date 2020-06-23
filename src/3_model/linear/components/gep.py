@@ -2004,11 +2004,12 @@ if __name__ == '__main__':
     # Check primal and dual solution - primal and dual elements should be the same for prices and power output
     # check.check_primal_and_dual_solutions()
 
-    # Permit prices
+    # Manually set permit prices and baseline for testing
     permit_price = {2016: 40.0, 2017: 40.0, 2018: 40.0, 2019: 40.0, 2020: 40.0}
     baseline = {2016: 0.9979464507243393, 2017: 1.0153153056565962, 2018: 1.0323371086829316, 2019: 0.9870038442889452,
                 2020: 1.0269914600598047}
 
+    # Check primal and dual solutions
     # check.check_primal_and_mppdc_solutions(permit_prices=permit_price, baselines=baseline)
     # check.check_dual_and_mppdc_solutions()
 
@@ -2017,13 +2018,3 @@ if __name__ == '__main__':
     #                    transition_year=transition_model_year)
     #
     # m_m = mppdc.construct_model(include_primal_constraints=True)
-
-    primal = Primal(2016, 2022, 3)
-    primal_model = primal.construct_model()
-    # primal_model.baseline.fix(0)
-    # primal_model.permit_price.fix(40)
-    #
-    # t_start = time.time()
-    # primal_model, primal_status = primal.solve_model(primal_model)
-    #
-    # print(f'Solved in {time.time() - t_start}s')
