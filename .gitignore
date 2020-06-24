@@ -1,4 +1,5 @@
 .idea/*
 *.log
 *.pyc
-man/manuscript/*
+man/*
+
