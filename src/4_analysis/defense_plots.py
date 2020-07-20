@@ -221,7 +221,7 @@ class CreatePlots:
         fig.subplots_adjust(left=0.11, bottom=0.12, right=0.90, top=0.95, wspace=0.1, hspace=0.16)
 
         # Save figure
-        # fig.savefig(os.path.join(self.figures_dir, 'defense', 'tax_rep.pdf'), transparent=True)
+        fig.savefig(os.path.join(self.figures_dir, 'defense', 'tax_rep.pdf'), transparent=True)
         fig.savefig(os.path.join(self.figures_dir, 'defense', 'tax_rep.png'), transparent=True, dpi=300)
         plt.show()
 
@@ -460,12 +460,12 @@ class CreatePlots:
 
         # Add colour bars
         cb3 = fig.colorbar(im3, cax=cax3)
-        cb3.ax.tick_params(labelsize=6)
-        cb3.set_label('Price difference ($)', fontsize=8)
+        cb3.ax.tick_params(labelsize=5.5)
+        cb3.set_label('Price difference ($)', fontsize=6.5)
 
         cb6 = fig.colorbar(im6, cax=cax6)
-        cb6.ax.tick_params(labelsize=6)
-        cb6.set_label('Price difference ($)', fontsize=8)
+        cb6.ax.tick_params(labelsize=5.5)
+        cb6.set_label('Price difference ($)', fontsize=6.5)
 
         # Set y-lim for all plots
         for a in [ax1, ax2, ax3, ax4, ax5, ax6]:
@@ -486,25 +486,25 @@ class CreatePlots:
             ax.yaxis.set_major_locator(MultipleLocator(6))
             ax.yaxis.set_minor_locator(MultipleLocator(2))
 
-            ax.tick_params(axis='both', which='major', labelsize=6)
-            ax.set_ylabel('Year', fontsize=8)
+            ax.tick_params(axis='both', which='major', labelsize=5.5)
+            ax.set_ylabel('Year', fontsize=6.5)
 
         # Format x-ticks
         for ax in [ax4, ax5, ax6]:
             ax.xaxis.set_major_locator(MultipleLocator(20))
             ax.xaxis.set_minor_locator(MultipleLocator(10))
 
-            ax.tick_params(axis='both', which='major', labelsize=6)
-            ax.set_xlabel('Emissions price (\$/tCO$_{2}$)', fontsize=8)
+            ax.tick_params(axis='both', which='major', labelsize=5.5)
+            ax.set_xlabel('Emissions price (\$/tCO$_{2}$)', fontsize=6.5)
 
         # Add titles denoting transition years
-        ax1.set_title('2020', fontsize=8, pad=2)
-        ax2.set_title('2025', fontsize=8, pad=2)
-        ax3.set_title('2030', fontsize=8, pad=2)
+        ax1.set_title('2020', fontsize=6.5, pad=2)
+        ax2.set_title('2025', fontsize=6.5, pad=2)
+        ax3.set_title('2030', fontsize=6.5, pad=2)
 
         # Add letters to differentiate plots
         text_x, text_y = 9, 2016.5
-        text_style = {'verticalalignment': 'bottom', 'horizontalalignment': 'left', 'fontsize': 10, 'weight': 'bold'}
+        text_style = {'verticalalignment': 'bottom', 'horizontalalignment': 'left', 'fontsize': 8, 'weight': 'bold'}
         ax1.text(text_x, text_y, 'a', color='k', **text_style)
         ax2.text(text_x, text_y, 'b', color='k', **text_style)
         ax3.text(text_x, text_y, 'c', color='k', **text_style)
@@ -515,9 +515,9 @@ class CreatePlots:
 
         # Set figure size
         fig.set_size_inches(self.cm_to_in(11.5), self.cm_to_in(7.6))
-        fig.subplots_adjust(left=0.09, bottom=0.12, right=0.92, top=0.96, wspace=0.01)
-        fig.savefig(os.path.join(self.figures_dir, 'defense', 'price_difference.png'), dpi=200)
-        fig.savefig(os.path.join(self.figures_dir, 'defense', 'price_difference.pdf'))
+        fig.subplots_adjust(left=0.11, bottom=0.12, right=0.90, top=0.96, wspace=0.01)
+        fig.savefig(os.path.join(self.figures_dir, 'defense', 'price_difference.pdf'), transparent=True)
+        fig.savefig(os.path.join(self.figures_dir, 'defense', 'price_difference.png'), dpi=400, transparent=True)
 
         plt.show()
 
@@ -538,7 +538,7 @@ class CreatePlots:
         line_properties = {'alpha': 0.8, 'linewidth': 1.1, 'markersize': 3.5, 'fillstyle': 'none', 'markeredgewidth': 0.5}
         ax.plot(x, p_tax, 'o--', color='#d91818', **line_properties)
         ax.plot(x, p_rep, 'o--', color='#4263f5', **line_properties)
-        ax.legend(['BAU', 'Tax', 'REP'], fontsize=9, frameon=False)
+        ax.legend(['BAU', 'Tax', 'REP'], fontsize=7, frameon=False)
 
         # Installed gas capacity
         g_c = [sum(v for k, v in self.plot_data.results['tax'][t]['x_c'].items()
@@ -557,7 +557,7 @@ class CreatePlots:
         ax.xaxis.set_minor_locator(MultipleLocator(5))
 
         ax2.set_ylabel('New gas capacity (MW)')
-        ax2.legend(['Gas'], fontsize=9, frameon=False, loc='lower right',
+        ax2.legend(['Gas'], fontsize=7, frameon=False, loc='lower right',
                    # bbox_to_anchor=(0.5, 0.5),
                    )
 
@@ -567,23 +567,23 @@ class CreatePlots:
         ax.set_ylim([0, 120])
 
         # Set font size
-        ax.xaxis.label.set_size(10)
-        ax.yaxis.label.set_size(10)
+        ax.xaxis.label.set_size(8)
+        ax.yaxis.label.set_size(8)
 
-        ax2.xaxis.label.set_size(10)
-        ax2.yaxis.label.set_size(10)
+        ax2.xaxis.label.set_size(8)
+        ax2.yaxis.label.set_size(8)
 
-        ax.tick_params(axis='both', which='major', labelsize=9)
-        ax2.tick_params(axis='y', which='major', labelsize=9)
+        ax.tick_params(axis='both', which='major', labelsize=7.4)
+        ax2.tick_params(axis='y', which='major', labelsize=7.4)
         ax2.ticklabel_format(axis='y', style='sci', scilimits=(3, 3), useMathText=True)
-        ax2.yaxis.offsetText.set_fontsize(9)
+        ax2.yaxis.offsetText.set_fontsize(8)
 
         # Adjust figures
         fig.set_size_inches(self.cm_to_in(11.5), self.cm_to_in(7.6))
         fig.subplots_adjust(left=0.11, bottom=0.14, right=0.91, top=0.94)
 
-        fig.savefig(os.path.join(self.figures_dir, 'defense', 'price_sensitivity.png'), dpi=200)
-        fig.savefig(os.path.join(self.figures_dir, 'defense', 'price_sensitivity.pdf'))
+        fig.savefig(os.path.join(self.figures_dir, 'defense', 'price_sensitivity.pdf'), transparent=True)
+        fig.savefig(os.path.join(self.figures_dir, 'defense', 'price_sensitivity.png'), dpi=400, transparent=True)
 
         plt.show()
 
@@ -622,11 +622,11 @@ if __name__ == '__main__':
     bau_first_year_trajectory = {y: bau_price_trajectory[2016] for y in range(2016, 2031)}
 
     # Create plots
-    # plots.plot_tax_rep_comparison()
+    plots.plot_tax_rep_comparison()
     plots.plot_transition_year_comparison('baudev')
     plots.plot_transition_year_comparison('ptar')
     plots.plot_transition_year_comparison('pdev')
 
-    # plot_params = {'price_trajectory': bau_price_trajectory, 'bau_price': bau_first_year_trajectory}
-    # plots.plot_price_target_difference(**plot_params)
-    # plots.plot_tax_rep_comparison_first_year()
+    plot_params = {'price_trajectory': bau_price_trajectory, 'bau_price': bau_first_year_trajectory}
+    plots.plot_price_target_difference(**plot_params)
+    plots.plot_tax_rep_comparison_first_year()
