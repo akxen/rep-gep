@@ -15,6 +15,10 @@ from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.ticker
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.ticker import MultipleLocator, FormatStrFormatter, AutoMinorLocator
+from matplotlib import rc
+
+# activate latex text rendering
+rc('text', usetex=True)
 
 from analysis import AnalyseResults
 
@@ -168,9 +172,9 @@ class CreatePlots:
         cb2 = fig.colorbar(im4, cax=cax2)
         cb2.set_label('Emissions (tCO$_{2}$)', fontsize=7)
 
-        cb2.formatter.set_powerlimits((6, 6))
-        cb2.formatter.useMathText = True
-        cb2.update_ticks()
+        # cb2.formatter.set_powerlimits((6, 6))
+        # cb2.formatter.useMathText = True
+        # cb2.update_ticks()
 
         # Format axes
         ax1.yaxis.set_major_locator(MultipleLocator(3))
@@ -190,28 +194,30 @@ class CreatePlots:
             a.tick_params(axis='both', which='minor', labelsize=6)
 
         # Set font size
-        ax1.set_title('Tax', fontsize=7, y=0.97)
-        ax2.set_title('REP', fontsize=7, y=0.97)
+        ax1.set_title('Tax', fontsize=9, y=0.97)
+        ax2.set_title('REP', fontsize=9, y=0.97)
 
         cb1.ax.tick_params(labelsize=6)
         cb2.ax.tick_params(labelsize=6)
 
-        cb2.ax.yaxis.offsetText.set_fontsize(7)
+        font_size = 8
+        cb2.ax.yaxis.offsetText.set_fontsize(font_size)
 
-        ax1.xaxis.label.set_size(7)
-        ax1.yaxis.label.set_size(7)
+        ax1.xaxis.label.set_size(font_size)
+        ax1.yaxis.label.set_size(font_size)
 
-        ax2.xaxis.label.set_size(7)
-        ax2.yaxis.label.set_size(7)
+        ax2.xaxis.label.set_size(font_size)
+        ax2.yaxis.label.set_size(font_size)
 
-        ax3.xaxis.label.set_size(7)
-        ax3.yaxis.label.set_size(7)
+        ax3.xaxis.label.set_size(font_size)
+        ax3.yaxis.label.set_size(font_size)
 
-        ax4.xaxis.label.set_size(7)
-        ax4.yaxis.label.set_size(7)
+        ax4.xaxis.label.set_size(font_size)
+        ax4.yaxis.label.set_size(font_size)
 
         # Add text to denote subfigures
-        text_style = {'verticalalignment': 'bottom', 'horizontalalignment': 'left', 'fontsize': 8, 'weight': 'bold'}
+        text_style = {'verticalalignment': 'bottom', 'horizontalalignment': 'left', 'fontsize': 8, 'weight': 'bold',
+                      'usetex': False}
         ax1.text(7, 2016.25, 'a', color='white', **text_style)
         ax2.text(7, 2016.25, 'b', color='white', **text_style)
         ax3.text(7, 2016.25, 'c', color='k', **text_style)
@@ -222,7 +228,7 @@ class CreatePlots:
 
         # Save figure
         fig.savefig(os.path.join(self.figures_dir, 'defense', 'tax_rep.pdf'), transparent=True)
-        fig.savefig(os.path.join(self.figures_dir, 'defense', 'tax_rep.png'), transparent=True, dpi=300)
+        fig.savefig(os.path.join(self.figures_dir, 'defense', 'tax_rep.png'), transparent=True, dpi=400)
         plt.show()
 
     def plot_transition_year_comparison(self, model_key):
@@ -313,17 +319,17 @@ class CreatePlots:
         cb1 = fig.colorbar(layout['ax3']['im'], cax=layout['ax3']['cax'], ticks=MultipleLocator(40e6))
         cb1.ax.tick_params(labelsize=5)
         # cb1.set_label('Emissions (tCO$_{2}$)', fontsize=5)
-        cb1.formatter.set_powerlimits((6, 6))
-        cb1.formatter.useMathText = True
+        # cb1.formatter.set_powerlimits((6, 6))
+        # cb1.formatter.useMathText = True
         t1 = cb1.ax.yaxis.get_offset_text()
         t1.set_size(5.5)
         layout['ax3']['cax'].yaxis.get_offset_text().set_visible(False)
-        layout['ax3']['ax'].text(95, 2030.2, r"$\times 10^{6}$", fontsize=5.5)
+        layout['ax3']['ax'].text(95, 2030.9, r"$\times 10^{6}$", fontsize=5.5)
 
         cb1.update_ticks()
 
         layout['ax6']['cax'].axis('on')
-        cb2 = fig.colorbar(layout['ax6']['im'], cax=layout['ax6']['cax'])
+        cb2 = fig.colorbar(layout['ax6']['im'], cax=layout['ax6']['cax'], ticks=MultipleLocator(25))
         # cb2.set_label('Price ($/MWh)', fontsize=5)
         cb2.ax.tick_params(labelsize=5)
 
@@ -333,7 +339,7 @@ class CreatePlots:
         cb3.ax.tick_params(labelsize=5)
 
         layout['ax12']['cax'].axis('on')
-        cb4 = fig.colorbar(layout['ax12']['im'], cax=layout['ax12']['cax'])
+        cb4 = fig.colorbar(layout['ax12']['im'], cax=layout['ax12']['cax'], ticks=MultipleLocator(10e9))
         # cb4.set_label('Revenue ($)', fontsize=5)
         cb4.ax.tick_params(labelsize=5)
         cb4.formatter.set_powerlimits((9, 9))
@@ -341,7 +347,7 @@ class CreatePlots:
         t4 = cb4.ax.yaxis.get_offset_text()
         t4.set_size(5.5)
         layout['ax12']['cax'].yaxis.get_offset_text().set_visible(False)
-        layout['ax12']['ax'].text(95, 2030.2, r"$\times 10^{9}$", fontsize=5.5)
+        layout['ax12']['ax'].text(95, 2030.9, r"$\times 10^{9}$", fontsize=5.5)
         cb4.update_ticks()
 
         # Set y-lim for all plots
@@ -367,7 +373,7 @@ class CreatePlots:
             layout[a]['ax'].yaxis.set_minor_locator(MultipleLocator(2))
 
             layout[a]['ax'].tick_params(axis='both', which='major', labelsize=5)
-            layout[a]['ax'].set_ylabel('Year', fontsize=6, labelpad=-.1)
+            layout[a]['ax'].set_ylabel('Year', fontsize=7)
 
         # Format x-ticks
         for a in ['ax10', 'ax11', 'ax12']:
@@ -375,7 +381,7 @@ class CreatePlots:
             layout[a]['ax'].xaxis.set_minor_locator(MultipleLocator(10))
 
             layout[a]['ax'].tick_params(axis='both', which='major', labelsize=5)
-            layout[a]['ax'].set_xlabel('Emissions price (\$/tCO$_{2}$)', fontsize=6, labelpad=-0.01)
+            layout[a]['ax'].set_xlabel('Emissions price (\$/tCO$_{2}$)', fontsize=7)
 
         # Add titles denoting transition years
         layout['ax1']['ax'].set_title('2020', fontsize=7, pad=2)
@@ -384,7 +390,8 @@ class CreatePlots:
 
         # Add letters to differentiate plots
         text_x, text_y = 7.5, 2016.5
-        text_style = {'verticalalignment': 'bottom', 'horizontalalignment': 'left', 'fontsize': 6, 'weight': 'bold'}
+        text_style = {'verticalalignment': 'bottom', 'horizontalalignment': 'left', 'fontsize': 6, 'weight': 'bold',
+                      'usetex': False}
         ax1.text(text_x, text_y, 'a', color='k', **text_style)
         ax2.text(text_x, text_y, 'b', color='k', **text_style)
         ax3.text(text_x, text_y, 'c', color='k', **text_style)
@@ -403,13 +410,13 @@ class CreatePlots:
 
         # Aligned colorbar labels
         layout['ax3']['ax'].text(132.5, 2023, 'Emissions (tCO$_{2}$)', va='center', fontsize=4.7, rotation=90)
-        layout['ax6']['ax'].text(132.5, 2023, 'Price ($/MWh)', va='center', fontsize=4.7, rotation=90)
+        layout['ax6']['ax'].text(132.5, 2023, 'Price (\$/MWh)', va='center', fontsize=4.7, rotation=90)
         layout['ax9']['ax'].text(132.5, 2023, 'Baseline (tCO$_{2}$/MWh)', va='center', fontsize=4.7, rotation=90)
-        layout['ax12']['ax'].text(132.5, 2023, 'Revenue ($)', va='center', fontsize=4.7, rotation=90)
+        layout['ax12']['ax'].text(132.5, 2023, 'Revenue (\$)', va='center', fontsize=4.7, rotation=90)
 
         # Format labels
         fig.set_size_inches(self.cm_to_in(11.5), self.cm_to_in(7.6))
-        fig.subplots_adjust(left=0.09, bottom=0.1, right=0.91, top=0.96, wspace=0.01)
+        fig.subplots_adjust(left=0.1, bottom=0.11, right=0.91, top=0.96, wspace=0.01, hspace=0.2)
         fig.savefig(os.path.join(self.figures_dir, 'defense', f'transition_years_{model_key}.png'), dpi=400,
                     transparent=True)
         fig.savefig(os.path.join(self.figures_dir, 'defense', f'transition_years_{model_key}.pdf'), transparent=True)
@@ -461,11 +468,11 @@ class CreatePlots:
         # Add colour bars
         cb3 = fig.colorbar(im3, cax=cax3)
         cb3.ax.tick_params(labelsize=5.5)
-        cb3.set_label('Price difference ($)', fontsize=6.5)
+        cb3.set_label('Price difference (\$)', fontsize=7)
 
         cb6 = fig.colorbar(im6, cax=cax6)
         cb6.ax.tick_params(labelsize=5.5)
-        cb6.set_label('Price difference ($)', fontsize=6.5)
+        cb6.set_label('Price difference (\$)', fontsize=7)
 
         # Set y-lim for all plots
         for a in [ax1, ax2, ax3, ax4, ax5, ax6]:
@@ -486,25 +493,26 @@ class CreatePlots:
             ax.yaxis.set_major_locator(MultipleLocator(6))
             ax.yaxis.set_minor_locator(MultipleLocator(2))
 
-            ax.tick_params(axis='both', which='major', labelsize=5.5)
-            ax.set_ylabel('Year', fontsize=6.5)
+            ax.tick_params(axis='both', which='major', labelsize=6.5)
+            ax.set_ylabel('Year', fontsize=7)
 
         # Format x-ticks
         for ax in [ax4, ax5, ax6]:
             ax.xaxis.set_major_locator(MultipleLocator(20))
             ax.xaxis.set_minor_locator(MultipleLocator(10))
 
-            ax.tick_params(axis='both', which='major', labelsize=5.5)
-            ax.set_xlabel('Emissions price (\$/tCO$_{2}$)', fontsize=6.5)
+            ax.tick_params(axis='both', which='major', labelsize=6.5)
+            ax.set_xlabel('Emissions price (\$/tCO$_{2}$)', fontsize=7)
 
         # Add titles denoting transition years
-        ax1.set_title('2020', fontsize=6.5, pad=2)
-        ax2.set_title('2025', fontsize=6.5, pad=2)
-        ax3.set_title('2030', fontsize=6.5, pad=2)
+        ax1.set_title('2020', fontsize=7, pad=2)
+        ax2.set_title('2025', fontsize=7, pad=2)
+        ax3.set_title('2030', fontsize=7, pad=2)
 
         # Add letters to differentiate plots
         text_x, text_y = 9, 2016.5
-        text_style = {'verticalalignment': 'bottom', 'horizontalalignment': 'left', 'fontsize': 8, 'weight': 'bold'}
+        text_style = {'verticalalignment': 'bottom', 'horizontalalignment': 'left', 'fontsize': 8, 'weight': 'bold',
+                      'usetex': False}
         ax1.text(text_x, text_y, 'a', color='k', **text_style)
         ax2.text(text_x, text_y, 'b', color='k', **text_style)
         ax3.text(text_x, text_y, 'c', color='k', **text_style)
@@ -546,7 +554,7 @@ class CreatePlots:
         ax2.plot(x, g_c, 'o--', color='#4fa83d', **line_properties)
 
         # Labels
-        ax.set_ylabel('Average price ($/MWh)')
+        ax.set_ylabel('Average price (\$/MWh)')
         ax.set_xlabel('Emissions price (tCO$_{2}$/MWh')
 
         # Format axes
@@ -567,15 +575,15 @@ class CreatePlots:
         ax.set_ylim([0, 120])
 
         # Set font size
-        ax.xaxis.label.set_size(8)
-        ax.yaxis.label.set_size(8)
+        ax.xaxis.label.set_size(9)
+        ax.yaxis.label.set_size(9)
 
-        ax2.xaxis.label.set_size(8)
-        ax2.yaxis.label.set_size(8)
+        ax2.xaxis.label.set_size(9)
+        ax2.yaxis.label.set_size(9)
 
-        ax.tick_params(axis='both', which='major', labelsize=7.4)
-        ax2.tick_params(axis='y', which='major', labelsize=7.4)
-        ax2.ticklabel_format(axis='y', style='sci', scilimits=(3, 3), useMathText=True)
+        ax.tick_params(axis='both', which='major', labelsize=8)
+        ax2.tick_params(axis='y', which='major', labelsize=8)
+        ax2.ticklabel_format(axis='y', style='sci', scilimits=(3, 3))
         ax2.yaxis.offsetText.set_fontsize(8)
 
         # Adjust figures
