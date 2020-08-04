@@ -9,16 +9,20 @@ from scipy import interpolate
 from scipy.interpolate import griddata
 from matplotlib.colors import BoundaryNorm
 
-from matplotlib import cm
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+import matplotlib
 import matplotlib.ticker
+import matplotlib.pyplot as plt
+from matplotlib import cm
+from matplotlib import rc
+from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.ticker import MultipleLocator, FormatStrFormatter, AutoMinorLocator
-from matplotlib import rc
 
 # activate latex text rendering
-rc('text', usetex=True)
+# rc('text', usetex=True)
+matplotlib.rcParams['font.family'] = 'sans-serif'
+matplotlib.rcParams['font.sans-serif'] = 'Roboto'
+matplotlib.rcParams['font.style'] = 'normal'
 
 from analysis import AnalyseResults
 
@@ -199,6 +203,8 @@ class CreatePlots:
 
         cb1.ax.tick_params(labelsize=6)
         cb2.ax.tick_params(labelsize=6)
+        cb2.formatter.set_powerlimits((8, 8))
+        cb2.formatter.useMathText = True
 
         font_size = 8
         cb2.ax.yaxis.offsetText.set_fontsize(font_size)
@@ -324,7 +330,7 @@ class CreatePlots:
         t1 = cb1.ax.yaxis.get_offset_text()
         t1.set_size(5.5)
         layout['ax3']['cax'].yaxis.get_offset_text().set_visible(False)
-        layout['ax3']['ax'].text(95, 2030.9, r"$\times 10^{6}$", fontsize=5.5)
+        layout['ax3']['ax'].text(95, 2030.2, r"$\times 10^{6}$", fontsize=5.5)
 
         cb1.update_ticks()
 
@@ -347,7 +353,7 @@ class CreatePlots:
         t4 = cb4.ax.yaxis.get_offset_text()
         t4.set_size(5.5)
         layout['ax12']['cax'].yaxis.get_offset_text().set_visible(False)
-        layout['ax12']['ax'].text(95, 2030.9, r"$\times 10^{9}$", fontsize=5.5)
+        layout['ax12']['ax'].text(95, 2030.2, r"$\times 10^{9}$", fontsize=5.5)
         cb4.update_ticks()
 
         # Set y-lim for all plots
@@ -372,7 +378,7 @@ class CreatePlots:
             layout[a]['ax'].yaxis.set_major_locator(MultipleLocator(6))
             layout[a]['ax'].yaxis.set_minor_locator(MultipleLocator(2))
 
-            layout[a]['ax'].tick_params(axis='both', which='major', labelsize=5)
+            layout[a]['ax'].tick_params(axis='both', which='major', labelsize=5.5)
             layout[a]['ax'].set_ylabel('Year', fontsize=7)
 
         # Format x-ticks
@@ -380,7 +386,7 @@ class CreatePlots:
             layout[a]['ax'].xaxis.set_major_locator(MultipleLocator(20))
             layout[a]['ax'].xaxis.set_minor_locator(MultipleLocator(10))
 
-            layout[a]['ax'].tick_params(axis='both', which='major', labelsize=5)
+            layout[a]['ax'].tick_params(axis='both', which='major', labelsize=5.5)
             layout[a]['ax'].set_xlabel('Emissions price (\$/tCO$_{2}$)', fontsize=7)
 
         # Add titles denoting transition years
@@ -416,7 +422,7 @@ class CreatePlots:
 
         # Format labels
         fig.set_size_inches(self.cm_to_in(11.5), self.cm_to_in(7.6))
-        fig.subplots_adjust(left=0.1, bottom=0.11, right=0.91, top=0.96, wspace=0.01, hspace=0.2)
+        fig.subplots_adjust(left=0.1, bottom=0.115, right=0.91, top=0.96, wspace=0.01, hspace=0.2)
         fig.savefig(os.path.join(self.figures_dir, 'defense', f'transition_years_{model_key}.png'), dpi=400,
                     transparent=True)
         fig.savefig(os.path.join(self.figures_dir, 'defense', f'transition_years_{model_key}.pdf'), transparent=True)
@@ -583,7 +589,7 @@ class CreatePlots:
 
         ax.tick_params(axis='both', which='major', labelsize=8)
         ax2.tick_params(axis='y', which='major', labelsize=8)
-        ax2.ticklabel_format(axis='y', style='sci', scilimits=(3, 3))
+        ax2.ticklabel_format(axis='y', style='sci', scilimits=(3, 3), useMathText=True)
         ax2.yaxis.offsetText.set_fontsize(8)
 
         # Adjust figures
