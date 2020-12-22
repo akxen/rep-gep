@@ -161,7 +161,7 @@ class CreatePlots:
         divider2 = make_axes_locatable(ax4)
         cax2 = divider2.append_axes("right", size="5%", pad=0.05)
         cb2 = fig.colorbar(im4, cax=cax2)
-        cb2.set_label('Emissions price (tCO$_{2}$)', fontsize=7)
+        cb2.set_label('Emissions (tCO$_{2}$)', fontsize=7)
 
         cb2.formatter.set_powerlimits((6, 6))
         cb2.formatter.useMathText = True
